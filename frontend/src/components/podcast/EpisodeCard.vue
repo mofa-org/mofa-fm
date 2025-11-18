@@ -1,0 +1,152 @@
+<template>
+  <div class="episode-card mofa-card">
+    <div class="episode-cover" @click="handlePlay">
+      <img :src="episode.cover_url" :alt="episode.title" />
+      <div class="play-overlay">
+        <el-icon class="play-icon" :size="48">
+          <VideoPlay />
+        </el-icon>
+      </div>
+    </div>
+
+    <div class="episode-info">
+      <router-link
+        :to="`/shows/${episode.show.slug}/episodes/${episode.slug}`"
+        class="episode-title"
+      >
+        {{ episode.title }}
+      </router-link>
+
+      <router-link :to="`/shows/${episode.show.slug}`" class="show-name">
+        {{ episode.show.title }}
+      </router-link>
+
+      <p class="episode-description">{{ episode.description }}</p>
+
+      <div class="episode-meta">
+        <span>{{ formatDuration(episode.duration) }}</span>
+        <span>{{ episode.play_count }} 播放</span>
+        <span>{{ formatDate(episode.published_at) }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { usePlayerStore } from '@/stores/player'
+import { VideoPlay } from '@element-plus/icons-vue'
+import dayjs from 'dayjs'
+
+const props = defineProps({
+  episode: {
+    type: Object,
+    required: true
+  }
+})
+
+const playerStore = usePlayerStore()
+
+function handlePlay() {
+  playerStore.play(props.episode)
+}
+
+function formatDuration(seconds) {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:00`
+  return `${m}:00`
+}
+
+function formatDate(date) {
+  return dayjs(date).format('YYYY-MM-DD')
+}
+</script>
+
+<style scoped>
+.episode-card {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.episode-cover {
+  flex: 0 0 120px;
+  height: 120px;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  border-radius: var(--radius-default);
+}
+
+.episode-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.play-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.episode-cover:hover .play-overlay {
+  opacity: 1;
+}
+
+.play-icon {
+  color: white;
+}
+
+.episode-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.episode-title {
+  font-size: var(--font-lg);
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
+  display: block;
+  margin-bottom: var(--spacing-xs);
+}
+
+.episode-title:hover {
+  color: var(--color-primary);
+}
+
+.show-name {
+  font-size: var(--font-sm);
+  color: var(--color-text-tertiary);
+  display: block;
+  margin-bottom: var(--spacing-sm);
+}
+
+.show-name:hover {
+  color: var(--color-primary);
+}
+
+.episode-description {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.episode-meta {
+  display: flex;
+  gap: var(--spacing-md);
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+}
+</style>

@@ -1,0 +1,296 @@
+/**
+ * MoFA FM 主样式文件
+ * 基础样式 + MoFA 组件样式
+ */
+
+/* ========== 基础样式 ========== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ========== MoFA 卡片 ========== */
+
+.mofa-card {
+  background: var(--color-white);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-lg);
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.mofa-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-bar);
+}
+
+.mofa-card:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: var(--shadow-hover);
+}
+
+.mofa-card-glass {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: var(--border-width) solid rgba(255, 255, 255, 0.3);
+}
+
+/* ========== MoFA 按钮 ========== */
+
+.mofa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-default);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  background: var(--color-white);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.mofa-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-md);
+}
+
+.mofa-btn:active {
+  transform: translate(0, 0);
+  box-shadow: var(--shadow-sm);
+}
+
+.mofa-btn-primary {
+  background: var(--gradient-primary);
+  color: var(--color-white);
+  border-color: var(--color-primary-dark);
+}
+
+.mofa-btn-success {
+  background: var(--gradient-success);
+  color: var(--color-white);
+  border-color: var(--color-success-dark);
+}
+
+.mofa-btn-warning {
+  background: var(--gradient-warning);
+  color: var(--color-text-primary);
+  border-color: var(--color-warning-dark);
+}
+
+.mofa-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ========== MoFA 标签 ========== */
+
+.mofa-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.08);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  transition: var(--transition-fast);
+}
+
+.mofa-tag:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.mofa-tag-primary {
+  background: var(--gradient-primary);
+  color: var(--color-white);
+  border-color: var(--color-primary-dark);
+}
+
+.mofa-tag-success {
+  background: var(--gradient-success);
+  color: var(--color-white);
+  border-color: var(--color-success-dark);
+}
+
+.mofa-tag-warning {
+  background: var(--gradient-warning);
+  color: var(--color-text-primary);
+  border-color: var(--color-warning-dark);
+}
+
+/* ========== 封面图片 ========== */
+
+.show-cover,
+.episode-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-default);
+}
+
+/* ========== 布局 ========== */
+
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 var(--spacing-lg);
+}
+
+.page-content {
+  min-height: calc(100vh - var(--header-height) - var(--player-height));
+  padding: var(--spacing-xl) 0;
+}
+
+/* ========== 网格布局 ========== */
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-lg);
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-lg);
+}
+
+/* ========== 响应式 ========== */
+
+@media (max-width: 1024px) {
+  .grid-4 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .container {
+    padding: 0 var(--spacing-md);
+  }
+
+  .page-content {
+    padding: var(--spacing-lg) 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== Element Plus 覆盖 ========== */
+
+.el-button {
+  border-width: var(--border-width) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: var(--transition) !important;
+}
+
+.el-button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-md) !important;
+}
+
+.el-button:active {
+  transform: translate(0, 0);
+}
+
+.el-input__wrapper {
+  border-width: var(--border-width-thin) !important;
+  border-radius: var(--radius-default) !important;
+  box-shadow: none !important;
+  transition: var(--transition) !important;
+}
+
+.el-input__wrapper:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.el-input__wrapper.is-focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 4px 4px 0 rgba(255, 81, 59, 0.2) !important;
+}
+
+.el-dialog {
+  border: var(--border-width) solid var(--border-color) !important;
+  border-radius: var(--radius-xl) !important;
+  box-shadow: var(--shadow-soft-lg) !important;
+}
+
+.el-dialog__header {
+  background: var(--gradient-bar);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.el-card {
+  border-width: var(--border-width) !important;
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.el-message {
+  border-width: var(--border-width) !important;
+  border-radius: var(--radius-default) !important;
+  box-shadow: var(--shadow-lg) !important;
+}

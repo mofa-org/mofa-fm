@@ -1,0 +1,66 @@
+/**
+ * Axios API 客户端配置
+ */
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
+
+const client = axios.create({
+  baseURL: '/api',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+// 请求拦截器 - 添加认证token
+client.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  error => {
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器 - 处理错误
+client.interceptors.response.use(
+  response => response.data,
+  error => {
+    if (error.response) {
+      const { status, data } = error.response
+
+      switch (status) {
+        case 401:
+          // 未授权，清除token并跳转登录
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
+          ElMessage.error('请先登录')
+          break
+        case 403:
+          ElMessage.error('没有权限执行此操作')
+          break
+        case 404:
+          ElMessage.error('请求的资源不存在')
+          break
+        case 500:
+          ElMessage.error('服务器错误，请稍后重试')
+          break
+        default:
+          ElMessage.error(data.message || data.error || '请求失败')
+      }
+    } else {
+      ElMessage.error('网络错误，请检查您的连接')
+    }
+
+    return Promise.reject(error)
+  }
+)
+
+export default client

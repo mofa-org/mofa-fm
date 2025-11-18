@@ -1,0 +1,5 @@
+-r base.txt
+
+# 开发工具
+django-debug-toolbar==4.3.0
+ipython==8.21.0
