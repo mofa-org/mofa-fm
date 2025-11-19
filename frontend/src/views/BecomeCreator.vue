@@ -77,6 +77,10 @@ onMounted(async () => {
     attemptsLeft.value = 3 - data.attempts
   } catch (error) {
     console.error('获取验证题目失败', error)
+    // 如果用户已经是创作者，自动设置为已验证
+    if (error.response?.status === 400 && error.response?.data?.error?.includes('已经是创作者')) {
+      verified.value = true
+    }
   }
 })
 

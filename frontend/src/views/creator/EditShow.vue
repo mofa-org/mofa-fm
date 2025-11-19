@@ -1,9 +1,9 @@
 <template>
-  <div class="create-show-page">
+  <div class="edit-show-page">
     <div class="container">
-      <h1 class="page-title">创建内容节目</h1>
+      <h1 class="page-title">编辑节目</h1>
 
-      <div class="form-card mofa-card">
+      <div class="form-card mofa-card" v-if="!loading">
         <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
           <el-form-item label="内容类型" prop="content_type">
             <el-radio-group v-model="form.content_type">
@@ -28,7 +28,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="封面图片" prop="cover">
+          <el-form-item label="封面图片">
             <el-upload
               class="cover-uploader"
               :show-file-list="false"
@@ -39,13 +39,13 @@
               <img v-if="coverPreview" :src="coverPreview" class="cover-preview" />
               <el-icon v-else class="cover-uploader-icon"><Plus /></el-icon>
             </el-upload>
-            <p class="form-hint">推荐尺寸：1400x1400 像素</p>
+            <p class="form-hint">推荐尺寸：1400x1400 像素，留空则不更新封面</p>
           </el-form-item>
 
           <el-form-item label="分类" prop="category_id">
             <el-select v-model="form.category_id" placeholder="选择分类">
               <el-option
-                v-for="cat in (categories || [])"
+                v-for="cat in categories"
                 :key="cat.id"
                 :label="cat.name"
                 :value="cat.id"
@@ -56,7 +56,7 @@
           <el-form-item label="标签">
             <el-select v-model="form.tag_ids" multiple placeholder="选择标签（可选）">
               <el-option
-                v-for="tag in (tags || [])"
+                v-for="tag in tags"
                 :key="tag.id"
                 :label="tag.name"
                 :value="tag.id"
@@ -65,12 +65,17 @@
           </el-form-item>
 
           <el-form-item>
-            <el-button type="primary" @click="handleSubmit" :loading="loading">
-              创建节目
+            <el-button type="primary" @click="handleSubmit" :loading="submitting">
+              保存修改
             </el-button>
             <el-button @click="$router.back()">取消</el-button>
           </el-form-item>
         </el-form>
+      </div>
+
+      <div v-else class="loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <p>加载中...</p>
       </div>
     </div>
   </div>
@@ -78,17 +83,19 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { usePodcastsStore } from '@/stores/podcasts'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Loading } from '@element-plus/icons-vue'
 
+const route = useRoute()
 const router = useRouter()
 const podcastsStore = usePodcastsStore()
 
 const formRef = ref()
-const loading = ref(false)
+const loading = ref(true)
+const submitting = ref(false)
 const coverPreview = ref('')
 const coverFile = ref(null)
 
@@ -96,7 +103,6 @@ const form = ref({
   content_type: 'podcast',
   title: '',
   description: '',
-  cover: null,
   category_id: null,
   tag_ids: []
 })
@@ -107,18 +113,37 @@ const tags = ref([])
 const rules = {
   content_type: [{ required: true, message: '请选择内容类型', trigger: 'change' }],
   title: [{ required: true, message: '请输入节目名称', trigger: 'blur' }],
-  description: [{ required: true, message: '请输入节目描述', trigger: 'blur' }],
-  cover: [{ required: true, message: '请上传封面图片', trigger: 'change' }]
+  description: [{ required: true, message: '请输入节目描述', trigger: 'blur' }]
 }
 
 onMounted(async () => {
-  categories.value = await podcastsStore.fetchCategories()
-  tags.value = await podcastsStore.fetchTags()
+  try {
+    // 加载分类和标签
+    categories.value = await podcastsStore.fetchCategories()
+    tags.value = await podcastsStore.fetchTags()
+
+    // 加载节目详情
+    const slug = route.params.slug
+    const show = await api.podcasts.getShow(slug)
+
+    // 填充表单
+    form.value.content_type = show.content_type || 'podcast'
+    form.value.title = show.title
+    form.value.description = show.description
+    form.value.category_id = show.category?.id || null
+    form.value.tag_ids = show.tags?.map(tag => tag.id) || []
+    coverPreview.value = show.cover_url
+
+    loading.value = false
+  } catch (error) {
+    console.error('加载节目信息失败：', error)
+    ElMessage.error('加载节目信息失败')
+    router.push('/creator')
+  }
 })
 
 function handleCoverChange(file) {
   coverFile.value = file.raw
-  form.value.cover = file.raw
   coverPreview.value = URL.createObjectURL(file.raw)
 }
 
@@ -126,33 +151,41 @@ async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
-  loading.value = true
+  submitting.value = true
   try {
     const formData = new FormData()
     formData.append('content_type', form.value.content_type)
     formData.append('title', form.value.title)
     formData.append('description', form.value.description)
-    formData.append('cover', coverFile.value)
+
+    // 只在有新封面时才上传
+    if (coverFile.value) {
+      formData.append('cover', coverFile.value)
+    }
+
     if (form.value.category_id) {
       formData.append('category_id', form.value.category_id)
     }
+
     if (form.value.tag_ids.length > 0) {
       form.value.tag_ids.forEach(id => formData.append('tag_ids', id))
     }
 
-    await api.podcasts.createShow(formData)
-    ElMessage.success('创建成功')
+    const slug = route.params.slug
+    await api.put(`/podcasts/shows/${slug}/update/`, formData)
+
+    ElMessage.success('保存成功')
     router.push('/creator')
   } catch (error) {
-    // 错误已处理
+    ElMessage.error(error.response?.data?.message || '保存失败')
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 </script>
 
 <style scoped>
-.create-show-page {
+.edit-show-page {
   padding: var(--spacing-xl) 0;
 }
 
@@ -167,6 +200,17 @@ async function handleSubmit() {
   padding: var(--spacing-xl);
 }
 
+.loading {
+  text-align: center;
+  padding: 4rem 0;
+  color: var(--color-text-secondary);
+}
+
+.loading .el-icon {
+  font-size: 48px;
+  margin-bottom: 1rem;
+}
+
 .cover-uploader {
   display: block;
 }
@@ -176,6 +220,7 @@ async function handleSubmit() {
   height: 200px;
   object-fit: cover;
   border-radius: var(--radius-default);
+  cursor: pointer;
 }
 
 .cover-uploader-icon {

@@ -52,10 +52,57 @@ def process_episode_audio(episode_id):
             return f"Episode {episode_id} processing failed: {result['error']}"
 
     except Exception as e:
+        # Log error
+        print(f"Error processing audio for episode {episode_id}: {e}")
+        # Update status to failed
         try:
             episode = Episode.objects.get(id=episode_id)
             episode.status = 'failed'
             episode.save()
-        except:
+        except Episode.DoesNotExist:
             pass
         raise
+
+@shared_task
+def generate_podcast_task(episode_id, script_content):
+    """
+    Background task to generate podcast audio from script.
+    """
+    from .models import Episode
+    from .services.generator import PodcastGenerator
+    from pydub import AudioSegment
+    import os
+    from django.conf import settings
+    
+    episode = None # Initialize episode to None for error handling
+    try:
+        episode = Episode.objects.get(id=episode_id)
+        episode.status = 'processing'
+        episode.save()
+        
+        # Initialize generator
+        generator = PodcastGenerator()
+        
+        # Define output path
+        # e.g. media/episodes/YYYY/MM/uuid.mp3
+        filename = f"generated_{episode.slug}_{episode.id}.mp3"
+        relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
+        full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+        
+        # Generate
+        generator.generate(script_content, full_path)
+        
+        # Update episode
+        episode.audio_file.name = relative_path
+        episode.status = 'published' 
+        episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
+        episode.file_size = os.path.getsize(full_path)
+        episode.save()
+        
+    except Exception as e:
+        print(f"Failed to generate podcast for episode {episode_id}: {e}")
+        if episode: # Only update status if episode object was successfully retrieved
+            episode.status = 'failed'
+            episode.save()
+        raise
+

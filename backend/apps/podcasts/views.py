@@ -192,3 +192,40 @@ def show_episodes(request, show_id):
     episodes = show.episodes.all().order_by('-created_at')
     serializer = EpisodeListSerializer(episodes, many=True, context={'request': request})
     return Response(serializer.data)
+
+
+class GenerateEpisodeView(generics.GenericAPIView):
+    """生成播客单集"""
+    serializer_class = EpisodeCreateSerializer # Just for documentation, actually uses PodcastGenerationSerializer
+    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    
+    def post(self, request, *args, **kwargs):
+        from .serializers import PodcastGenerationSerializer
+        from .tasks import generate_podcast_task
+        
+        serializer = PodcastGenerationSerializer(data=request.data, context={'context': request})
+        if serializer.is_valid():
+            data = serializer.validated_data
+            show_id = data['show_id']
+            title = data['title']
+            script = data['script']
+            
+            # Create Episode placeholder
+            show = Show.objects.get(id=show_id)
+            episode = Episode.objects.create(
+                show=show,
+                title=title,
+                description="AI Generated Podcast",
+                status='processing',
+                audio_file='placeholder.mp3' # Will be updated by task
+            )
+            
+            # Trigger task
+            generate_podcast_task.delay(episode.id, script)
+            
+            return Response({
+                "message": "Podcast generation started",
+                "episode_id": episode.id
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

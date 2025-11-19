@@ -23,7 +23,7 @@ class TagSerializer(serializers.ModelSerializer):
 
 
 class ShowListSerializer(serializers.ModelSerializer):
-    """播客节目列表序列化器"""
+    """播客节目/音乐专辑列表序列化器"""
 
     creator = UserSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
@@ -33,7 +33,7 @@ class ShowListSerializer(serializers.ModelSerializer):
         model = Show
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
-            'creator', 'category', 'is_featured',
+            'content_type', 'creator', 'category', 'is_featured',
             'episodes_count', 'followers_count', 'total_plays',
             'created_at', 'updated_at'
         ]
@@ -48,7 +48,7 @@ class ShowListSerializer(serializers.ModelSerializer):
 
 
 class ShowDetailSerializer(serializers.ModelSerializer):
-    """播客节目详情序列化器"""
+    """播客节目/音乐专辑详情序列化器"""
 
     creator = UserSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
@@ -60,7 +60,7 @@ class ShowDetailSerializer(serializers.ModelSerializer):
         model = Show
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
-            'creator', 'category', 'tags', 'is_featured', 'is_following',
+            'content_type', 'creator', 'category', 'tags', 'is_featured', 'is_following',
             'episodes_count', 'followers_count', 'total_plays',
             'created_at', 'updated_at'
         ]
@@ -82,7 +82,7 @@ class ShowDetailSerializer(serializers.ModelSerializer):
 
 
 class ShowCreateSerializer(serializers.ModelSerializer):
-    """创建播客节目序列化器"""
+    """创建播客节目/音乐专辑序列化器"""
 
     category_id = serializers.IntegerField(required=False, allow_null=True)
     tag_ids = serializers.ListField(
@@ -93,7 +93,7 @@ class ShowCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Show
-        fields = ['title', 'description', 'cover', 'category_id', 'tag_ids']
+        fields = ['title', 'description', 'cover', 'content_type', 'category_id', 'tag_ids']
 
     def create(self, validated_data):
         category_id = validated_data.pop('category_id', None)
@@ -121,7 +121,7 @@ class ShowCreateSerializer(serializers.ModelSerializer):
 
 
 class EpisodeListSerializer(serializers.ModelSerializer):
-    """单集列表序列化器"""
+    """单集/单曲列表序列化器"""
 
     show = ShowListSerializer(read_only=True)
     audio_url = serializers.SerializerMethodField()
@@ -132,8 +132,9 @@ class EpisodeListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
             'show', 'audio_file', 'audio_url', 'duration', 'file_size',
-            'episode_number', 'season_number', 'status',
-            'play_count', 'like_count', 'comment_count',
+            'episode_number', 'season_number',
+            'artist', 'genre', 'album_name', 'release_date',
+            'status', 'play_count', 'like_count', 'comment_count',
             'published_at', 'created_at'
         ]
 
@@ -158,7 +159,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
 
 
 class EpisodeDetailSerializer(serializers.ModelSerializer):
-    """单集详情序列化器"""
+    """单集/单曲详情序列化器"""
 
     show = ShowDetailSerializer(read_only=True)
     audio_url = serializers.SerializerMethodField()
@@ -171,8 +172,9 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
             'show', 'audio_file', 'audio_url', 'duration', 'file_size',
-            'episode_number', 'season_number', 'status',
-            'play_count', 'like_count', 'comment_count',
+            'episode_number', 'season_number',
+            'artist', 'genre', 'album_name', 'release_date',
+            'status', 'play_count', 'like_count', 'comment_count',
             'is_liked', 'play_position',
             'published_at', 'created_at', 'updated_at'
         ]
@@ -216,7 +218,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
 
 class EpisodeCreateSerializer(serializers.ModelSerializer):
-    """创建单集序列化器"""
+    """创建单集/单曲序列化器"""
 
     show_id = serializers.IntegerField(required=True)
 
@@ -224,7 +226,8 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
         model = Episode
         fields = [
             'show_id', 'title', 'description', 'cover',
-            'audio_file', 'episode_number', 'season_number'
+            'audio_file', 'episode_number', 'season_number',
+            'artist', 'genre', 'album_name', 'release_date'
         ]
 
     def validate_show_id(self, value):
@@ -249,3 +252,19 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
         process_episode_audio.delay(episode.id)
 
         return episode
+
+
+class PodcastGenerationSerializer(serializers.Serializer):
+    """播客生成请求序列化器"""
+    
+    title = serializers.CharField(max_length=255, required=True)
+    show_id = serializers.IntegerField(required=True)
+    script = serializers.CharField(required=True, style={'base_template': 'textarea.html'})
+    
+    def validate_show_id(self, value):
+        user = self.context['request'].user
+        try:
+            show = Show.objects.get(id=value, creator=user)
+            return value
+        except Show.DoesNotExist:
+            raise serializers.ValidationError("节目不存在或您没有权限")

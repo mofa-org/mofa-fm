@@ -24,6 +24,7 @@ urlpatterns = [
     # 单集
     path('episodes/', views.EpisodeListView.as_view(), name='episode_list'),
     path('episodes/create/', views.EpisodeCreateView.as_view(), name='episode_create'),
+    path('episodes/generate/', views.GenerateEpisodeView.as_view(), name='episode_generate'),
     path('episodes/<int:pk>/update/', views.EpisodeUpdateView.as_view(), name='episode_update'),
     path('episodes/<int:pk>/delete/', views.EpisodeDeleteView.as_view(), name='episode_delete'),
     path('shows/<slug:show_slug>/episodes/<slug:episode_slug>/',

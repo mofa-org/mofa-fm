@@ -54,12 +54,18 @@ class Tag(models.Model):
 
 
 class Show(models.Model):
-    """播客节目"""
+    """播客节目/音乐专辑"""
+
+    CONTENT_TYPE_CHOICES = [
+        ('podcast', '播客'),
+        ('music', '音乐'),
+    ]
 
     title = models.CharField('标题', max_length=255, db_index=True)
     slug = models.SlugField('URL标识', unique=True, max_length=255)
     description = models.TextField('描述')
     cover = models.ImageField('封面', upload_to='covers/%Y/%m/')
+    content_type = models.CharField('内容类型', max_length=20, choices=CONTENT_TYPE_CHOICES, default='podcast', db_index=True)
 
     # 创作者
     creator = models.ForeignKey(
@@ -112,7 +118,7 @@ class Show(models.Model):
 
 
 class Episode(models.Model):
-    """播客单集"""
+    """播客单集/音乐单曲"""
 
     STATUS_CHOICES = [
         ('draft', '草稿'),
@@ -137,9 +143,15 @@ class Episode(models.Model):
     duration = models.IntegerField('时长', default=0, help_text='秒数')
     file_size = models.BigIntegerField('文件大小', default=0, help_text='字节')
 
-    # 元数据
+    # 播客元数据
     episode_number = models.IntegerField('集数', null=True, blank=True)
     season_number = models.IntegerField('季数', null=True, blank=True)
+
+    # 音乐元数据（可选，仅用于音乐类型）
+    artist = models.CharField('艺术家', max_length=255, blank=True, null=True)
+    genre = models.CharField('流派', max_length=100, blank=True, null=True, help_text='如：流行、摇滚、古典等')
+    album_name = models.CharField('专辑名', max_length=255, blank=True, null=True)
+    release_date = models.DateField('发行日期', blank=True, null=True)
 
     # 状态
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='draft')

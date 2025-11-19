@@ -6,15 +6,15 @@
       <!-- 统计卡片 -->
       <div class="stats-grid">
         <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.shows_count || 0 }}</div>
+          <div class="stat-value">{{ stats.shows_count }}</div>
           <div class="stat-label">我的节目</div>
         </div>
         <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.episodes_count || 0 }}</div>
+          <div class="stat-value">{{ shows.reduce((sum, s) => sum + s.episodes_count, 0) }}</div>
           <div class="stat-label">发布单集</div>
         </div>
         <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.total_plays || 0 }}</div>
+          <div class="stat-value">{{ stats.total_plays }}</div>
           <div class="stat-label">总播放量</div>
         </div>
       </div>
@@ -37,12 +37,18 @@
             <p class="show-meta">{{ show.episodes_count }} 集 · {{ show.followers_count }} 关注</p>
           </div>
           <div class="show-actions">
-            <router-link :to="`/creator/shows/${show.id}/episodes/create`">
-              <el-button type="primary">上传单集</el-button>
+            <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-primary mofa-btn-sm">
+              上传单集
             </router-link>
-            <router-link :to="`/shows/${show.slug}`">
-              <el-button>查看</el-button>
+            <router-link :to="`/shows/${show.slug}`" class="mofa-btn mofa-btn-sm">
+              查看
             </router-link>
+            <router-link :to="`/creator/shows/${show.slug}/edit`" class="mofa-btn mofa-btn-sm">
+              编辑
+            </router-link>
+            <button @click="handleDeleteShow(show)" class="mofa-btn mofa-btn-danger mofa-btn-sm">
+              删除
+            </button>
           </div>
         </div>
       </div>
@@ -57,17 +63,51 @@ import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
 import { Plus } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()
 
 const shows = ref([])
-
-const stats = computed(() => authStore.user || {})
+const stats = ref({
+  shows_count: 0,
+  total_plays: 0
+})
 
 onMounted(async () => {
+  await loadShows()
+})
+
+async function loadShows() {
   const data = await api.podcasts.getMyShows()
   shows.value = data.results || data
-})
+
+  // 计算统计数据
+  stats.value.shows_count = shows.value.length
+  stats.value.total_plays = shows.value.reduce((sum, show) => sum + (show.total_plays || 0), 0)
+}
+
+async function handleDeleteShow(show) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除节目"${show.title}"吗？删除后无法恢复！`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    await api.podcasts.deleteShow(show.slug)
+    ElMessage.success('删除成功')
+    await loadShows()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败：', error)
+      ElMessage.error('删除失败')
+    }
+  }
+}
 </script>
 
 <style scoped>
@@ -153,5 +193,6 @@ onMounted(async () => {
 .show-actions {
   display: flex;
   gap: var(--spacing-sm);
+  align-items: center;
 }
 </style>
