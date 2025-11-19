@@ -35,6 +35,7 @@ defineProps({
   padding-top: 100%;
   position: relative;
   overflow: hidden;
+  background: var(--color-bg-secondary);
 }
 
 .show-cover {
@@ -44,6 +45,11 @@ defineProps({
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: var(--transition);
+}
+
+.show-card:hover .show-cover {
+  transform: scale(1.05);
 }
 
 .show-info {
@@ -54,15 +60,21 @@ defineProps({
   font-size: var(--font-lg);
   font-weight: var(--font-bold);
   margin-bottom: var(--spacing-xs);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: var(--line-height-tight);
 }
 
 .show-creator {
   font-size: var(--font-sm);
   color: var(--color-text-tertiary);
   margin-bottom: var(--spacing-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .show-meta {
@@ -70,5 +82,37 @@ defineProps({
   gap: var(--spacing-md);
   font-size: var(--font-sm);
   color: var(--color-text-secondary);
+  flex-wrap: wrap;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .show-info {
+    padding: var(--spacing-sm);
+  }
+
+  .show-title {
+    font-size: var(--font-base);
+  }
+
+  .show-creator,
+  .show-meta {
+    font-size: var(--font-xs);
+  }
+
+  .show-meta {
+    gap: var(--spacing-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .show-title {
+    font-size: var(--font-sm);
+    -webkit-line-clamp: 1;
+  }
+
+  .show-meta span {
+    font-size: 10px;
+  }
 }
 </style>

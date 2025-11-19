@@ -19,6 +19,12 @@ body {
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 防止iOS上的点击高亮 */
+  -webkit-tap-highlight-color: transparent;
+  /* 改善移动端滚动 */
+  -webkit-overflow-scrolling: touch;
+  /* 防止iOS上的文本大小调整 */
+  -webkit-text-size-adjust: 100%;
 }
 
 a {
@@ -34,6 +40,9 @@ img {
 button {
   font-family: inherit;
   cursor: pointer;
+  /* 改善触摸响应 */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* ========== MoFA 卡片 ========== */
@@ -212,6 +221,10 @@ button {
   .grid-4 {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  .grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
@@ -228,6 +241,21 @@ button {
   .page-content {
     padding: var(--spacing-lg) 0;
   }
+
+  /* 按钮响应式 */
+  .mofa-btn {
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: var(--font-sm);
+  }
+
+  /* 卡片响应式 */
+  .mofa-card {
+    padding: var(--spacing-md);
+  }
+
+  .mofa-card:hover {
+    transform: translate(-2px, -2px);
+  }
 }
 
 @media (max-width: 480px) {
@@ -235,6 +263,47 @@ button {
   .grid-3,
   .grid-4 {
     grid-template-columns: 1fr;
+  }
+
+  .container {
+    padding: 0 var(--spacing-sm);
+  }
+
+  .page-content {
+    padding: var(--spacing-md) 0;
+  }
+
+  /* 小屏幕按钮优化 */
+  .mofa-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-xs);
+    border-width: var(--border-width-thin);
+  }
+
+  .mofa-btn:hover {
+    transform: translate(-1px, -1px);
+  }
+
+  /* 小屏幕卡片优化 */
+  .mofa-card {
+    padding: var(--spacing-sm);
+    border-width: var(--border-width-thin);
+  }
+
+  .mofa-card:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* 小屏幕标签优化 */
+  .mofa-tag {
+    padding: 2px var(--spacing-xs);
+    font-size: var(--font-xs);
+    border-width: 1px;
+  }
+
+  .mofa-tag:hover {
+    transform: translate(-0.5px, -0.5px);
   }
 }
 

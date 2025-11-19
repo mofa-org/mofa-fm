@@ -36,19 +36,6 @@
         </div>
       </section>
 
-      <!-- 精选节目 -->
-      <section class="section">
-        <h2 class="section-title">精选节目</h2>
-        <div class="shows-grid" v-if="featuredShows.length > 0">
-          <ShowCard
-            v-for="show in featuredShows"
-            :key="show.id"
-            :show="show"
-          />
-        </div>
-        <el-empty v-else description="暂无精选节目" />
-      </section>
-
       <!-- 最新单集 -->
       <section class="section">
         <h2 class="section-title">最新单集</h2>
@@ -68,20 +55,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { usePodcastsStore } from '@/stores/podcasts'
 import api from '@/api'
-import ShowCard from '@/components/podcast/ShowCard.vue'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 
 const authStore = useAuthStore()
-const podcastsStore = usePodcastsStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
 const stats = ref(null)
 const latestEpisodes = ref([])
-
-const featuredShows = computed(() => podcastsStore.featuredShows)
 
 onMounted(async () => {
   // 加载统计数据
@@ -89,13 +71,6 @@ onMounted(async () => {
     stats.value = await api.podcasts.getStats()
   } catch (error) {
     console.error('加载统计失败', error)
-  }
-
-  // 加载精选节目
-  try {
-    await podcastsStore.fetchFeaturedShows()
-  } catch (error) {
-    console.error('加载精选节目失败', error)
   }
 
   // 加载最新单集
@@ -201,19 +176,128 @@ function formatNumber(num) {
   gap: var(--spacing-md);
 }
 
+/* 响应式优化 */
 @media (max-width: 1024px) {
   .stats {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .shows-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
+  .home-page {
+    padding: var(--spacing-xl) 0;
+  }
+
+  .hero {
+    padding: var(--spacing-xl) 0;
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .hero-logo {
+    width: 80px;
+    height: 80px;
+  }
+
   .hero-title {
     font-size: var(--font-3xl);
   }
 
+  .hero-subtitle {
+    font-size: var(--font-lg);
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 var(--spacing-lg);
+  }
+
   .stats {
     grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .stat-card {
+    padding: var(--spacing-md);
+  }
+
+  .stat-value {
+    font-size: var(--font-2xl);
+  }
+
+  .stat-label {
+    font-size: var(--font-sm);
+  }
+
+  .section {
+    margin-bottom: var(--spacing-xl);
+  }
+
+  .section-title {
+    font-size: var(--font-xl);
+  }
+
+  .shows-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .home-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .hero {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .hero-logo {
+    width: 60px;
+    height: 60px;
+  }
+
+  .hero-title {
+    font-size: var(--font-2xl);
+  }
+
+  .hero-subtitle {
+    font-size: var(--font-base);
+  }
+
+  .hero-actions {
+    padding: 0 var(--spacing-md);
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .stat-card {
+    padding: var(--spacing-sm);
+  }
+
+  .stat-value {
+    font-size: var(--font-xl);
+  }
+
+  .stat-label {
+    font-size: var(--font-xs);
+  }
+
+  .section-title {
+    font-size: var(--font-lg);
+  }
+
+  .shows-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
   }
 }
 </style>

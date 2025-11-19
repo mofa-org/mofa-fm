@@ -55,7 +55,7 @@
         <div class="comments-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item mofa-card">
             <div class="comment-user">
-              <el-avatar :size="40">{{ comment.user.username[0] }}</el-avatar>
+              <el-avatar :size="40" :src="comment.user.avatar_url || '/default_avatar.png'" />
               <span class="username">{{ comment.user.username }}</span>
               <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
             </div>

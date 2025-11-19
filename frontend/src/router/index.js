@@ -73,6 +73,12 @@ const router = createRouter({
       name: 'become-creator',
       component: () => import('@/views/BecomeCreator.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/Profile.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

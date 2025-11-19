@@ -26,7 +26,10 @@ class UserSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.avatar.url)
             return obj.avatar.url
-        return None
+        # 返回默认头像
+        if request:
+            return request.build_absolute_uri('/static/default_avatar.png')
+        return '/static/default_avatar.png'
 
 
 class RegisterSerializer(serializers.ModelSerializer):

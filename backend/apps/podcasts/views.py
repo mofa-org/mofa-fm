@@ -7,6 +7,7 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
 from .models import Category, Tag, Show, Episode
 from .serializers import (
     CategorySerializer, TagSerializer,
@@ -14,6 +15,8 @@ from .serializers import (
     EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer
 )
 from .permissions import IsCreatorOrReadOnly, IsShowOwner
+
+User = get_user_model()
 
 
 # 分类和标签

@@ -19,6 +19,10 @@ client.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // 如果是FormData，删除Content-Type让浏览器自动设置
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    }
     return config
   },
   error => {
@@ -34,6 +38,20 @@ client.interceptors.response.use(
       const { status, data } = error.response
 
       switch (status) {
+        case 400:
+          // 验证错误，显示详细信息
+          if (data && typeof data === 'object') {
+            // 处理字段级错误
+            const errors = Object.values(data).flat()
+            if (errors.length > 0) {
+              ElMessage.error(errors[0])
+            } else {
+              ElMessage.error(data.message || data.error || '请求参数错误')
+            }
+          } else {
+            ElMessage.error('请求参数错误')
+          }
+          break
         case 401:
           // 未授权，清除token并跳转登录
           localStorage.removeItem('access_token')

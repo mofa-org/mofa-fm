@@ -5,9 +5,9 @@
         <img :src="show.cover_url" :alt="show.title" class="show-cover" />
         <div class="show-info">
           <h1 class="show-title">{{ show.title }}</h1>
-          <router-link :to="`/users/${show.creator.username}`" class="creator-name">
+          <div class="creator-name">
             {{ show.creator.username }}
-          </router-link>
+          </div>
           <p class="show-description">{{ show.description }}</p>
 
           <div class="show-meta">
@@ -102,9 +102,10 @@ async function handleFollow() {
 
 .creator-name {
   font-size: var(--font-lg);
-  color: var(--color-primary);
+  color: var(--color-text-secondary);
   display: block;
   margin-bottom: var(--spacing-md);
+  font-weight: var(--font-medium);
 }
 
 .show-description {
@@ -130,5 +131,108 @@ async function handleFollow() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .show-header {
+    gap: var(--spacing-lg);
+  }
+
+  .show-cover {
+    width: 240px;
+    height: 240px;
+  }
+
+  .show-title {
+    font-size: var(--font-2xl);
+  }
+
+  .creator-name {
+    font-size: var(--font-base);
+  }
+}
+
+@media (max-width: 768px) {
+  .show-detail-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .show-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--spacing-md);
+  }
+
+  .show-cover {
+    width: 200px;
+    height: 200px;
+  }
+
+  .show-info {
+    width: 100%;
+  }
+
+  .show-title {
+    font-size: var(--font-xl);
+  }
+
+  .show-meta {
+    justify-content: center;
+    gap: var(--spacing-md);
+    font-size: var(--font-sm);
+  }
+
+  .section-title {
+    font-size: var(--font-xl);
+  }
+}
+
+@media (max-width: 480px) {
+  .show-detail-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .show-header {
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+  }
+
+  .show-cover {
+    width: 160px;
+    height: 160px;
+  }
+
+  .show-title {
+    font-size: var(--font-lg);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .creator-name {
+    font-size: var(--font-sm);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .show-description {
+    font-size: var(--font-sm);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .show-meta {
+    gap: var(--spacing-sm);
+    font-size: var(--font-xs);
+    flex-wrap: wrap;
+  }
+
+  .section-title {
+    font-size: var(--font-lg);
+    margin-bottom: var(--spacing-md);
+    padding: 0 var(--spacing-md);
+  }
+
+  .episodes-list {
+    gap: var(--spacing-sm);
+  }
 }
 </style>

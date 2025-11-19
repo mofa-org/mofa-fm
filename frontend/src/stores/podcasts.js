@@ -14,9 +14,15 @@ export const usePodcastsStore = defineStore('podcasts', () => {
   async function fetchCategories() {
     if (categories.value.length > 0) return categories.value
 
-    const data = await api.podcasts.getCategories()
-    categories.value = data
-    return data
+    try {
+      const data = await api.podcasts.getCategories()
+      categories.value = data || []
+      return categories.value
+    } catch (error) {
+      console.error('获取分类失败', error)
+      categories.value = []
+      return []
+    }
   }
 
   // 获取标签

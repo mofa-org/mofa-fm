@@ -51,8 +51,8 @@ class CreatorVerification(models.Model):
     )
 
     # 数学题验证
-    question = models.CharField('问题', max_length=100)
-    answer = models.IntegerField('答案')
+    question = models.CharField('问题', max_length=100, blank=True, null=True)
+    answer = models.IntegerField('答案', blank=True, null=True)
 
     # 验证状态
     is_verified = models.BooleanField('已验证', default=False)

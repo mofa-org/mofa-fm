@@ -35,7 +35,7 @@
           <el-form-item label="分类" prop="category_id">
             <el-select v-model="form.category_id" placeholder="选择分类">
               <el-option
-                v-for="cat in categories"
+                v-for="cat in (categories || [])"
                 :key="cat.id"
                 :label="cat.name"
                 :value="cat.id"
@@ -46,7 +46,7 @@
           <el-form-item label="标签">
             <el-select v-model="form.tag_ids" multiple placeholder="选择标签（可选）">
               <el-option
-                v-for="tag in tags"
+                v-for="tag in (tags || [])"
                 :key="tag.id"
                 :label="tag.name"
                 :value="tag.id"

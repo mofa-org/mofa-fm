@@ -149,4 +149,66 @@ function formatDate(date) {
   font-size: var(--font-xs);
   color: var(--color-text-tertiary);
 }
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .episode-cover {
+    flex: 0 0 100px;
+    height: 100px;
+  }
+
+  .episode-title {
+    font-size: var(--font-base);
+  }
+
+  .episode-meta {
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .episode-card {
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .episode-cover {
+    flex: 0 0 80px;
+    height: 80px;
+  }
+
+  .play-overlay {
+    opacity: 0.7;
+  }
+
+  .play-icon {
+    font-size: 32px !important;
+  }
+
+  .episode-title {
+    font-size: var(--font-sm);
+    margin-bottom: 4px;
+  }
+
+  .show-name {
+    font-size: var(--font-xs);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .episode-description {
+    font-size: var(--font-xs);
+    margin-bottom: var(--spacing-xs);
+    -webkit-line-clamp: 1;
+  }
+
+  .episode-meta {
+    gap: var(--spacing-xs);
+    font-size: 10px;
+  }
+
+  .episode-meta span {
+    white-space: nowrap;
+  }
+}
 </style>

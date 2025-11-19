@@ -65,7 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
   // 更新用户资料
   async function updateProfile(userData) {
     const data = await api.auth.updateProfile(userData)
-    user.value = data
+    user.value = { ...user.value, ...data }
     return data
   }
 
