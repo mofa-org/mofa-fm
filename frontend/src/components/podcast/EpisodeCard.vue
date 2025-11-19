@@ -29,25 +29,78 @@
         <span>{{ formatDate(episode.published_at) }}</span>
       </div>
     </div>
+
+    <!-- 创作者操作按钮 -->
+    <div v-if="isCreator" class="episode-actions">
+      <router-link
+        :to="`/creator/shows/${episode.show.slug}/episodes/${episode.slug}/edit`"
+        class="mofa-btn mofa-btn-sm"
+      >
+        编辑
+      </router-link>
+      <button @click="handleDelete" class="mofa-btn mofa-btn-danger mofa-btn-sm">
+        删除
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { useAuthStore } from '@/stores/auth'
 import { VideoPlay } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import api from '@/api'
 import dayjs from 'dayjs'
 
 const props = defineProps({
   episode: {
     type: Object,
     required: true
+  },
+  show: {
+    type: Object,
+    default: null
   }
 })
 
+const emit = defineEmits(['deleted'])
+
 const playerStore = usePlayerStore()
+const authStore = useAuthStore()
+
+// 判断当前用户是否是该节目的创作者
+const isCreator = computed(() => {
+  if (!authStore.isAuthenticated || !props.show) return false
+  return props.show.creator?.id === authStore.user?.id
+})
 
 function handlePlay() {
   playerStore.play(props.episode)
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除单集"${props.episode.title}"吗？删除后无法恢复！`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    await api.podcasts.deleteEpisode(props.episode.show.slug, props.episode.slug)
+    ElMessage.success('删除成功')
+    emit('deleted', props.episode.id)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败：', error)
+      ElMessage.error('删除失败')
+    }
+  }
 }
 
 function formatDuration(seconds) {
@@ -66,6 +119,7 @@ function formatDate(date) {
 .episode-card {
   display: flex;
   gap: var(--spacing-md);
+  align-items: center;
 }
 
 .episode-cover {
@@ -150,6 +204,12 @@ function formatDate(date) {
   color: var(--color-text-tertiary);
 }
 
+.episode-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .episode-cover {
@@ -165,12 +225,17 @@ function formatDate(date) {
     gap: var(--spacing-sm);
     flex-wrap: wrap;
   }
+
+  .episode-actions {
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 480px) {
   .episode-card {
     gap: var(--spacing-sm);
     padding: var(--spacing-sm);
+    flex-wrap: wrap;
   }
 
   .episode-cover {
@@ -209,6 +274,12 @@ function formatDate(date) {
 
   .episode-meta span {
     white-space: nowrap;
+  }
+
+  .episode-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-end;
   }
 }
 </style>

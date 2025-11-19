@@ -30,6 +30,19 @@
               <el-icon><Star :style="episode.is_liked ? { color: '#ffc63e' } : {}" /></el-icon>
               {{ episode.is_liked ? '已点赞' : '点赞' }}
             </el-button>
+
+            <!-- 创作者操作按钮 -->
+            <template v-if="isCreator">
+              <router-link
+                :to="`/creator/shows/${episode.show.slug}/episodes/${episode.slug}/edit`"
+                class="mofa-btn mofa-btn-sm"
+              >
+                编辑
+              </router-link>
+              <button @click="handleDelete" class="mofa-btn mofa-btn-danger mofa-btn-sm">
+                删除
+              </button>
+            </template>
           </div>
         </div>
       </div>
@@ -69,15 +82,16 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoPlay, Star } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
 const playerStore = usePlayerStore()
 
@@ -87,6 +101,10 @@ const commentText = ref('')
 const commenting = ref(false)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const isCreator = computed(() => {
+  if (!authStore.isAuthenticated || !episode.value) return false
+  return episode.value.show?.creator?.id === authStore.user?.id
+})
 
 onMounted(async () => {
   const { showSlug, episodeSlug } = route.params
@@ -107,6 +125,29 @@ async function handleLike() {
     episode.value.like_count = data.like_count
   } catch (error) {
     // 错误已处理
+  }
+}
+
+async function handleDelete() {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除单集"${episode.value.title}"吗？删除后无法恢复！`,
+      '删除确认',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    await api.podcasts.deleteEpisode(episode.value.show.slug, episode.value.slug)
+    ElMessage.success('删除成功')
+    router.push(`/shows/${episode.value.show.slug}`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除失败：', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 

@@ -75,6 +75,12 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {
+      path: '/creator/shows/:showSlug/episodes/:episodeSlug/edit',
+      name: 'edit-episode',
+      component: () => import('@/views/creator/EditEpisode.vue'),
+      meta: { requiresAuth: true, requiresCreator: true }
+    },
+    {
       path: '/become-creator',
       name: 'become-creator',
       component: () => import('@/views/BecomeCreator.vue'),

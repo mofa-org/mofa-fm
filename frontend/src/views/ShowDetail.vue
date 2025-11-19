@@ -29,7 +29,13 @@
       <!-- 单集列表 -->
       <h2 class="section-title">所有单集</h2>
       <div class="episodes-list">
-        <EpisodeCard v-for="episode in episodes" :key="episode.id" :episode="episode" />
+        <EpisodeCard
+          v-for="episode in episodes"
+          :key="episode.id"
+          :episode="episode"
+          :show="show"
+          @deleted="handleEpisodeDeleted"
+        />
       </div>
     </div>
   </div>
@@ -68,6 +74,15 @@ async function handleFollow() {
     ElMessage.success(data.following ? '关注成功' : '取消关注')
   } catch (error) {
     // 错误已处理
+  }
+}
+
+async function handleEpisodeDeleted(episodeId) {
+  // 从列表中移除已删除的单集
+  episodes.value = episodes.value.filter(ep => ep.id !== episodeId)
+  // 更新单集数量
+  if (show.value) {
+    show.value.episodes_count--
   }
 }
 </script>
