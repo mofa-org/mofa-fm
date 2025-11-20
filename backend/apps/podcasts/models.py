@@ -197,3 +197,134 @@ class Episode(models.Model):
         if self.cover:
             return self.cover.url
         return self.show.cover.url if self.show.cover else None
+
+
+class ScriptSession(models.Model):
+    """AI脚本创作会话 - 用户与AI对话生成播客脚本"""
+
+    STATUS_CHOICES = [
+        ('active', '进行中'),
+        ('completed', '已完成'),
+        ('archived', '已归档'),
+    ]
+
+    # 关联
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='script_sessions',
+        verbose_name='创作者'
+    )
+    show = models.ForeignKey(
+        Show,
+        on_delete=models.CASCADE,
+        related_name='script_sessions',
+        verbose_name='所属节目',
+        null=True,
+        blank=True,
+        help_text='可选，如果已选择节目'
+    )
+    episode = models.OneToOneField(
+        Episode,
+        on_delete=models.SET_NULL,
+        related_name='script_session',
+        verbose_name='生成的单集',
+        null=True,
+        blank=True,
+        help_text='生成音频后关联的Episode'
+    )
+
+    # 会话信息
+    title = models.CharField('会话标题', max_length=255, blank=True)
+    status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='active')
+
+    # 对话历史 (JSON格式)
+    # 格式: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+    chat_history = models.JSONField('对话历史', default=list)
+
+    # 当前脚本内容 (Markdown格式)
+    current_script = models.TextField('当前脚本', blank=True, help_text='Markdown格式，包含【角色名】标签')
+
+    # 脚本版本历史 (JSON格式)
+    # 格式: [{"version": 1, "script": "...", "timestamp": "..."}, ...]
+    script_versions = models.JSONField('脚本版本历史', default=list)
+
+    # 音色配置 (JSON格式)
+    # 格式: {"角色名": {"voice_id": "xxx", "voice_name": "罗翔"}, ...}
+    voice_config = models.JSONField('音色配置', default=dict, blank=True)
+
+    # 元数据
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'script_sessions'
+        ordering = ['-updated_at']
+        verbose_name = 'AI脚本会话'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.creator.username} - {self.title or '未命名会话'}"
+
+    def add_message(self, role: str, content: str):
+        """添加一条对话消息"""
+        self.chat_history.append({
+            'role': role,
+            'content': content,
+            'timestamp': models.DateTimeField(auto_now_add=True).isoformat()
+        })
+        self.save()
+
+    def update_script(self, new_script: str):
+        """更新脚本并保存版本"""
+        # 保存旧版本
+        if self.current_script:
+            version = len(self.script_versions) + 1
+            self.script_versions.append({
+                'version': version,
+                'script': self.current_script,
+                'timestamp': models.DateTimeField(auto_now_add=True).isoformat()
+            })
+
+        # 更新当前脚本
+        self.current_script = new_script
+        self.save()
+
+
+class UploadedReference(models.Model):
+    """上传的参考文件 - 用于AI生成脚本时的参考材料"""
+
+    FILE_TYPE_CHOICES = [
+        ('txt', '文本文件'),
+        ('pdf', 'PDF文档'),
+        ('md', 'Markdown文档'),
+        ('docx', 'Word文档'),
+    ]
+
+    session = models.ForeignKey(
+        ScriptSession,
+        on_delete=models.CASCADE,
+        related_name='uploaded_files',
+        verbose_name='所属会话'
+    )
+
+    # 文件信息
+    file = models.FileField('文件', upload_to='script_references/%Y/%m/')
+    original_filename = models.CharField('原始文件名', max_length=255)
+    file_type = models.CharField('文件类型', max_length=10, choices=FILE_TYPE_CHOICES)
+    file_size = models.BigIntegerField('文件大小', help_text='字节')
+
+    # 提取的文本内容
+    extracted_text = models.TextField('提取的文本', blank=True, help_text='从文件中提取的纯文本内容')
+
+    # 元数据
+    uploaded_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'uploaded_references'
+        ordering = ['-uploaded_at']
+        verbose_name = '参考文件'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.original_filename} ({self.session.creator.username})"
