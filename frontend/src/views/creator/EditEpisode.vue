@@ -109,6 +109,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const audioFile = ref(null)
 const showContentType = ref('podcast')
+const episodeId = ref(null)
 
 const form = ref({
   title: '',
@@ -134,6 +135,9 @@ onMounted(async () => {
 
     // 加载单集详情
     const episode = await api.podcasts.getEpisode(showSlug, episodeSlug)
+
+    // 保存 episode ID
+    episodeId.value = episode.id
 
     // 获取节目内容类型
     showContentType.value = episode.show.content_type || 'podcast'
@@ -197,10 +201,10 @@ async function handleSubmit() {
       if (form.value.release_date) formData.append('release_date', form.value.release_date)
     }
 
-    const { showSlug, episodeSlug } = route.params
-    await api.podcasts.updateEpisode(showSlug, episodeSlug, formData)
+    await api.podcasts.updateEpisode(episodeId.value, formData)
 
     ElMessage.success('保存成功')
+    const { showSlug } = route.params
     router.push(`/shows/${showSlug}`)
   } catch (error) {
     ElMessage.error(error.response?.data?.message || '保存失败')

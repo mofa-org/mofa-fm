@@ -112,8 +112,24 @@ const rules = {
 }
 
 onMounted(async () => {
-  categories.value = await podcastsStore.fetchCategories()
-  tags.value = await podcastsStore.fetchTags()
+  try {
+    const [categoriesData, tagsData] = await Promise.all([
+      podcastsStore.fetchCategories().catch(() => []),
+      podcastsStore.fetchTags().catch(() => [])
+    ])
+
+    categories.value = Array.isArray(categoriesData)
+      ? categoriesData.filter(item => item !== null && item !== undefined)
+      : []
+
+    tags.value = Array.isArray(tagsData)
+      ? tagsData.filter(item => item !== null && item !== undefined)
+      : []
+  } catch (error) {
+    console.error('加载分类和标签失败：', error)
+    categories.value = []
+    tags.value = []
+  }
 })
 
 function handleCoverChange(file) {

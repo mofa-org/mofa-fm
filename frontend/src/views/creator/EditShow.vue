@@ -3,7 +3,7 @@
     <div class="container">
       <h1 class="page-title">编辑节目</h1>
 
-      <div class="form-card mofa-card" v-if="!loading">
+      <div class="form-card mofa-card" v-if="dataLoaded">
         <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
           <el-form-item label="内容类型" prop="content_type">
             <el-radio-group v-model="form.content_type">
@@ -42,7 +42,7 @@
             <p class="form-hint">推荐尺寸：1400x1400 像素，留空则不更新封面</p>
           </el-form-item>
 
-          <el-form-item label="分类" prop="category_id">
+          <el-form-item label="分类" prop="category_id" v-if="categories.length > 0">
             <el-select v-model="form.category_id" placeholder="选择分类">
               <el-option
                 v-for="cat in categories"
@@ -53,7 +53,7 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="标签">
+          <el-form-item label="标签" v-if="tags.length > 0">
             <el-select v-model="form.tag_ids" multiple placeholder="选择标签（可选）">
               <el-option
                 v-for="tag in tags"
@@ -94,7 +94,7 @@ const router = useRouter()
 const podcastsStore = usePodcastsStore()
 
 const formRef = ref()
-const loading = ref(true)
+const dataLoaded = ref(false)
 const submitting = ref(false)
 const coverPreview = ref('')
 const coverFile = ref(null)
@@ -118,23 +118,36 @@ const rules = {
 
 onMounted(async () => {
   try {
-    // 加载分类和标签
-    categories.value = await podcastsStore.fetchCategories()
-    tags.value = await podcastsStore.fetchTags()
-
-    // 加载节目详情
     const slug = route.params.slug
-    const show = await api.podcasts.getShow(slug)
+
+    // 并行加载所有数据
+    const [categoriesData, tagsData, show] = await Promise.all([
+      podcastsStore.fetchCategories().catch(() => []),
+      podcastsStore.fetchTags().catch(() => []),
+      api.podcasts.getShow(slug)
+    ])
+
+    // 确保数据是数组且过滤掉 null 值
+    categories.value = Array.isArray(categoriesData)
+      ? categoriesData.filter(item => item !== null && item !== undefined)
+      : []
+
+    tags.value = Array.isArray(tagsData)
+      ? tagsData.filter(item => item !== null && item !== undefined)
+      : []
 
     // 填充表单
     form.value.content_type = show.content_type || 'podcast'
     form.value.title = show.title
     form.value.description = show.description
     form.value.category_id = show.category?.id || null
-    form.value.tag_ids = show.tags?.map(tag => tag.id) || []
+    form.value.tag_ids = Array.isArray(show.tags)
+      ? show.tags.map(tag => tag.id).filter(id => id !== null && id !== undefined)
+      : []
     coverPreview.value = show.cover_url
 
-    loading.value = false
+    // 所有数据加载完成后才显示表单
+    dataLoaded.value = true
   } catch (error) {
     console.error('加载节目信息失败：', error)
     ElMessage.error('加载节目信息失败')
@@ -172,11 +185,12 @@ async function handleSubmit() {
     }
 
     const slug = route.params.slug
-    await api.put(`/podcasts/shows/${slug}/update/`, formData)
+    await api.podcasts.updateShow(slug, formData)
 
     ElMessage.success('保存成功')
     router.push('/creator')
   } catch (error) {
+    console.error('保存失败：', error)
     ElMessage.error(error.response?.data?.message || '保存失败')
   } finally {
     submitting.value = false

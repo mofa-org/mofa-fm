@@ -76,10 +76,12 @@ onMounted(async () => {
     question.value = data.question
     attemptsLeft.value = 3 - data.attempts
   } catch (error) {
-    console.error('获取验证题目失败', error)
-    // 如果用户已经是创作者，自动设置为已验证
+    // 如果用户已经是创作者，自动设置为已验证（不打印错误日志）
     if (error.response?.status === 400 && error.response?.data?.error?.includes('已经是创作者')) {
       verified.value = true
+    } else {
+      // 其他错误才打印日志
+      console.error('获取验证题目失败', error)
     }
   }
 })

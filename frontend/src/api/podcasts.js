@@ -59,15 +59,15 @@ export default {
   },
 
   // 更新单集
-  updateEpisode(showSlug, episodeSlug, data) {
-    return client.put(`/podcasts/shows/${showSlug}/episodes/${episodeSlug}/update/`, data, {
+  updateEpisode(episodeId, data) {
+    return client.put(`/podcasts/episodes/${episodeId}/update/`, data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   },
 
   // 删除单集
-  deleteEpisode(showSlug, episodeSlug) {
-    return client.delete(`/podcasts/shows/${showSlug}/episodes/${episodeSlug}/delete/`)
+  deleteEpisode(episodeId) {
+    return client.delete(`/podcasts/episodes/${episodeId}/delete/`)
   },
 
   // 我的播客节目

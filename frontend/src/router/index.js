@@ -63,6 +63,12 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {
+      path: '/creator/shows/:slug',
+      name: 'manage-show',
+      component: () => import('@/views/creator/ManageShow.vue'),
+      meta: { requiresAuth: true, requiresCreator: true }
+    },
+    {
       path: '/creator/shows/:slug/edit',
       name: 'edit-show',
       component: () => import('@/views/creator/EditShow.vue'),

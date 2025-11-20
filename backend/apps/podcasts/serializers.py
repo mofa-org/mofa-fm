@@ -220,7 +220,8 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 class EpisodeCreateSerializer(serializers.ModelSerializer):
     """创建单集/单曲序列化器"""
 
-    show_id = serializers.IntegerField(required=True)
+    show_id = serializers.IntegerField(required=False)
+    audio_file = serializers.FileField(required=False)
 
     class Meta:
         model = Episode
@@ -239,6 +240,16 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
         except Show.DoesNotExist:
             raise serializers.ValidationError("节目不存在或您没有权限")
 
+    def validate(self, attrs):
+        """验证数据"""
+        # 创建时必须提供 show_id 和 audio_file
+        if not self.instance:
+            if 'show_id' not in attrs:
+                raise serializers.ValidationError({'show_id': '创建单集时必须指定所属节目'})
+            if 'audio_file' not in attrs:
+                raise serializers.ValidationError({'audio_file': '创建单集时必须上传音频文件'})
+        return attrs
+
     def create(self, validated_data):
         show_id = validated_data.pop('show_id')
         show = Show.objects.get(id=show_id)
@@ -252,6 +263,28 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
         process_episode_audio.delay(episode.id)
 
         return episode
+
+    def update(self, instance, validated_data):
+        """更新单集"""
+        # 移除 show_id，不允许更新所属节目
+        validated_data.pop('show_id', None)
+
+        # 如果有新的音频文件，设置状态为处理中
+        if 'audio_file' in validated_data and validated_data['audio_file']:
+            instance.status = 'processing'
+
+        # 更新字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+
+        # 如果有新音频，触发处理任务
+        if 'audio_file' in validated_data and validated_data['audio_file']:
+            from .tasks import process_episode_audio
+            process_episode_audio.delay(instance.id)
+
+        return instance
 
 
 class PodcastGenerationSerializer(serializers.Serializer):

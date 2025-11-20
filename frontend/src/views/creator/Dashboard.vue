@@ -37,14 +37,14 @@
             <p class="show-meta">{{ show.episodes_count }} 集 · {{ show.followers_count }} 关注</p>
           </div>
           <div class="show-actions">
-            <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-primary mofa-btn-sm">
+            <router-link :to="`/creator/shows/${show.slug}`" class="mofa-btn mofa-btn-primary mofa-btn-sm">
+              管理单集
+            </router-link>
+            <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-sm">
               上传单集
             </router-link>
-            <router-link :to="`/shows/${show.slug}`" class="mofa-btn mofa-btn-sm">
-              查看
-            </router-link>
             <router-link :to="`/creator/shows/${show.slug}/edit`" class="mofa-btn mofa-btn-sm">
-              编辑
+              编辑节目
             </router-link>
             <button @click="handleDeleteShow(show)" class="mofa-btn mofa-btn-danger mofa-btn-sm">
               删除

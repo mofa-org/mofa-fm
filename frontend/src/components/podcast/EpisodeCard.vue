@@ -31,7 +31,7 @@
     </div>
 
     <!-- 创作者操作按钮 -->
-    <div v-if="isCreator" class="episode-actions">
+    <div v-if="showCreatorActions && isCreator" class="episode-actions">
       <router-link
         :to="`/creator/shows/${episode.show.slug}/episodes/${episode.slug}/edit`"
         class="mofa-btn mofa-btn-sm"
@@ -62,6 +62,10 @@ const props = defineProps({
   show: {
     type: Object,
     default: null
+  },
+  showCreatorActions: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -92,7 +96,7 @@ async function handleDelete() {
       }
     )
 
-    await api.podcasts.deleteEpisode(props.episode.show.slug, props.episode.slug)
+    await api.podcasts.deleteEpisode(props.episode.id)
     ElMessage.success('删除成功')
     emit('deleted', props.episode.id)
   } catch (error) {

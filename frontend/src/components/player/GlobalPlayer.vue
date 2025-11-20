@@ -13,6 +13,14 @@
       <!-- 中间：播放控制 -->
       <div class="player-controls">
         <div class="control-buttons">
+          <button
+            class="player-btn player-btn-nav"
+            @click="playerStore.playPrevious()"
+            :disabled="!hasPrevious"
+            title="上一首"
+          >
+            <el-icon><ArrowLeftBold /></el-icon>
+          </button>
           <button class="player-btn player-btn-skip" @click="playerStore.skip(-15)" title="后退15秒">
             <el-icon><DArrowLeft /></el-icon>
           </button>
@@ -24,6 +32,14 @@
           </button>
           <button class="player-btn player-btn-skip" @click="playerStore.skip(15)" title="前进15秒">
             <el-icon><DArrowRight /></el-icon>
+          </button>
+          <button
+            class="player-btn player-btn-nav"
+            @click="playerStore.playNext()"
+            :disabled="!hasNext"
+            title="下一首"
+          >
+            <el-icon><ArrowRightBold /></el-icon>
           </button>
         </div>
 
@@ -68,7 +84,9 @@ import {
   VideoPlay,
   VideoPause,
   DArrowLeft,
-  DArrowRight
+  DArrowRight,
+  ArrowLeftBold,
+  ArrowRightBold
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
@@ -82,6 +100,8 @@ const duration = computed(() => playerStore.duration)
 const playbackRate = computed(() => playerStore.playbackRate)
 const formattedCurrentTime = computed(() => playerStore.formattedCurrentTime)
 const formattedDuration = computed(() => playerStore.formattedDuration)
+const hasPrevious = computed(() => playerStore.hasPrevious)
+const hasNext = computed(() => playerStore.hasNext)
 
 // 同步进度条
 watch(() => playerStore.progress, (val) => {
@@ -230,6 +250,23 @@ function handleRateChange(rate) {
   box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.08);
 }
 
+/* 上一首/下一首按钮 */
+.player-btn-nav {
+  width: 40px;
+  height: 40px;
+  color: var(--color-text-primary);
+}
+
+.player-btn-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.player-btn-nav:disabled:hover {
+  transform: none;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.08);
+}
+
 /* 跳过按钮 */
 .player-btn-skip {
   width: 36px;
@@ -325,6 +362,11 @@ function handleRateChange(rate) {
     font-size: var(--font-xs);
   }
 
+  .player-btn-nav {
+    width: 36px;
+    height: 36px;
+  }
+
   .player-btn-skip {
     width: 32px;
     height: 32px;
@@ -384,16 +426,25 @@ function handleRateChange(rate) {
   }
 
   .control-buttons {
-    gap: var(--spacing-md);
+    gap: var(--spacing-sm);
   }
 
-  .player-btn-skip {
+  .player-btn-nav {
     width: 32px;
     height: 32px;
   }
 
-  .player-btn-skip :deep(.el-icon) {
+  .player-btn-nav :deep(.el-icon) {
     font-size: 16px !important;
+  }
+
+  .player-btn-skip {
+    width: 28px;
+    height: 28px;
+  }
+
+  .player-btn-skip :deep(.el-icon) {
+    font-size: 14px !important;
   }
 
   .player-btn-play {

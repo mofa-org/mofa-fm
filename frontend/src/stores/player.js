@@ -8,6 +8,8 @@ import api from '@/api'
 export const usePlayerStore = defineStore('player', () => {
   const currentEpisode = ref(null)
   const audio = ref(null)
+  const playlist = ref([]) // 播放列表
+  const currentIndex = ref(-1) // 当前播放索引
 
   const isPlaying = ref(false)
   const currentTime = ref(0)
@@ -22,6 +24,12 @@ export const usePlayerStore = defineStore('player', () => {
 
   const formattedCurrentTime = computed(() => formatTime(currentTime.value))
   const formattedDuration = computed(() => formatTime(duration.value))
+
+  // 是否有上一首
+  const hasPrevious = computed(() => currentIndex.value > 0)
+
+  // 是否有下一首
+  const hasNext = computed(() => currentIndex.value < playlist.value.length - 1)
 
   // 初始化音频
   function initAudio() {
@@ -45,6 +53,10 @@ export const usePlayerStore = defineStore('player', () => {
     audio.value.addEventListener('ended', () => {
       isPlaying.value = false
       saveProgress(true)
+      // 自动播放下一首
+      if (hasNext.value) {
+        playNext()
+      }
     })
 
     // 加载中
@@ -73,8 +85,18 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   // 播放单集
-  function play(episode) {
+  function play(episode, episodeList = null) {
     initAudio()
+
+    // 如果提供了播放列表，更新播放列表
+    if (episodeList && Array.isArray(episodeList)) {
+      playlist.value = episodeList
+      currentIndex.value = episodeList.findIndex(e => e.id === episode.id)
+    } else if (!currentEpisode.value || currentEpisode.value.id !== episode.id) {
+      // 如果是单独播放，将当前单集作为播放列表
+      playlist.value = [episode]
+      currentIndex.value = 0
+    }
 
     // 切换单集
     if (!currentEpisode.value || currentEpisode.value.id !== episode.id) {
@@ -90,6 +112,36 @@ export const usePlayerStore = defineStore('player', () => {
 
     audio.value.play()
     isPlaying.value = true
+  }
+
+  // 播放上一首
+  function playPrevious() {
+    if (!hasPrevious.value) return
+
+    currentIndex.value--
+    const previousEpisode = playlist.value[currentIndex.value]
+    if (previousEpisode) {
+      currentEpisode.value = previousEpisode
+      audio.value.src = previousEpisode.audio_url
+      audio.value.load()
+      audio.value.play()
+      isPlaying.value = true
+    }
+  }
+
+  // 播放下一首
+  function playNext() {
+    if (!hasNext.value) return
+
+    currentIndex.value++
+    const nextEpisode = playlist.value[currentIndex.value]
+    if (nextEpisode) {
+      currentEpisode.value = nextEpisode
+      audio.value.src = nextEpisode.audio_url
+      audio.value.load()
+      audio.value.play()
+      isPlaying.value = true
+    }
   }
 
   // 暂停
@@ -171,6 +223,8 @@ export const usePlayerStore = defineStore('player', () => {
 
   return {
     currentEpisode,
+    playlist,
+    currentIndex,
     isPlaying,
     currentTime,
     duration,
@@ -180,12 +234,16 @@ export const usePlayerStore = defineStore('player', () => {
     progress,
     formattedCurrentTime,
     formattedDuration,
+    hasPrevious,
+    hasNext,
     play,
     pause,
     toggle,
     seek,
     skip,
     setVolume,
-    setPlaybackRate
+    setPlaybackRate,
+    playPrevious,
+    playNext
   }
 })
