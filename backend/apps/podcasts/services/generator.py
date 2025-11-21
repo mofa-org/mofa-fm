@@ -1,6 +1,11 @@
 """
 Podcast audio generator that streams MiniMax TTS output, inspired by the
 MoFA `podcast-generator` flow (flows/podcast-generator).
+
+Updated to match MoFA Flow logic exactly:
+- Time-based text segmentation (instead of fixed character count)
+- Float32 audio processing with batching
+- Enhanced punctuation handling
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import random
 import re
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 from django.conf import settings
 from pydub import AudioSegment
 
@@ -19,7 +25,8 @@ from .minimax_client import MiniMaxError, MiniMaxVoiceConfig, synthesize_to_pcm
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PUNCTUATION_MARKS = "。？！!?；；…"
+# MoFA Flow default punctuation marks (more comprehensive)
+DEFAULT_PUNCTUATION_MARKS = "。！？.!?，,、；;：:"
 
 
 def _coerce_bool(value, default: bool = True) -> bool:
@@ -35,16 +42,23 @@ def _coerce_bool(value, default: bool = True) -> bool:
 
 
 def _find_split_index(text: str, max_length: int, split_marks: str) -> int:
+    """
+    Find a split index at or before max_length using provided marks or whitespace.
+
+    Copied from MoFA Flow script_segmenter for sentence-aware splitting.
+    """
     if max_length <= 0:
         return -1
 
     limit = min(len(text), max_length)
-    marks = set(split_marks or "")
 
-    for idx in range(limit, 0, -1):
-        if text[idx - 1] in marks:
-            return idx
+    # Try to split at punctuation marks first
+    if split_marks:
+        for idx in range(limit, 0, -1):
+            if text[idx - 1] in split_marks:
+                return idx
 
+    # Fall back to whitespace
     for idx in range(limit, 0, -1):
         if text[idx - 1].isspace():
             return idx
@@ -53,27 +67,44 @@ def _find_split_index(text: str, max_length: int, split_marks: str) -> int:
 
 
 def _split_long_text(text: str, max_length: int, punctuation_marks: str) -> List[str]:
+    """
+    Split long text into chunks that respect sentence boundaries.
+
+    Args:
+        text: Text to split
+        max_length: Maximum characters per segment
+        punctuation_marks: String of punctuation marks for splitting
+
+    Returns:
+        List of text segments (all <= max_length if possible)
+    """
     if max_length <= 0 or len(text) <= max_length:
         return [text]
 
-    segments: List[str] = []
+    # Build split marks from punctuation
+    split_marks = set(punctuation_marks)
+
+    chunks: List[str] = []
     remainder = text.strip()
 
     while remainder:
         if len(remainder) <= max_length:
-            segments.append(remainder)
+            chunks.append(remainder)
             break
 
+        # Find best split point
         split_idx = _find_split_index(remainder, max_length, punctuation_marks)
         if split_idx == -1:
+            # No good split point found, force split at max_length
             split_idx = max_length
 
         chunk = remainder[:split_idx].strip()
         if chunk:
-            segments.append(chunk)
+            chunks.append(chunk)
+
         remainder = remainder[split_idx:].lstrip()
 
-    return segments
+    return chunks
 
 
 class PodcastGenerator:
@@ -119,8 +150,22 @@ class PodcastGenerator:
         self.enable_english_normalization = _coerce_bool(
             minimax_settings.get("enable_english_normalization"), True
         )
+        self.batch_duration_ms = int(minimax_settings.get("batch_duration_ms", 2000))
 
-        self.max_segment_chars = int(minimax_settings.get("max_segment_chars", 120))
+        # Time-based text segmentation (MoFA Flow approach)
+        # Convert max duration (seconds) to character count
+        # Estimate: ~250-300 Chinese chars/minute = ~4-5 chars/second
+        # For 10 seconds: ~40-50 characters
+        max_segment_duration = float(minimax_settings.get("max_segment_duration", 10.0))  # seconds
+        chars_per_second = float(minimax_settings.get("tts_chars_per_second", 4.5))  # Conservative for Chinese
+        self.max_segment_chars = int(max_segment_duration * chars_per_second)
+
+        logger.info(
+            f"文本分段配置: max_duration={max_segment_duration}s, "
+            f"chars_per_second={chars_per_second}, "
+            f"max_length={self.max_segment_chars} chars"
+        )
+
         self.punctuation_marks = minimax_settings.get("punctuation_marks", DEFAULT_PUNCTUATION_MARKS)
 
         self.silence_min_ms = int(minimax_settings.get("silence_min_ms", 300))
@@ -156,6 +201,7 @@ class PodcastGenerator:
                     ),
                     self.enable_english_normalization,
                 ),
+                batch_duration_ms=int(override.get("batch_duration_ms", self.batch_duration_ms)),
             )
 
         for alias, data in self.DEFAULT_VOICES.items():
@@ -180,6 +226,7 @@ class PodcastGenerator:
                     override.get("enable_english_normalization", self.enable_english_normalization),
                     self.enable_english_normalization,
                 ),
+                batch_duration_ms=int(override.get("batch_duration_ms", self.batch_duration_ms)),
             )
             self.voice_configs[alias] = config
 
@@ -284,6 +331,11 @@ class PodcastGenerator:
         return expanded
 
     async def _generate_all_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, AudioSegment]]:
+        """
+        Generate audio for all text segments.
+
+        Processes float32 numpy arrays from MiniMax and converts to AudioSegment.
+        """
         results: List[Tuple[str, AudioSegment]] = []
 
         for index, (speaker, text) in enumerate(segments, start=1):
@@ -292,16 +344,21 @@ class PodcastGenerator:
                 logger.warning("跳过未配置语音的角色 %s", speaker)
                 continue
 
-            logger.info("MiniMax 生成片段 %s/%s (%s)", index, len(segments), speaker)
+            logger.info("MiniMax 生成片段 %s/%s (%s): '%s...' (len=%d)", index, len(segments), speaker, text[:30], len(text))
 
             def client_logger(message: str, *, _speaker=speaker, _index=index):
                 logger.debug("[MiniMax][%s #%s] %s", _speaker, _index, message)
 
-            sample_rate, pcm_bytes = await synthesize_to_pcm(config, text, logger=client_logger)
+            # Get float32 audio array from MiniMax
+            sample_rate, audio_float32 = await synthesize_to_pcm(config, text, logger=client_logger)
 
+            # Convert float32 [-1, 1] back to int16 for pydub
+            audio_int16 = (audio_float32 * 32767).astype(np.int16)
+
+            # Create AudioSegment from int16 array
             segment_audio = AudioSegment(
-                data=pcm_bytes,
-                sample_width=2,
+                data=audio_int16.tobytes(),
+                sample_width=2,  # 16-bit
                 frame_rate=sample_rate,
                 channels=config.audio_channel,
             )

@@ -4,6 +4,8 @@
 """
 from pydub import AudioSegment
 import os
+import subprocess
+import tempfile
 
 
 def get_audio_duration(file_path):
@@ -35,8 +37,40 @@ def process_audio(input_path, output_path=None):
         }
     """
     try:
-        # 加载音频（支持多种格式）
-        audio = AudioSegment.from_file(input_path)
+        # 加载音频（支持多种格式，包括从视频文件中提取音频）
+        try:
+            audio = AudioSegment.from_file(input_path)
+        except Exception as e:
+            # 如果失败（通常是因为文件包含视频流或格式特殊），使用 ffmpeg 直接提取音频
+            error_msg = str(e)
+            if "4GB" in error_msg or "video" in error_msg.lower() or "Unable to process" in error_msg:
+                # 使用 ffmpeg 提取音频流到临时文件
+                with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+                    temp_path = temp_file.name
+
+                try:
+                    # ffmpeg 命令：提取音频流，不重新编码
+                    subprocess.run([
+                        'ffmpeg', '-i', input_path,
+                        '-vn',  # 不包含视频
+                        '-acodec', 'libmp3lame',  # 使用 MP3 编码
+                        '-ab', '192k',  # 比特率
+                        '-y',  # 覆盖输出文件
+                        temp_path
+                    ], check=True, capture_output=True, text=True)
+
+                    # 从临时文件加载音频
+                    audio = AudioSegment.from_mp3(temp_path)
+
+                    # 清理临时文件
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                except subprocess.CalledProcessError as ffmpeg_error:
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise Exception(f"ffmpeg 提取音频失败: {ffmpeg_error.stderr}")
+            else:
+                raise
 
         # 标准化音量（防止过大或过小）
         audio = audio.normalize()

@@ -17,6 +17,7 @@ redis==5.0.3
 
 # 音频处理
 pydub==0.25.1
+numpy>=1.24.0  # MoFA Flow audio processing (float32 arrays)
 
 # 评论嵌套
 django-mptt==0.16.0

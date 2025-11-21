@@ -4,6 +4,8 @@ MiniMax TTS WebSocket helper for podcast audio generation.
 This client mirrors the behaviour used in the MoFA `podcast-generator`
 flow (see mofa/flows/podcast-generator) and provides a thin async wrapper
 that can be consumed by our Celery tasks.
+
+Updated to match MoFA Flow implementation exactly.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import ssl
 from dataclasses import dataclass
 from typing import AsyncGenerator, Callable, Optional, Tuple
 
+import numpy as np
 import websockets
 
 
@@ -35,6 +38,7 @@ class MiniMaxVoiceConfig:
     audio_bitrate: int = 128000
     audio_channel: int = 1
     enable_english_normalization: bool = True
+    batch_duration_ms: int = 2000  # Audio batching to prevent shared memory issues
 
     def validate(self) -> None:
         if not self.api_key:
@@ -140,13 +144,24 @@ class MiniMaxWebSocketClient:
             raise MiniMaxError(f"MiniMax 未能启动任务: {response}")
         self.logger("MiniMax 任务启动成功")
 
-    async def stream_text(self, text: str) -> AsyncGenerator[Tuple[int, bytes], None]:
-        """Stream PCM audio chunks for the given text."""
+    async def stream_text(self, text: str) -> AsyncGenerator[Tuple[int, np.ndarray], None]:
+        """
+        Stream PCM audio chunks for the given text.
+
+        Uses batching logic from MoFA Flow to prevent shared memory issues.
+        Yields float32 numpy arrays normalized to [-1, 1] range.
+        """
         if not self._ws:
             raise MiniMaxError("MiniMax WebSocket 未初始化")
 
         await self._ws.send(json.dumps({"event": "task_continue", "text": text}))
         self.logger(f"MiniMax 开始生成语音 (长度 {len(text)})")
+
+        # Batching configuration (from MoFA Flow)
+        batch_duration_threshold = self.config.batch_duration_ms / 1000.0  # Convert ms to seconds
+        chunk_buffer = []
+        batch_accumulated_duration = 0.0
+        chunk_counter = 0
 
         while True:
             response = json.loads(await self._ws.recv())
@@ -155,10 +170,39 @@ class MiniMaxWebSocketClient:
             if "data" in response and "audio" in response["data"]:
                 audio_hex = response["data"]["audio"]
                 if audio_hex:
-                    yield self.config.sample_rate, bytes.fromhex(audio_hex)
+                    chunk_counter += 1
+                    audio_bytes = bytes.fromhex(audio_hex)
+
+                    # Convert PCM bytes to numpy float32 array (MoFA Flow approach)
+                    # PCM format: 16-bit signed integers, normalize to [-1, 1]
+                    audio_int16 = np.frombuffer(audio_bytes, dtype=np.int16)
+                    audio_float32 = audio_int16.astype(np.float32) / 32768.0
+
+                    fragment_duration = len(audio_float32) / self.config.sample_rate
+
+                    # Add to buffer
+                    chunk_buffer.append(audio_float32)
+                    batch_accumulated_duration += fragment_duration
+
+                    # Send batch when accumulated duration exceeds threshold
+                    if batch_accumulated_duration >= batch_duration_threshold:
+                        batched_audio = np.concatenate(chunk_buffer)
+                        self.logger(f"发送批次音频: {len(batched_audio)} 采样点, {batch_accumulated_duration:.2f}秒")
+                        yield self.config.sample_rate, batched_audio
+
+                        # Reset buffer
+                        chunk_buffer = []
+                        batch_accumulated_duration = 0.0
 
             # Completed
             if response.get("is_final"):
+                # Send remaining chunks in buffer
+                if chunk_buffer:
+                    batched_audio = np.concatenate(chunk_buffer)
+                    self.logger(f"发送最后批次音频: {len(batched_audio)} 采样点, {batch_accumulated_duration:.2f}秒")
+                    yield self.config.sample_rate, batched_audio
+
+                self.logger(f"语音生成完成，共处理 {chunk_counter} 个原始片段")
                 break
 
     async def close(self) -> None:
@@ -178,13 +222,17 @@ async def synthesize_to_pcm(
     config: MiniMaxVoiceConfig,
     text: str,
     logger: Optional[Callable[[str], None]] = None,
-) -> Tuple[int, bytes]:
+) -> Tuple[int, np.ndarray]:
     """
-    Convenience helper: synthesize `text` and return raw PCM bytes with sample rate.
+    Convenience helper: synthesize `text` and return float32 numpy array with sample rate.
+
+    Returns:
+        Tuple of (sample_rate, audio_float32_array)
+        Audio is normalized to [-1, 1] range as float32.
     """
     config.validate()
 
-    chunks: list[bytes] = []
+    chunks: list[np.ndarray] = []
     async with MiniMaxWebSocketClient(config, logger=logger) as client:
         async for sample_rate, chunk in client.stream_text(text):
             chunks.append(chunk)
@@ -192,16 +240,20 @@ async def synthesize_to_pcm(
     if not chunks:
         raise MiniMaxError("MiniMax 未返回任何音频片段")
 
-    return config.sample_rate, b"".join(chunks)
+    # Concatenate all batched audio chunks
+    final_audio = np.concatenate(chunks)
+    return config.sample_rate, final_audio
 
 
 def synthesize_text(
     config: MiniMaxVoiceConfig,
     text: str,
     logger: Optional[Callable[[str], None]] = None,
-) -> Tuple[int, bytes]:
+) -> Tuple[int, np.ndarray]:
     """
     Synchronous wrapper around `synthesize_to_pcm`.
-    """
 
+    Returns:
+        Tuple of (sample_rate, audio_float32_array)
+    """
     return asyncio.run(synthesize_to_pcm(config, text, logger=logger))

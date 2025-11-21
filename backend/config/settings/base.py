@@ -154,6 +154,7 @@ AUDIO_OUTPUT_FORMAT = 'mp3'
 AUDIO_OUTPUT_BITRATE = '192k'
 
 # MiniMax TTS defaults (override via environment if needed)
+# Updated to match MoFA Flow implementation
 MINIMAX_TTS = {
     'api_key': config('MINIMAX_API_KEY', default=''),
     'model': config('MINIMAX_MODEL', default='speech-2.5-hd-preview'),
@@ -161,8 +162,20 @@ MINIMAX_TTS = {
     'audio_bitrate': config('MINIMAX_AUDIO_BITRATE', default=128000, cast=int),
     'audio_channel': config('MINIMAX_AUDIO_CHANNEL', default=1, cast=int),
     'enable_english_normalization': config('MINIMAX_ENABLE_ENGLISH_NORMALIZATION', default=True, cast=bool),
-    'max_segment_chars': config('MINIMAX_MAX_SEGMENT_CHARS', default=120, cast=int),
-    'punctuation_marks': config('MINIMAX_PUNCTUATION_MARKS', default='。？！!?；；…'),
+
+    # Audio batching (MoFA Flow optimization to prevent shared memory issues)
+    'batch_duration_ms': config('MINIMAX_BATCH_DURATION_MS', default=2000, cast=int),
+
+    # Time-based text segmentation (MoFA Flow approach)
+    # Convert max duration to character count: max_duration * chars_per_second
+    # Default: 10 seconds * 4.5 chars/second = 45 characters
+    'max_segment_duration': config('MINIMAX_MAX_SEGMENT_DURATION', default=10.0, cast=float),  # seconds
+    'tts_chars_per_second': config('MINIMAX_TTS_CHARS_PER_SECOND', default=4.5, cast=float),  # Conservative for Chinese
+
+    # Enhanced punctuation marks for sentence-aware splitting (MoFA Flow)
+    'punctuation_marks': config('MINIMAX_PUNCTUATION_MARKS', default='。！？.!?，,、；;：:'),
+
+    # Random silence between speaker changes
     'silence_min_ms': config('MINIMAX_SILENCE_MIN_MS', default=300, cast=int),
     'silence_max_ms': config('MINIMAX_SILENCE_MAX_MS', default=1200, cast=int),
 }
