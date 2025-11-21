@@ -1,233 +1,310 @@
-import os
-import re
-import json
-import time
-import random
+"""
+Podcast audio generator that streams MiniMax TTS output, inspired by the
+MoFA `podcast-generator` flow (flows/podcast-generator).
+"""
+
+from __future__ import annotations
+
 import asyncio
 import logging
-import numpy as np
-from typing import List, Tuple, Optional, Dict
+import os
+import random
+import re
+from typing import Dict, List, Optional, Tuple
+
 from django.conf import settings
 from pydub import AudioSegment
-import websockets
+
+from .minimax_client import MiniMaxError, MiniMaxVoiceConfig, synthesize_to_pcm
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_PUNCTUATION_MARKS = "。？！!?；；…"
+
+
+def _coerce_bool(value, default: bool = True) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return default
+
+
+def _find_split_index(text: str, max_length: int, split_marks: str) -> int:
+    if max_length <= 0:
+        return -1
+
+    limit = min(len(text), max_length)
+    marks = set(split_marks or "")
+
+    for idx in range(limit, 0, -1):
+        if text[idx - 1] in marks:
+            return idx
+
+    for idx in range(limit, 0, -1):
+        if text[idx - 1].isspace():
+            return idx
+
+    return -1
+
+
+def _split_long_text(text: str, max_length: int, punctuation_marks: str) -> List[str]:
+    if max_length <= 0 or len(text) <= max_length:
+        return [text]
+
+    segments: List[str] = []
+    remainder = text.strip()
+
+    while remainder:
+        if len(remainder) <= max_length:
+            segments.append(remainder)
+            break
+
+        split_idx = _find_split_index(remainder, max_length, punctuation_marks)
+        if split_idx == -1:
+            split_idx = max_length
+
+        chunk = remainder[:split_idx].strip()
+        if chunk:
+            segments.append(chunk)
+        remainder = remainder[split_idx:].lstrip()
+
+    return segments
+
+
 class PodcastGenerator:
     """
-    Service to generate two-person podcasts from markdown scripts using MiniMax API.
+    Generate two-person podcast audio using MiniMax streaming TTS.
+
+    Behaviour mirrors the Dora flow under `mofa/flows/podcast-generator`
+    so that output timing, speaker handling, and silence padding remain
+    consistent with the CLI workflow.
     """
-    
-    # Voice IDs (Hardcoded for now as per requirement, could be configurable)
-    VOICE_IDS = {
-        "daniu": "ttv-voice-2025103011222725-sg8dZxUP",  # Luo Xiang style
-        "yifan": "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d", # Doubao style
+
+    DEFAULT_VOICES: Dict[str, Dict[str, object]] = {
+        "daniu": {
+            "voice_id": "ttv-voice-2025103011222725-sg8dZxUP",
+            "speed": 1.0,
+            "volume": 1.0,
+            "pitch": -1,
+        },
+        "yifan": {
+            "voice_id": "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d",
+            "speed": 1.0,
+            "volume": 1.0,
+            "pitch": 0,
+        },
     }
-    
-    CHARACTER_ALIASES = {
+
+    CHARACTER_ALIASES: Dict[str, str] = {
         "大牛": "daniu",
         "一帆": "yifan",
     }
 
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv("MINIMAX_API_KEY")
+    def __init__(self):
+        minimax_settings = getattr(settings, "MINIMAX_TTS", {})
+
+        self.api_key = minimax_settings.get("api_key") or os.getenv("MINIMAX_API_KEY")
         if not self.api_key:
-            raise ValueError("MINIMAX_API_KEY is not set")
-            
-        self.url = f"wss://api.minimax.chat/v1/t2a_v2?GroupId={os.getenv('MINIMAX_GROUP_ID', '1813378404020551699')}"
-        
+            raise MiniMaxError("MINIMAX_API_KEY 未配置，请在环境变量或 settings.MINIMAX_TTS 中添加")
+
+        self.model = minimax_settings.get("model", "speech-2.5-hd-preview")
+        self.sample_rate = int(minimax_settings.get("sample_rate", 32000))
+        self.audio_bitrate = int(minimax_settings.get("audio_bitrate", 128000))
+        self.audio_channel = int(minimax_settings.get("audio_channel", 1))
+        self.enable_english_normalization = _coerce_bool(
+            minimax_settings.get("enable_english_normalization"), True
+        )
+
+        self.max_segment_chars = int(minimax_settings.get("max_segment_chars", 120))
+        self.punctuation_marks = minimax_settings.get("punctuation_marks", DEFAULT_PUNCTUATION_MARKS)
+
+        self.silence_min_ms = int(minimax_settings.get("silence_min_ms", 300))
+        self.silence_max_ms = int(minimax_settings.get("silence_max_ms", 1200))
+        if self.silence_min_ms < 0 or self.silence_max_ms < self.silence_min_ms:
+            raise ValueError("MiniMax 静音区间配置不正确，请检查 silence_min_ms / silence_max_ms")
+
+        aliases = minimax_settings.get("aliases", {})
+        if isinstance(aliases, dict):
+            self.character_aliases = {**self.CHARACTER_ALIASES, **aliases}
+        else:
+            self.character_aliases = dict(self.CHARACTER_ALIASES)
+
+        voice_overrides = minimax_settings.get("voices", {}) or {}
+        self.voice_configs: Dict[str, MiniMaxVoiceConfig] = {}
+
+        def build_config(alias: str, data: Dict[str, object]) -> MiniMaxVoiceConfig:
+            override = voice_overrides.get(alias, {})
+            return MiniMaxVoiceConfig(
+                api_key=self.api_key,
+                model=override.get("model", self.model),
+                voice_id=override.get("voice_id", data.get("voice_id", "")),
+                speed=float(override.get("speed", data.get("speed", 1.0))),
+                volume=float(override.get("volume", data.get("volume", 1.0))),
+                pitch=int(override.get("pitch", data.get("pitch", 0))),
+                sample_rate=int(override.get("sample_rate", self.sample_rate)),
+                audio_bitrate=int(override.get("audio_bitrate", self.audio_bitrate)),
+                audio_channel=int(override.get("audio_channel", self.audio_channel)),
+                enable_english_normalization=_coerce_bool(
+                    override.get(
+                        "enable_english_normalization",
+                        self.enable_english_normalization,
+                    ),
+                    self.enable_english_normalization,
+                ),
+            )
+
+        for alias, data in self.DEFAULT_VOICES.items():
+            config = build_config(alias, data)
+            self.voice_configs[alias] = config
+
+        # Allow defining entirely new voices via settings
+        for alias, override in voice_overrides.items():
+            if alias in self.voice_configs:
+                continue
+            config = MiniMaxVoiceConfig(
+                api_key=self.api_key,
+                model=override.get("model", self.model),
+                voice_id=override.get("voice_id", ""),
+                speed=float(override.get("speed", 1.0)),
+                volume=float(override.get("volume", 1.0)),
+                pitch=int(override.get("pitch", 0)),
+                sample_rate=int(override.get("sample_rate", self.sample_rate)),
+                audio_bitrate=int(override.get("audio_bitrate", self.audio_bitrate)),
+                audio_channel=int(override.get("audio_channel", self.audio_channel)),
+                enable_english_normalization=_coerce_bool(
+                    override.get("enable_english_normalization", self.enable_english_normalization),
+                    self.enable_english_normalization,
+                ),
+            )
+            self.voice_configs[alias] = config
+
     def generate(self, script_content: str, output_path: str) -> str:
-        """
-        Main entry point: Parse script, generate audio for each segment, stitch them, and save.
-        """
-        logger.info("Starting podcast generation...")
-        
-        # 1. Parse Script
+        logger.info("MiniMax 播客生成开始")
+
         segments = self._parse_markdown(script_content)
+        segments = self._expand_segments(segments)
+
         if not segments:
-            raise ValueError("No valid segments found in script")
-        
-        logger.info(f"Parsed {len(segments)} segments.")
-        
-        # 2. Generate Audio for each segment
-        audio_segments = []
-        
-        # Run async generation loop
+            raise ValueError("脚本中未找到有效的角色对话内容")
+
+        logger.info("共解析 %s 个语音片段", len(segments))
+
         try:
             audio_segments = asyncio.run(self._generate_all_segments(segments))
-        except Exception as e:
-            logger.error(f"Generation failed: {e}")
+        except Exception as exc:
+            logger.exception("调用 MiniMax 生成音频失败: %s", exc)
             raise
-            
-        # 3. Stitch Audio
-        logger.info("Stitching audio segments...")
-        final_audio = AudioSegment.empty()
-        
-        last_speaker = None
-        
+
+        if not audio_segments:
+            raise ValueError("MiniMax 未生成任何音频片段")
+
+        final_audio = AudioSegment.silent(duration=0)
+        last_speaker: Optional[str] = None
+
         for speaker, audio_chunk in audio_segments:
-            # Add silence if speaker changes (and it's not the very first segment)
             if last_speaker and last_speaker != speaker:
-                silence_duration = random.randint(1000, 3000) # 1-3 seconds
-                final_audio += AudioSegment.silent(duration=silence_duration)
-                
+                silence = random.randint(self.silence_min_ms, self.silence_max_ms)
+                final_audio += AudioSegment.silent(duration=silence)
+                logger.debug("插入静音 %sms (%s → %s)", silence, last_speaker, speaker)
+
             final_audio += audio_chunk
             last_speaker = speaker
-            
-        # 4. Save to file
-        logger.info(f"Saving to {output_path}...")
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         final_audio.export(output_path, format="mp3")
-        
+        logger.info("MiniMax 播客生成完成，输出路径: %s", output_path)
+
         return output_path
 
     def _parse_markdown(self, script_content: str) -> List[Tuple[str, str]]:
-        """
-        Parse markdown script into (character, text) tuples.
-        """
         segments: List[Tuple[str, str]] = []
         current_character: Optional[str] = None
         current_text: List[str] = []
 
-        def finalize_segment():
+        def finalize_segment() -> None:
             nonlocal current_character, current_text
             if current_character and current_text:
-                combined_text = " ".join(current_text).strip()
-                if combined_text:
-                    segments.append((current_character, combined_text))
+                combined = " ".join(current_text).strip()
+                if combined:
+                    segments.append((current_character, combined))
             current_text = []
 
         for raw_line in script_content.splitlines():
             line = raw_line.strip()
-
-            # Skip empty lines and headers
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
 
-            # Detect character tags
-            match = re.search(r'【([^】]+)】', line)
+            match = re.search(r"【([^】]+)】", line)
             if match:
                 finalize_segment()
-
                 tag_content = match.group(1).strip()
-                character = self.CHARACTER_ALIASES.get(tag_content)
-                
-                if not character:
-                    # Try to see if the tag content itself is a known key (e.g. "daniu")
-                    if tag_content.lower() in self.VOICE_IDS:
-                        character = tag_content.lower()
-                    else:
-                        # Unknown character, skip
-                        current_character = None
-                        current_text = []
-                        continue
 
-                # Extract text after tag
-                remainder = line.split('】', 1)[1] if '】' in line else ''
-                remainder = remainder.lstrip('*').strip()
+                character = self.character_aliases.get(tag_content)
+                if not character:
+                    lowered = tag_content.lower()
+                    character = self.voice_configs.get(lowered) and lowered
+
+                if not character:
+                    logger.debug("跳过未知角色: %s", tag_content)
+                    current_character = None
+                    current_text = []
+                    continue
+
+                remainder = line.split("】", 1)[1] if "】" in line else ""
+                remainder = remainder.lstrip("*").strip()
 
                 current_character = character
                 current_text = [remainder] if remainder else []
                 continue
 
             if current_character:
-                clean_line = line.strip('*').strip()
+                clean_line = line.strip("*").strip()
                 if clean_line:
                     current_text.append(clean_line)
 
         finalize_segment()
         return segments
 
-    async def _generate_all_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, AudioSegment]]:
-        """
-        Generate audio for all segments sequentially.
-        """
-        results = []
-        for i, (speaker, text) in enumerate(segments):
-            logger.info(f"Generating segment {i+1}/{len(segments)} for {speaker}...")
-            audio_data = await self._synthesize_text(speaker, text)
-            
-            # Convert raw PCM/MP3 bytes to AudioSegment
-            # MiniMax returns raw audio, we need to handle it. 
-            # Actually MiniMax returns PCM or MP3 depending on config. 
-            # Let's assume we request MP3 or handle PCM.
-            # Based on previous code, it returns streaming PCM.
-            # But for simplicity in this service, we can accumulate and convert.
-            
-            # Since we are using pydub, we can create AudioSegment from bytes
-            # Assuming 32kHz, 1 channel, 16-bit PCM (from previous analysis)
-            
-            segment = AudioSegment(
-                data=audio_data,
-                sample_width=2, # 16-bit
-                frame_rate=32000,
-                channels=1
-            )
-            results.append((speaker, segment))
-            
-        return results
+    def _expand_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+        expanded: List[Tuple[str, str]] = []
+        for speaker, text in segments:
+            voice_config = self.voice_configs.get(speaker)
+            if not voice_config:
+                logger.warning("未配置 %s 的语音，跳过该段落", speaker)
+                continue
 
-    async def _synthesize_text(self, speaker: str, text: str) -> bytes:
-        """
-        Call MiniMax API to synthesize text.
-        """
-        voice_id = self.VOICE_IDS.get(speaker)
-        if not voice_id:
-            raise ValueError(f"No voice ID for speaker: {speaker}")
-            
-        payload = {
-            "model": "speech-01-turbo",
-            "text": text,
-            "stream": True,
-            "voice_setting": {
-                "voice_id": voice_id,
-                "speed": 1.0,
-                "vol": 1.0,
-                "pitch": 0 if speaker == 'yifan' else -1, # Match previous config
-            },
-            "audio_setting": {
-                "sample_rate": 32000,
-                "bitrate": 128000,
-                "format": "pcm",
-                "channel": 1,
-            },
-            "pronunciation_dict": {
-                "tone": []
-            },
-            "language": "CN" # or Auto
-        }
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        audio_buffer = bytearray()
-        
-        async with websockets.connect(self.url, extra_headers=headers) as websocket:
-            await websocket.send(json.dumps(payload))
-            
-            async for message in websocket:
-                if isinstance(message, str):
-                    # Parse JSON message
-                    data = json.loads(message)
-                    if data.get("base_resp", {}).get("status_code") != 0:
-                         logger.error(f"MiniMax Error: {data}")
-                         # Continue or raise?
-                         continue
-                         
-                    # Check if done
-                    if data.get("status") == 2: # Finished
-                        break
-                        
-                    # Extract audio
-                    if "data" in data and "audio" in data["data"]:
-                        # Hex string to bytes
-                        chunk = bytes.fromhex(data["data"]["audio"])
-                        audio_buffer.extend(chunk)
-                        
-                elif isinstance(message, bytes):
-                    # Should not happen with this API usually, but just in case
-                    audio_buffer.extend(message)
-                    
-        return bytes(audio_buffer)
+            parts = _split_long_text(text, self.max_segment_chars, self.punctuation_marks)
+            expanded.extend((speaker, part) for part in parts if part)
+
+        return expanded
+
+    async def _generate_all_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, AudioSegment]]:
+        results: List[Tuple[str, AudioSegment]] = []
+
+        for index, (speaker, text) in enumerate(segments, start=1):
+            config = self.voice_configs.get(speaker)
+            if not config:
+                logger.warning("跳过未配置语音的角色 %s", speaker)
+                continue
+
+            logger.info("MiniMax 生成片段 %s/%s (%s)", index, len(segments), speaker)
+
+            def client_logger(message: str, *, _speaker=speaker, _index=index):
+                logger.debug("[MiniMax][%s #%s] %s", _speaker, _index, message)
+
+            sample_rate, pcm_bytes = await synthesize_to_pcm(config, text, logger=client_logger)
+
+            segment_audio = AudioSegment(
+                data=pcm_bytes,
+                sample_width=2,
+                frame_rate=sample_rate,
+                channels=config.audio_channel,
+            )
+            results.append((speaker, segment_audio))
+
+        return results

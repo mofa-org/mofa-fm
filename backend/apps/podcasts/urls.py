@@ -1,10 +1,15 @@
 """
 播客路由
 """
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
 app_name = 'podcasts'
+
+# 创建路由器用于ViewSet
+router = DefaultRouter()
+router.register(r'script-sessions', views.ScriptSessionViewSet, basename='script-session')
 
 urlpatterns = [
     # 分类和标签
@@ -33,4 +38,8 @@ urlpatterns = [
     # 创作者
     path('creator/shows/', views.my_shows, name='my_shows'),
     path('creator/shows/<int:show_id>/episodes/', views.show_episodes, name='show_episodes'),
+    path('creator/generation-queue/', views.generation_queue, name='generation_queue'),
+
+    # AI脚本创作 (ViewSet路由)
+    path('', include(router.urls)),
 ]

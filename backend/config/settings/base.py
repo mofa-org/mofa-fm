@@ -152,3 +152,20 @@ AUDIO_MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
 AUDIO_ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
 AUDIO_OUTPUT_FORMAT = 'mp3'
 AUDIO_OUTPUT_BITRATE = '192k'
+
+# MiniMax TTS defaults (override via environment if needed)
+MINIMAX_TTS = {
+    'api_key': config('MINIMAX_API_KEY', default=''),
+    'model': config('MINIMAX_MODEL', default='speech-2.5-hd-preview'),
+    'sample_rate': config('MINIMAX_SAMPLE_RATE', default=32000, cast=int),
+    'audio_bitrate': config('MINIMAX_AUDIO_BITRATE', default=128000, cast=int),
+    'audio_channel': config('MINIMAX_AUDIO_CHANNEL', default=1, cast=int),
+    'enable_english_normalization': config('MINIMAX_ENABLE_ENGLISH_NORMALIZATION', default=True, cast=bool),
+    'max_segment_chars': config('MINIMAX_MAX_SEGMENT_CHARS', default=120, cast=int),
+    'punctuation_marks': config('MINIMAX_PUNCTUATION_MARKS', default='。？！!?；；…'),
+    'silence_min_ms': config('MINIMAX_SILENCE_MIN_MS', default=300, cast=int),
+    'silence_max_ms': config('MINIMAX_SILENCE_MAX_MS', default=1200, cast=int),
+}
+
+# Kimi AI API for script generation
+KIMI_API_KEY = config('KIMI_API_KEY', default='')

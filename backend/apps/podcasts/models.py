@@ -268,22 +268,24 @@ class ScriptSession(models.Model):
 
     def add_message(self, role: str, content: str):
         """添加一条对话消息"""
+        from django.utils import timezone
         self.chat_history.append({
             'role': role,
             'content': content,
-            'timestamp': models.DateTimeField(auto_now_add=True).isoformat()
+            'timestamp': timezone.now().isoformat()
         })
         self.save()
 
     def update_script(self, new_script: str):
         """更新脚本并保存版本"""
+        from django.utils import timezone
         # 保存旧版本
         if self.current_script:
             version = len(self.script_versions) + 1
             self.script_versions.append({
                 'version': version,
                 'script': self.current_script,
-                'timestamp': models.DateTimeField(auto_now_add=True).isoformat()
+                'timestamp': timezone.now().isoformat()
             })
 
         # 更新当前脚本

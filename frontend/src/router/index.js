@@ -75,7 +75,7 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {
-      path: '/creator/shows/:id/episodes/create',
+      path: '/creator/shows/:slug/episodes/create',
       name: 'upload-episode',
       component: () => import('@/views/creator/UploadEpisode.vue'),
       meta: { requiresAuth: true, requiresCreator: true }
@@ -84,6 +84,12 @@ const router = createRouter({
       path: '/creator/shows/:showSlug/episodes/:episodeSlug/edit',
       name: 'edit-episode',
       component: () => import('@/views/creator/EditEpisode.vue'),
+      meta: { requiresAuth: true, requiresCreator: true }
+    },
+    {
+      path: '/creator/ai-studio',
+      name: 'ai-studio',
+      component: () => import('@/views/creator/AIScriptStudio.vue'),
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {

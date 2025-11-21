@@ -128,6 +128,12 @@ button {
   border-color: var(--color-warning-dark);
 }
 
+.mofa-btn-ai {
+  background: linear-gradient(135deg, var(--color-warning) 0%, var(--color-warning-light) 100%);
+  color: var(--color-text-primary);
+  border-color: var(--color-warning-dark);
+}
+
 .mofa-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

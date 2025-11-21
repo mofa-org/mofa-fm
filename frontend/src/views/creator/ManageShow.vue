@@ -8,7 +8,7 @@
           <h1 class="show-title">{{ show.title }}</h1>
           <p class="show-meta">{{ show.episodes_count }} 集 · {{ show.followers_count }} 关注</p>
           <div class="show-actions">
-            <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-primary">
+            <router-link :to="`/creator/shows/${show.slug}/episodes/create`" class="mofa-btn mofa-btn-primary">
               <el-icon><Plus /></el-icon>
               上传单集
             </router-link>
@@ -25,7 +25,13 @@
       <!-- 单集列表 -->
       <h2 class="section-title">单集管理</h2>
       <div class="episodes-list">
-        <div v-for="episode in episodes" :key="episode.id" class="episode-item mofa-card">
+        <div
+          v-for="episode in episodes"
+          :key="episode.id"
+          class="episode-item mofa-card"
+          :class="{ highlighted: highlightSlug === episode.slug }"
+          :data-episode-slug="episode.slug"
+        >
           <img :src="episode.cover_url" :alt="episode.title" class="episode-cover" @click="handlePlay(episode)" />
           <div class="episode-info">
             <h3 class="episode-title">{{ episode.title }}</h3>
@@ -51,7 +57,7 @@
       </div>
 
       <el-empty v-if="episodes.length === 0" description="还没有上传单集">
-        <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-primary">
+        <router-link :to="`/creator/shows/${show.slug}/episodes/create`" class="mofa-btn mofa-btn-primary">
           立即上传
         </router-link>
       </el-empty>
@@ -60,7 +66,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
@@ -74,10 +80,12 @@ const playerStore = usePlayerStore()
 
 const show = ref(null)
 const episodes = ref([])
+const highlightSlug = ref(null)
 
 onMounted(async () => {
   await loadShow()
   await loadEpisodes()
+  await highlightEpisodeIfNeeded()
 })
 
 async function loadShow() {
@@ -89,6 +97,29 @@ async function loadEpisodes() {
   const slug = route.params.slug
   const data = await api.podcasts.getEpisodes({ show_slug: slug })
   episodes.value = data.results || data
+}
+
+watch(
+  () => route.query.highlightEpisode,
+  async () => {
+    await highlightEpisodeIfNeeded()
+  }
+)
+
+async function highlightEpisodeIfNeeded() {
+  const slug = route.query.highlightEpisode
+  if (!slug) return
+  highlightSlug.value = slug
+  await nextTick()
+  const el = document.querySelector(`[data-episode-slug="${slug}"]`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setTimeout(() => {
+      if (highlightSlug.value === slug) {
+        highlightSlug.value = null
+      }
+    }, 3000)
+  }
 }
 
 function handlePlay(episode) {
@@ -198,6 +229,11 @@ function getStatusText(status) {
   gap: var(--spacing-md);
   align-items: center;
   padding: var(--spacing-md);
+}
+
+.episode-item.highlighted {
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(255, 81, 59, 0.15);
 }
 
 .episode-cover {

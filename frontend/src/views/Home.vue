@@ -44,6 +44,7 @@
             v-for="episode in latestEpisodes"
             :key="episode.id"
             :episode="episode"
+            :playlist="latestEpisodes"
           />
         </div>
         <el-empty v-else description="暂无单集" />

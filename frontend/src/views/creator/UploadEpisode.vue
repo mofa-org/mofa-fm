@@ -4,22 +4,19 @@
       <h1 class="page-title">创建播客单集</h1>
 
       <div class="form-card mofa-card">
-        <!-- 模式切换 -->
-        <div class="mode-selector">
-          <el-radio-group v-model="mode" size="large">
-            <el-radio-button value="upload">
-              <el-icon><Upload /></el-icon>
-              上传音频文件
-            </el-radio-button>
-            <el-radio-button value="generate">
-              <el-icon><MagicStick /></el-icon>
-              AI 生成播客
-            </el-radio-button>
-          </el-radio-group>
+        <div class="ai-hint">
+          <div>
+            <h2>AI 想帮忙？</h2>
+            <p>使用 AI 脚本创作中心生成脚本并一键提交播客任务。</p>
+          </div>
+          <el-button type="primary" plain @click="goToAIStudio">
+            前往 AI 脚本创作中心
+          </el-button>
         </div>
 
-        <!-- 上传模式 -->
-        <el-form v-if="mode === 'upload'" :model="form" :rules="uploadRules" ref="uploadFormRef" label-width="100px">
+        <el-divider />
+
+        <el-form :model="form" :rules="uploadRules" ref="uploadFormRef" label-width="100px">
           <el-form-item label="单集标题" prop="title">
             <el-input v-model="form.title" placeholder="输入单集标题" />
           </el-form-item>
@@ -106,38 +103,6 @@
 
           <el-progress v-if="uploadProgress > 0" :percentage="uploadProgress" />
         </el-form>
-
-        <!-- AI 生成模式 -->
-        <el-form v-if="mode === 'generate'" :model="generateForm" :rules="generateRules" ref="generateFormRef" label-width="100px">
-          <el-form-item label="单集标题" prop="title">
-            <el-input v-model="generateForm.title" placeholder="输入单集标题" />
-          </el-form-item>
-
-          <el-form-item label="对话脚本" prop="script">
-            <div class="script-helper">
-              <p><strong>支持格式：</strong></p>
-              <code>【大牛】你好，我是大牛。</code>
-              <code>【一帆】你好，我是一帆。</code>
-            </div>
-            <el-input
-              v-model="generateForm.script"
-              type="textarea"
-              :rows="15"
-              placeholder="请输入对话脚本..."
-            />
-          </el-form-item>
-
-          <el-form-item>
-            <el-button
-              type="primary"
-              @click="handleGenerateSubmit"
-              :loading="generating"
-            >
-              {{ generating ? '生成中...' : '开始生成' }}
-            </el-button>
-            <el-button @click="$router.back()">取消</el-button>
-          </el-form-item>
-        </el-form>
       </div>
     </div>
   </div>
@@ -148,16 +113,13 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { Upload, Headset, MagicStick } from '@element-plus/icons-vue'
+import { Upload, Headset } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 
 // 节目信息
 const showContentType = ref('podcast')
-
-// 模式切换
-const mode = ref('upload')
 
 // 上传模式
 const uploadFormRef = ref()
@@ -185,37 +147,23 @@ const uploadRules = {
   audio_file: [{ required: true, message: '请上传音频文件', trigger: 'change' }]
 }
 
-// AI 生成模式
-const generateFormRef = ref()
-const generating = ref(false)
-
-const generateForm = ref({
-  show_id: null,
-  title: '',
-  script: `【大牛】大家好，欢迎来到今天的节目。
-【一帆】大家好，我是你们的老朋友一帆。
-【大牛】今天我们要聊什么话题呢？
-【一帆】不如聊聊最近很火的 AI 播客生成吧。`
-})
-
-const generateRules = {
-  title: [{ required: true, message: '请输入单集标题', trigger: 'blur' }],
-  script: [{ required: true, message: '请输入脚本内容', trigger: 'blur' }]
-}
-
 onMounted(async () => {
-  const showId = parseInt(route.params.id)
-  form.value.show_id = showId
-  generateForm.value.show_id = showId
+  const showSlug = route.params.slug
 
-  // 获取节目信息以确定内容类型
   try {
-    const response = await api.get(`/shows/${showId}/`)
-    showContentType.value = response.data.content_type || 'podcast'
+    const show = await api.podcasts.getShow(showSlug)
+    form.value.show_id = show.id
+    showContentType.value = show.content_type || 'podcast'
   } catch (error) {
     console.error('Failed to fetch show info:', error)
+    ElMessage.error('加载节目失败，请稍后重试')
+    router.back()
   }
 })
+
+function goToAIStudio() {
+  router.push('/creator/ai-studio')
+}
 
 function handleAudioChange(file) {
   audioFile.value = file
@@ -230,6 +178,10 @@ function removeAudio() {
 async function handleUploadSubmit() {
   const valid = await uploadFormRef.value.validate().catch(() => false)
   if (!valid) return
+  if (!form.value.show_id) {
+    ElMessage.error('节目信息加载失败，请刷新后重试')
+    return
+  }
 
   uploading.value = true
   uploadProgress.value = 0
@@ -266,24 +218,6 @@ async function handleUploadSubmit() {
     uploadProgress.value = 0
   }
 }
-
-async function handleGenerateSubmit() {
-  const valid = await generateFormRef.value.validate().catch(() => false)
-  if (!valid) return
-
-  generating.value = true
-
-  try {
-    const response = await api.post('/episodes/generate/', generateForm.value)
-    ElMessage.success('生成任务已提交，请稍候查看')
-    router.push('/creator')
-  } catch (error) {
-    console.error(error)
-    ElMessage.error(error.response?.data?.message || '提交失败')
-  } finally {
-    generating.value = false
-  }
-}
 </script>
 
 <style scoped>
@@ -302,18 +236,25 @@ async function handleGenerateSubmit() {
   padding: var(--spacing-xl);
 }
 
-.mode-selector {
-  margin-bottom: 2rem;
-  display: flex;
-  justify-content: center;
-}
-
-.mode-selector :deep(.el-radio-button__inner) {
-  padding: 12px 24px;
-  font-size: 16px;
+.ai-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-default);
+}
+
+.ai-hint h2 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-semibold);
+}
+
+.ai-hint p {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
 .audio-uploader {
@@ -339,25 +280,5 @@ async function handleGenerateSubmit() {
   font-size: var(--font-sm);
   color: var(--color-text-tertiary);
   margin-top: var(--spacing-xs);
-}
-
-.script-helper {
-  background: var(--bg-secondary);
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.script-helper p {
-  margin: 0 0 0.5rem 0;
-}
-
-.script-helper code {
-  display: block;
-  font-family: monospace;
-  color: var(--primary-color);
-  margin-top: 0.25rem;
 }
 </style>

@@ -17,6 +17,7 @@
               v-for="item in history"
               :key="item.id"
               :episode="item.episode"
+              :playlist="historyEpisodes"
             />
           </div>
           <el-empty v-else description="还没有播放历史" />
@@ -27,7 +28,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '@/api'
 import ShowCard from '@/components/podcast/ShowCard.vue'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
@@ -35,6 +36,7 @@ import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 const activeTab = ref('following')
 const following = ref([])
 const history = ref([])
+const historyEpisodes = computed(() => history.value.map(item => item.episode).filter(Boolean))
 
 onMounted(async () => {
   const [followingData, historyData] = await Promise.all([

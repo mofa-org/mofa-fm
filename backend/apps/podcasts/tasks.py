@@ -88,6 +88,13 @@ def generate_podcast_task(episode_id, script_content):
         filename = f"generated_{episode.slug}_{episode.id}.mp3"
         relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
         full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+
+        # 清理占位文件，避免残留空文件
+        placeholder_name = episode.audio_file.name
+        if placeholder_name and placeholder_name != relative_path:
+            storage = episode.audio_file.storage
+            if storage.exists(placeholder_name):
+                storage.delete(placeholder_name)
         
         # Generate
         generator.generate(script_content, full_path)
@@ -105,4 +112,3 @@ def generate_podcast_task(episode_id, script_content):
             episode.status = 'failed'
             episode.save()
         raise
-

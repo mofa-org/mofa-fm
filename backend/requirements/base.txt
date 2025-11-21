@@ -30,3 +30,11 @@ python-decouple==3.8
 
 # API 文档
 drf-yasg==1.21.7
+
+# AI功能
+openai>=1.0.0  # Kimi API (兼容OpenAI SDK)
+websockets>=11.0.3  # MiniMax TTS
+
+# 文件解析
+PyPDF2>=3.0.0  # PDF解析
+python-docx>=1.1.0  # Word文档解析

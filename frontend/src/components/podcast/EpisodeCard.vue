@@ -63,6 +63,10 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  playlist: {
+    type: Array,
+    default: null
+  },
   showCreatorActions: {
     type: Boolean,
     default: false
@@ -74,6 +78,13 @@ const emit = defineEmits(['deleted'])
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
 
+const resolvedPlaylist = computed(() => {
+  if (Array.isArray(props.playlist)) {
+    return props.playlist.map(item => (item?.episode ? item.episode : item)).filter(Boolean)
+  }
+  return null
+})
+
 // 判断当前用户是否是该节目的创作者
 const isCreator = computed(() => {
   if (!authStore.isAuthenticated || !props.show) return false
@@ -81,7 +92,7 @@ const isCreator = computed(() => {
 })
 
 function handlePlay() {
-  playerStore.play(props.episode)
+  playerStore.play(props.episode, resolvedPlaylist.value || null)
 }
 
 async function handleDelete() {

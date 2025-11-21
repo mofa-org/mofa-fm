@@ -1,18 +1,25 @@
 """
 播客视图
 """
-from rest_framework import generics, status, filters
-from rest_framework.decorators import api_view, permission_classes
+from uuid import uuid4
+
+from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import generics, status, filters, viewsets
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-from django.shortcuts import get_object_or_404
-from django.contrib.auth import get_user_model
-from .models import Category, Tag, Show, Episode
+
+from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
 from .serializers import (
     CategorySerializer, TagSerializer,
     ShowListSerializer, ShowDetailSerializer, ShowCreateSerializer,
-    EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer
+    EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer,
+    PodcastGenerationSerializer,
+    ScriptSessionSerializer, ScriptSessionCreateSerializer, ScriptChatSerializer,
+    UploadedReferenceSerializer
 )
 from .permissions import IsCreatorOrReadOnly, IsShowOwner
 
@@ -194,38 +201,236 @@ def show_episodes(request, show_id):
     return Response(serializer.data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generation_queue(request):
+    """当前用户的AI生成任务队列"""
+    allowed_statuses = {code for code, _ in Episode.STATUS_CHOICES}
+    default_statuses = {'processing', 'failed', 'published'}
+
+    requested_status = request.query_params.getlist('status')
+    if not requested_status:
+        single_status = request.query_params.get('status')
+        if single_status:
+            requested_status = [s.strip() for s in single_status.split(',') if s.strip()]
+
+    if requested_status:
+        statuses = [status for status in requested_status if status in allowed_statuses]
+    else:
+        statuses = list(default_statuses)
+
+    if not statuses:
+        statuses = list(default_statuses)
+
+    episodes = (
+        Episode.objects
+        .filter(show__creator=request.user, status__in=statuses, description__icontains='AI Generated Podcast')
+        .select_related('show')
+        .order_by('-created_at')
+    )
+    serializer = EpisodeListSerializer(episodes, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
 class GenerateEpisodeView(generics.GenericAPIView):
     """生成播客单集"""
-    serializer_class = EpisodeCreateSerializer # Just for documentation, actually uses PodcastGenerationSerializer
+    serializer_class = PodcastGenerationSerializer
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
-    
+
     def post(self, request, *args, **kwargs):
-        from .serializers import PodcastGenerationSerializer
         from .tasks import generate_podcast_task
-        
-        serializer = PodcastGenerationSerializer(data=request.data, context={'context': request})
-        if serializer.is_valid():
-            data = serializer.validated_data
-            show_id = data['show_id']
-            title = data['title']
-            script = data['script']
-            
-            # Create Episode placeholder
-            show = Show.objects.get(id=show_id)
-            episode = Episode.objects.create(
-                show=show,
-                title=title,
-                description="AI Generated Podcast",
-                status='processing',
-                audio_file='placeholder.mp3' # Will be updated by task
-            )
-            
-            # Trigger task
-            generate_podcast_task.delay(episode.id, script)
-            
-            return Response({
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+
+        episode = Episode.objects.create(
+            show=show,
+            title=data['title'],
+            description="AI Generated Podcast",
+            status='processing',
+            audio_file=placeholder_file
+        )
+
+        generate_podcast_task.delay(episode.id, data['script'])
+
+        return Response(
+            {
                 "message": "Podcast generation started",
                 "episode_id": episode.id
-            }, status=status.HTTP_202_ACCEPTED)
-            
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            },
+            status=status.HTTP_202_ACCEPTED
+        )
+
+
+# AI脚本创作相关视图
+
+class ScriptSessionViewSet(viewsets.ModelViewSet):
+    """AI脚本会话视图集"""
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ScriptSessionCreateSerializer
+        return ScriptSessionSerializer
+
+    def get_queryset(self):
+        """只返回当前用户的会话"""
+        return ScriptSession.objects.filter(creator=self.request.user).prefetch_related('uploaded_files')
+
+    def create(self, request, *args, **kwargs):
+        """创建会话后返回完整的序列化数据"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        # 使用完整的序列化器返回数据
+        response_serializer = ScriptSessionSerializer(instance, context={'request': request})
+        headers = self.get_success_headers(response_serializer.data)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=True, methods=['post'])
+    def chat(self, request, pk=None):
+        """与AI对话，生成或修改脚本"""
+        session = self.get_object()
+        serializer = ScriptChatSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        user_message = serializer.validated_data['message']
+
+        # 添加用户消息到历史
+        session.add_message('user', user_message)
+
+        # 调用AI服务
+        from .services.script_ai import ScriptAIService
+
+        ai_service = ScriptAIService()
+
+        # 获取所有上传文件的文本
+        reference_texts = [
+            ref.extracted_text
+            for ref in session.uploaded_files.all()
+            if ref.extracted_text and ref.extracted_text.strip()
+        ]
+
+        messages_for_ai = [
+            {
+                'role': msg['role'],
+                'content': msg['content']
+            }
+            for msg in session.chat_history
+            if msg.get('role') in ('user', 'assistant') and msg.get('content')
+        ]
+
+        # 调用AI
+        result = ai_service.chat(
+            messages=messages_for_ai,
+            reference_texts=reference_texts,
+            current_script=session.current_script
+        )
+
+        if not result['success']:
+            # 回滚最后一条用户消息，避免污染历史
+            if session.chat_history:
+                session.chat_history.pop()
+                session.save(update_fields=['chat_history'])
+            return Response(
+                {'error': result.get('error', 'AI调用失败')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # 添加AI回复到历史
+        session.add_message('assistant', result['response'])
+
+        # 如果有新脚本，更新
+        new_script = result.get('script')
+        script_updated = False
+
+        if new_script:
+            new_script = new_script.strip()
+
+        if new_script and new_script != session.current_script:
+            session.update_script(new_script)
+            script_updated = True
+
+        return Response({
+            'message': result['response'],
+            'script': session.current_script,
+            'has_script_update': script_updated
+        })
+
+    @action(detail=True, methods=['post'])
+    def upload_file(self, request, pk=None):
+        """上传参考文件"""
+        session = self.get_object()
+
+        if 'file' not in request.FILES:
+            return Response(
+                {'error': '请上传文件'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        uploaded_file = request.FILES['file']
+
+        # 检查文件类型
+        import os
+        file_ext = os.path.splitext(uploaded_file.name)[1].lower().lstrip('.')
+
+        if file_ext not in ['txt', 'pdf', 'md', 'docx']:
+            return Response(
+                {'error': f'不支持的文件类型: {file_ext}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 保存文件
+        reference = UploadedReference.objects.create(
+            session=session,
+            file=uploaded_file,
+            original_filename=uploaded_file.name,
+            file_type=file_ext,
+            file_size=uploaded_file.size
+        )
+
+        # 解析文件内容
+        from .services.file_parser import FileParser
+
+        parser = FileParser()
+        parse_result = parser.parse(reference.file.path, file_ext)
+
+        if parse_result['success']:
+            reference.extracted_text = parse_result['text']
+            reference.save()
+        else:
+            # 删除失败的文件
+            reference.delete()
+            return Response(
+                {'error': f'文件解析失败: {parse_result.get("error")}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = UploadedReferenceSerializer(reference, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def generate_audio(self, request, pk=None):
+        """从脚本生成音频（占位，暂不实现）"""
+        session = self.get_object()
+
+        if not session.current_script:
+            return Response(
+                {'error': '当前没有脚本，请先生成脚本'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # TODO: 实现音频生成
+        # 这里暂时返回占位响应
+        return Response({
+            'message': '音频生成功能即将上线',
+            'script': session.current_script,
+            'status': 'pending'
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)

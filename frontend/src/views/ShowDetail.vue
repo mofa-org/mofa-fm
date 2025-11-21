@@ -34,6 +34,7 @@
           :key="episode.id"
           :episode="episode"
           :show="show"
+          :playlist="episodes"
           @deleted="handleEpisodeDeleted"
         />
       </div>

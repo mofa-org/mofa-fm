@@ -21,6 +21,7 @@
               v-for="episode in results.episodes"
               :key="episode.id"
               :episode="episode"
+              :playlist="results.episodes"
             />
           </div>
         </section>

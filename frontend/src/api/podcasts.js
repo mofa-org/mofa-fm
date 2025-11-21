@@ -58,6 +58,11 @@ export default {
     })
   },
 
+  // AI 生成单集
+  generateEpisode(data) {
+    return client.post('/podcasts/episodes/generate/', data)
+  },
+
   // 更新单集
   updateEpisode(episodeId, data) {
     return client.put(`/podcasts/episodes/${episodeId}/update/`, data, {
@@ -83,5 +88,49 @@ export default {
   // 平台统计
   getStats() {
     return client.get('/podcasts/stats/')
+  },
+
+  // AI 脚本创作会话
+  getGenerationQueue(params) {
+    return client.get('/podcasts/creator/generation-queue/', { params })
+  },
+
+  getScriptSessions(params) {
+    return client.get('/podcasts/script-sessions/', { params })
+  },
+
+  getScriptSession(id) {
+    return client.get(`/podcasts/script-sessions/${id}/`)
+  },
+
+  createScriptSession(data) {
+    return client.post('/podcasts/script-sessions/', data)
+  },
+
+  updateScriptSession(id, data) {
+    return client.put(`/podcasts/script-sessions/${id}/`, data)
+  },
+
+  deleteScriptSession(id) {
+    return client.delete(`/podcasts/script-sessions/${id}/`)
+  },
+
+  // AI 对话
+  chatWithAI(sessionId, message) {
+    return client.post(`/podcasts/script-sessions/${sessionId}/chat/`, { message })
+  },
+
+  // 上传参考文件
+  uploadReference(sessionId, file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return client.post(`/podcasts/script-sessions/${sessionId}/upload_file/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 删除参考文件
+  deleteReference(sessionId, fileId) {
+    return client.delete(`/podcasts/script-sessions/${sessionId}/delete_file/${fileId}/`)
   }
 }

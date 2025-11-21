@@ -25,6 +25,9 @@
           <el-icon><Plus /></el-icon>
           创建新节目
         </router-link>
+        <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-warning">
+          AI 脚本创作
+        </router-link>
       </div>
 
       <!-- 我的节目列表 -->
@@ -40,7 +43,7 @@
             <router-link :to="`/creator/shows/${show.slug}`" class="mofa-btn mofa-btn-primary mofa-btn-sm">
               管理单集
             </router-link>
-            <router-link :to="`/creator/shows/${show.id}/episodes/create`" class="mofa-btn mofa-btn-sm">
+            <router-link :to="`/creator/shows/${show.slug}/episodes/create`" class="mofa-btn mofa-btn-sm">
               上传单集
             </router-link>
             <router-link :to="`/creator/shows/${show.slug}/edit`" class="mofa-btn mofa-btn-sm">
@@ -147,6 +150,8 @@ async function handleDeleteShow(show) {
 
 .actions {
   margin-bottom: var(--spacing-xl);
+  display: flex;
+  gap: var(--spacing-md);
 }
 
 .section-title {

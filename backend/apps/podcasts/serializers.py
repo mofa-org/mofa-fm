@@ -3,7 +3,7 @@
 """
 from rest_framework import serializers
 from apps.users.serializers import UserSerializer
-from .models import Category, Tag, Show, Episode
+from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -289,11 +289,11 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
 class PodcastGenerationSerializer(serializers.Serializer):
     """播客生成请求序列化器"""
-    
+
     title = serializers.CharField(max_length=255, required=True)
     show_id = serializers.IntegerField(required=True)
     script = serializers.CharField(required=True, style={'base_template': 'textarea.html'})
-    
+
     def validate_show_id(self, value):
         user = self.context['request'].user
         try:
@@ -301,3 +301,80 @@ class PodcastGenerationSerializer(serializers.Serializer):
             return value
         except Show.DoesNotExist:
             raise serializers.ValidationError("节目不存在或您没有权限")
+
+
+class UploadedReferenceSerializer(serializers.ModelSerializer):
+    """上传的参考文件序列化器"""
+
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UploadedReference
+        fields = [
+            'id', 'original_filename', 'file_type', 'file_size',
+            'file_url', 'extracted_text', 'uploaded_at'
+        ]
+        read_only_fields = ['extracted_text', 'uploaded_at']
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if obj.file and request:
+            return request.build_absolute_uri(obj.file.url)
+        return None
+
+
+class ScriptSessionSerializer(serializers.ModelSerializer):
+    """脚本会话序列化器"""
+
+    creator = UserSerializer(read_only=True)
+    show = ShowListSerializer(read_only=True)
+    uploaded_files = UploadedReferenceSerializer(many=True, read_only=True)
+    uploaded_files_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScriptSession
+        fields = [
+            'id', 'title', 'status', 'creator', 'show',
+            'chat_history', 'current_script', 'script_versions',
+            'voice_config', 'uploaded_files', 'uploaded_files_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['creator', 'chat_history', 'script_versions', 'created_at', 'updated_at']
+
+    def get_uploaded_files_count(self, obj):
+        return obj.uploaded_files.count()
+
+
+class ScriptChatSerializer(serializers.Serializer):
+    """脚本对话请求序列化器"""
+
+    message = serializers.CharField(required=True, help_text="用户消息")
+
+
+class ScriptSessionCreateSerializer(serializers.ModelSerializer):
+    """创建脚本会话序列化器"""
+
+    show_id = serializers.IntegerField(required=False, allow_null=True, help_text="关联的节目ID（可选）")
+
+    class Meta:
+        model = ScriptSession
+        fields = ['title', 'show_id']
+
+    def validate_show_id(self, value):
+        if value:
+            user = self.context['request'].user
+            try:
+                Show.objects.get(id=value, creator=user)
+                return value
+            except Show.DoesNotExist:
+                raise serializers.ValidationError("节目不存在或您没有权限")
+        return value
+
+    def create(self, validated_data):
+        show_id = validated_data.pop('show_id', None)
+        validated_data['creator'] = self.context['request'].user
+
+        if show_id:
+            validated_data['show_id'] = show_id
+
+        return ScriptSession.objects.create(**validated_data)
