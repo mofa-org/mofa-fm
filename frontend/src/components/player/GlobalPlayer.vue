@@ -1,5 +1,13 @@
 <template>
-  <div class="global-player">
+  <div class="global-player" :class="{ collapsed: isCollapsed }">
+    <!-- 收缩/展开按钮 -->
+    <button class="collapse-toggle" @click="toggleCollapse" title="收缩/展开播放器">
+      <el-icon>
+        <ArrowDown v-if="!isCollapsed" />
+        <ArrowUp v-else />
+      </el-icon>
+    </button>
+
     <div class="player-content">
       <!-- 左侧：单集信息 -->
       <div class="player-info">
@@ -86,12 +94,19 @@ import {
   DArrowLeft,
   DArrowRight,
   ArrowLeftBold,
-  ArrowRightBold
+  ArrowRightBold,
+  ArrowUp,
+  ArrowDown
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
 
 const sliderValue = ref(0)
+const isCollapsed = ref(false)
+
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value
+}
 
 const currentEpisode = computed(() => playerStore.currentEpisode)
 const isPlaying = computed(() => playerStore.isPlaying)
@@ -129,6 +144,43 @@ function handleRateChange(rate) {
   border-top: var(--border-width) solid var(--border-color);
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
   z-index: 99;
+  transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.global-player.collapsed {
+  height: 0;
+}
+
+/* 收缩/展开按钮 */
+.collapse-toggle {
+  position: absolute;
+  top: -32px;
+  right: 24px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-white);
+  border: 2px solid var(--border-color);
+  border-radius: 50% 50% 0 0;
+  border-bottom: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  color: var(--color-text-secondary);
+  outline: none;
+  z-index: 1;
+}
+
+.collapse-toggle:hover {
+  background: var(--color-light-gray);
+  color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+.collapse-toggle:active {
+  transform: translateY(0);
 }
 
 .global-player::before {
@@ -148,6 +200,14 @@ function handleRateChange(rate) {
   height: 100%;
   padding: 0 var(--spacing-lg);
   gap: var(--spacing-xl);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 收缩状态下隐藏所有内容 */
+.global-player.collapsed .player-content {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
 }
 
 .player-info {

@@ -101,11 +101,17 @@ def generate_podcast_task(episode_id, script_content):
         
         # Update episode
         episode.audio_file.name = relative_path
-        episode.status = 'published' 
+        episode.status = 'published'
         episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
         episode.file_size = os.path.getsize(full_path)
+        episode.published_at = timezone.now()
         episode.save()
-        
+
+        # 更新节目统计
+        show = episode.show
+        show.episodes_count = show.episodes.filter(status='published').count()
+        show.save()
+
     except Exception as e:
         print(f"Failed to generate podcast for episode {episode_id}: {e}")
         if episode: # Only update status if episode object was successfully retrieved

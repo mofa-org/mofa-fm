@@ -49,17 +49,7 @@
               刷新
             </button>
           </div>
-          <div class="queue-filters">
-            <button
-              v-for="option in generationStatusOptions"
-              :key="option.code"
-              class="queue-filter"
-              :class="{ active: queueFilters.includes(option.code) }"
-              @click="toggleQueueFilter(option.code)"
-            >
-              {{ option.label }}
-            </button>
-          </div>
+          <!-- 筛选控件已隐藏，显示所有任务 -->
           <div v-if="queueLoading" class="loading-state small">加载中...</div>
           <div v-else-if="generationQueue.length === 0" class="empty-state small">
             <p>暂无生成任务</p>
@@ -229,13 +219,36 @@
           <div class="script-panel mofa-card">
             <div class="panel-header">
               <h3>脚本预览</h3>
-              <button
-                v-if="currentSession.current_script"
-                @click="copyScript"
-                class="mofa-btn mofa-btn-sm"
-              >
-                复制
-              </button>
+              <div class="panel-actions">
+                <button
+                  v-if="currentSession.current_script && !isEditingScript"
+                  @click="startEditScript"
+                  class="mofa-btn mofa-btn-sm"
+                >
+                  编辑
+                </button>
+                <button
+                  v-if="isEditingScript"
+                  @click="saveScriptEdit"
+                  class="mofa-btn mofa-btn-sm mofa-btn-success"
+                >
+                  保存
+                </button>
+                <button
+                  v-if="isEditingScript"
+                  @click="cancelScriptEdit"
+                  class="mofa-btn mofa-btn-sm"
+                >
+                  取消
+                </button>
+                <button
+                  v-if="currentSession.current_script && !isEditingScript"
+                  @click="copyScript"
+                  class="mofa-btn mofa-btn-sm"
+                >
+                  复制
+                </button>
+              </div>
             </div>
 
             <div v-if="scriptMeta" class="script-meta">
@@ -255,6 +268,12 @@
                 <p>还没有生成脚本</p>
                 <p class="hint">在左侧与 AI 对话，让它帮你创作脚本</p>
               </div>
+              <textarea
+                v-else-if="isEditingScript"
+                v-model="editableScript"
+                class="script-editor"
+                placeholder="在这里编辑脚本..."
+              ></textarea>
               <pre v-else class="script-text">{{ currentSession.current_script }}</pre>
             </div>
 
@@ -420,12 +439,16 @@ const currentSession = ref(null)
 const myShows = ref([])
 const generationQueue = ref([])
 const queueLoading = ref(false)
-const queueFilters = ref(['processing', 'failed'])
+const queueFilters = ref([]) // 空数组表示显示所有状态的任务
 
 // 聊天相关
 const userMessage = ref('')
 const aiThinking = ref(false)
 const chatMessages = ref(null)
+
+// 脚本编辑相关
+const isEditingScript = ref(false)
+const editableScript = ref('')
 
 const sessionMeta = computed(() => {
   const session = currentSession.value
@@ -886,6 +909,30 @@ async function confirmGeneratePodcast() {
 function copyScript() {
   navigator.clipboard.writeText(currentSession.value.current_script)
   ElMessage.success('脚本已复制到剪贴板')
+}
+
+// 开始编辑脚本
+function startEditScript() {
+  editableScript.value = currentSession.value.current_script
+  isEditingScript.value = true
+}
+
+// 取消编辑脚本
+function cancelScriptEdit() {
+  isEditingScript.value = false
+  editableScript.value = ''
+}
+
+// 保存脚本编辑
+function saveScriptEdit() {
+  if (!editableScript.value.trim()) {
+    ElMessage.warning('脚本内容不能为空')
+    return
+  }
+
+  currentSession.value.current_script = editableScript.value
+  isEditingScript.value = false
+  ElMessage.success('脚本已更新，可以直接生成播客')
 }
 
 // 查看历史版本
@@ -1595,6 +1642,34 @@ onMounted(() => {
   border-radius: var(--radius-sm);
   margin: 0;
   font-size: 13px;
+}
+
+.script-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  padding: var(--spacing-md);
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: var(--color-white);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-default);
+  resize: vertical;
+  outline: none;
+  transition: var(--transition-fast);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.script-editor:focus {
+  border-color: var(--color-primary);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.05), 0 0 0 3px rgba(255, 81, 59, 0.1);
+}
+
+.panel-actions {
+  display: flex;
+  gap: var(--spacing-xs);
 }
 
 .script-versions {
