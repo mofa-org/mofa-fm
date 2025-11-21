@@ -45,7 +45,7 @@
 
             <el-dropdown @command="handleCommand">
               <div class="user-avatar">
-                <el-avatar :src="user?.avatar_url || '/default_avatar.png'" />
+                <el-avatar :src="user?.avatar_url" :icon="UserFilled" />
               </div>
               <template #dropdown>
                 <el-dropdown-menu>

@@ -55,7 +55,7 @@
         <div class="comments-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item mofa-card">
             <div class="comment-user">
-              <el-avatar :size="40" :src="comment.user.avatar_url || '/default_avatar.png'" />
+              <el-avatar :size="40" :src="comment.user.avatar_url" :icon="UserFilled" />
               <span class="username">{{ comment.user.username }}</span>
               <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
             </div>
@@ -74,7 +74,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Star } from '@element-plus/icons-vue'
+import { VideoPlay, Star, UserFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
