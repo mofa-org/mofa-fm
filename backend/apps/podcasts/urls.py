@@ -42,4 +42,8 @@ urlpatterns = [
 
     # AI脚本创作 (ViewSet路由)
     path('', include(router.urls)),
+
+    # 热搜榜
+    path('trending/sources/', views.trending_sources, name='trending_sources'),
+    path('trending/<str:source>/', views.trending_data, name='trending_data'),
 ]

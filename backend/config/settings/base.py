@@ -182,3 +182,6 @@ MINIMAX_TTS = {
 
 # Kimi AI API for script generation
 KIMI_API_KEY = config('KIMI_API_KEY', default='')
+
+# Trending API
+TRENDING_API_URL = config('TRENDING_API_URL', default='http://mofa.fm:1145')

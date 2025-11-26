@@ -86,9 +86,7 @@
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import axios from 'axios'
-
-const API_BASE = 'http://mofa.fm:1145'
+import api from '@/api'
 
 // 状态
 const collapsed = ref(false)
@@ -108,8 +106,8 @@ async function loadAllRoutes() {
   error.value = ''
 
   try {
-    const response = await axios.get(`${API_BASE}/all`)
-    const routesData = response.data.routes || []
+    const response = await api.podcasts.getTrendingSources()
+    const routesData = response.routes || []
 
     sources.value = routesData.map(route => ({
       name: route.name,
@@ -150,8 +148,7 @@ async function loadSourceData(sourceName) {
   loadingSource.value = sourceName
 
   try {
-    const response = await axios.get(`${API_BASE}${source.path}`)
-    const data = response.data
+    const data = await api.podcasts.getTrendingData(sourceName)
 
     source.title = data.title || data.name || sourceName
     source.total = data.total || data.data?.length || 0

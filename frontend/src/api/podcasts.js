@@ -132,5 +132,14 @@ export default {
   // 删除参考文件
   deleteReference(sessionId, fileId) {
     return client.delete(`/podcasts/script-sessions/${sessionId}/delete_file/${fileId}/`)
+  },
+
+  // 热搜榜
+  getTrendingSources() {
+    return client.get('/podcasts/trending/sources/')
+  },
+
+  getTrendingData(source) {
+    return client.get(`/podcasts/trending/${source}/`)
   }
 }

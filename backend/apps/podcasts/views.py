@@ -434,3 +434,45 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             'script': session.current_script,
             'status': 'pending'
         }, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+
+# 热搜榜相关视图
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def trending_sources(request):
+    """获取所有可用的热搜榜源"""
+    import requests
+    from django.conf import settings
+
+    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://mofa.fm:1145')
+
+    try:
+        response = requests.get(f'{trending_api_url}/all', timeout=10)
+        response.raise_for_status()
+        return Response(response.json())
+    except requests.RequestException as e:
+        return Response(
+            {'error': f'获取热搜榜源失败: {str(e)}'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def trending_data(request, source):
+    """获取指定热搜榜的数据"""
+    import requests
+    from django.conf import settings
+
+    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://mofa.fm:1145')
+
+    try:
+        response = requests.get(f'{trending_api_url}/{source}', timeout=10)
+        response.raise_for_status()
+        return Response(response.json())
+    except requests.RequestException as e:
+        return Response(
+            {'error': f'获取热搜数据失败: {str(e)}'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
