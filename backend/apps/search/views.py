@@ -284,24 +284,29 @@ def search_history(request):
     if request.user.is_authenticated:
         histories = SearchHistory.objects.filter(
             user=request.user
-        ).values('query', 'created_at').distinct('query')[:limit]
+        ).order_by('-created_at')[:limit * 2]
     else:
         session_key = request.session.session_key
         if not session_key:
             return Response({'results': []})
         histories = SearchHistory.objects.filter(
             session_key=session_key
-        ).values('query', 'created_at').distinct('query')[:limit]
+        ).order_by('-created_at')[:limit * 2]
 
-    return Response({
-        'results': [
-            {
-                'query': h['query'],
-                'timestamp': h['created_at']
-            }
-            for h in histories
-        ]
-    })
+    # 手动去重，保留最新的
+    seen = set()
+    unique_histories = []
+    for h in histories:
+        if h.query not in seen:
+            seen.add(h.query)
+            unique_histories.append({
+                'query': h.query,
+                'timestamp': h.created_at
+            })
+            if len(unique_histories) >= limit:
+                break
+
+    return Response({'results': unique_histories})
 
 
 @api_view(['DELETE'])
@@ -373,21 +378,25 @@ def search_suggestions(request):
         if request.user.is_authenticated:
             histories = SearchHistory.objects.filter(
                 user=request.user
-            ).values('query').distinct()[:5]
+            ).order_by('-created_at')[:10]
         else:
             session_key = request.session.session_key
             if session_key:
                 histories = SearchHistory.objects.filter(
                     session_key=session_key
-                ).values('query').distinct()[:5]
+                ).order_by('-created_at')[:10]
             else:
                 histories = []
 
+        # 手动去重
+        seen = set()
         for h in histories:
-            suggestions.append({
-                'query': h['query'],
-                'type': 'history'
-            })
+            if h.query not in seen and len(suggestions) < 5:
+                seen.add(h.query)
+                suggestions.append({
+                    'query': h.query,
+                    'type': 'history'
+                })
 
         # 补充热门搜索
         remaining = limit - len(suggestions)
