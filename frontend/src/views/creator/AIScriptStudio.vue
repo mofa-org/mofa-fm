@@ -780,7 +780,7 @@ async function sendMessage() {
     const needsSearch = searchKeywords.some(keyword => message.includes(keyword))
 
     if (needsSearch) {
-      typingMessage.content = '🔍 正在搜索实时信息...'
+      typingMessage.content = '正在搜索实时信息...'
       await nextTick()
     }
 
@@ -811,13 +811,13 @@ async function sendMessage() {
     let errorMsg = '发送失败，请重试'
 
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      errorMsg = '⏱️ 请求超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
+      errorMsg = '请求超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
     } else if (error.response?.status === 500) {
-      errorMsg = '❌ 服务器错误，请刷新页面重新加载试试看。'
+      errorMsg = '服务器错误，请刷新页面重新加载试试看。'
     } else if (error.response?.status === 504) {
-      errorMsg = '⏱️ 网关超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
+      errorMsg = '网关超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
     } else {
-      errorMsg = error.response?.data?.error || error.response?.data?.detail || '❌ 发送失败，请刷新页面重新加载试试看。'
+      errorMsg = error.response?.data?.error || error.response?.data?.detail || '发送失败，请刷新页面重新加载试试看。'
     }
 
     typingMessage.content = errorMsg
