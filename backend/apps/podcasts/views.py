@@ -308,6 +308,9 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
         # 调用AI服务
         from .services.script_ai import ScriptAIService
+        from .services.tools import AITools
+        import re
+        from datetime import datetime
 
         ai_service = ScriptAIService()
 
@@ -318,6 +321,78 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             if ref.extracted_text and ref.extracted_text.strip()
         ]
 
+        # 使用 AI 判断是否需要搜索
+        current_date = datetime.now().strftime('%Y年%m月%d日')
+
+        # 调用轻量级模型快速判断
+        from openai import OpenAI
+        from django.conf import settings
+
+        judge_client = OpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=settings.OPENAI_API_BASE
+        )
+
+        judge_prompt = f"""今天是 {current_date}。
+
+判断以下用户问题是否需要搜索实时信息。
+
+需要搜索的情况：
+1. 涉及时间相关词：今天、昨天、最近、最新、当前等
+2. 涉及实时数据：股价、指数、天气、新闻、比分等
+3. 明确要求搜索：搜索、查询、查找等
+4. 询问最新事件、热点话题
+
+不需要搜索的情况：
+1. 知识性问题（如"什么是AI"、"如何写代码"）
+2. 创作请求（如"帮我写个脚本"、"生成播客"）
+3. 历史事件（明确的过去时间，不涉及"最新"）
+
+用户问题："{user_message}"
+
+如果需要搜索，请输出一个优化后的搜索查询词（不超过20字，包含关键信息和日期）。
+如果不需要搜索，只输出"NO"。
+
+输出格式：
+- 需要搜索：直接输出搜索查询词，如"2024年11月26日 上证指数收盘价"
+- 不需要搜索：NO"""
+
+        try:
+            judge_response = judge_client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                messages=[{'role': 'user', 'content': judge_prompt}],
+                temperature=0,
+                max_tokens=100
+            )
+
+            search_query = judge_response.choices[0].message.content.strip()
+            needs_search = search_query != "NO"
+
+        except Exception as e:
+            # AI判断失败，回退到关键词检测
+            search_keywords = [
+                r'今天|昨天|前天|最近|最新|当前|现在',
+                r'沪指|上证|深证|股市|股价',
+                r'新闻|热点|热门|动态',
+                r'搜索|查询|查找|查一下|搜一下',
+            ]
+            needs_search = any(re.search(pattern, user_message, re.IGNORECASE) for pattern in search_keywords)
+            search_query = f"{current_date} {user_message}"
+
+        # 如果需要搜索，强制先执行搜索
+        if needs_search:
+            # 执行搜索
+            search_result = AITools.execute_tool('tavily_search', {
+                'query': search_query,
+                'max_results': 5
+            })
+
+            # 将搜索结果作为参考资料
+            pre_search_result = f"【搜索结果 - {current_date}】\n{search_result}"
+            if reference_texts is None:
+                reference_texts = []
+            reference_texts.insert(0, pre_search_result)
+
         messages_for_ai = [
             {
                 'role': msg['role'],
@@ -327,12 +402,12 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             if msg.get('role') in ('user', 'assistant') and msg.get('content')
         ]
 
-        # 调用AI
+        # 调用AI（禁用 function calling，因为我们已经强制搜索了）
         result = ai_service.chat(
             messages=messages_for_ai,
             reference_texts=reference_texts,
             current_script=session.current_script,
-            enable_tools=True  # 启用工具调用（Tavily搜索等）
+            enable_tools=False  # 禁用工具，避免重复搜索
         )
 
         if not result['success']:
