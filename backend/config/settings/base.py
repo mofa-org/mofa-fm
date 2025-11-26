@@ -180,8 +180,13 @@ MINIMAX_TTS = {
     'silence_max_ms': config('MINIMAX_SILENCE_MAX_MS', default=1200, cast=int),
 }
 
-# Kimi AI API for script generation
-KIMI_API_KEY = config('KIMI_API_KEY', default='')
+# OpenAI-compatible API for script generation (Moonshot/Kimi)
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.moonshot.cn/v1')
+OPENAI_MODEL = config('OPENAI_MODEL', default='moonshot-v1-8k')
 
 # Trending API
 TRENDING_API_URL = config('TRENDING_API_URL', default='http://mofa.fm:1145')
+
+# Tavily Search API for AI tool calling
+TAVILY_API_KEY = config('TAVILY_API_KEY', default='')

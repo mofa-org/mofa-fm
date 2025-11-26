@@ -1,67 +1,150 @@
 """
-AI 脚本生成服务 - 基于 Moonshot (Kimi) API
+AI 脚本生成服务 - 基于 OpenAI-compatible API (Moonshot/Kimi)
 """
 from typing import Dict, List, Optional
+import json
 
 from django.conf import settings
 from openai import OpenAI
+from .tools import AITools
 
 
 class ScriptAIService:
-    """封装与 Kimi Chat Completion 的交互逻辑"""
+    """封装与 OpenAI-compatible API 的交互逻辑"""
 
     def __init__(self):
-        api_key = getattr(settings, 'KIMI_API_KEY', None)
+        api_key = getattr(settings, 'OPENAI_API_KEY', None)
         if not api_key:
-            raise ValueError('KIMI_API_KEY 未配置，请在环境变量或 .env 中设置')
+            raise ValueError('OPENAI_API_KEY 未配置，请在环境变量或 .env 中设置')
 
         self.client = OpenAI(
             api_key=api_key,
-            base_url=getattr(settings, 'KIMI_BASE_URL', 'https://api.moonshot.cn/v1')
+            base_url=getattr(settings, 'OPENAI_API_BASE', 'https://api.moonshot.cn/v1')
         )
-        self.model = getattr(settings, 'KIMI_MODEL', 'moonshot-v1-8k')
+        self.model = getattr(settings, 'OPENAI_MODEL', 'moonshot-v1-8k')
 
     def chat(
         self,
         messages: List[Dict[str, str]],
         reference_texts: Optional[List[str]] = None,
-        current_script: Optional[str] = None
+        current_script: Optional[str] = None,
+        enable_tools: bool = True
     ) -> Dict[str, Optional[str]]:
         """
         与 Kimi 对话，生成或修改脚本。
+        支持 function calling 以调用外部工具。
+
         返回 {
             success: bool,
             response: str,
             script: str | None,
-            error: str | None
+            error: str | None,
+            tool_calls: List[Dict] | None  # 工具调用历史
         }
         """
         try:
             system_prompt = self._build_system_prompt(reference_texts, current_script)
             full_messages = [{'role': 'system', 'content': system_prompt}] + messages
 
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=full_messages,
-                temperature=0.7,
-                max_tokens=2800,
-            )
+            # 工具调用历史
+            tool_calls_history = []
 
-            response_text = completion.choices[0].message.content
-            extracted_script = self._extract_script(response_text)
+            # 最多允许3轮工具调用，防止死循环
+            max_iterations = 3
+            iteration = 0
 
+            while iteration < max_iterations:
+                iteration += 1
+
+                # 准备API调用参数
+                api_params = {
+                    'model': self.model,
+                    'messages': full_messages,
+                    'temperature': 0.7,
+                    'max_tokens': 2800,
+                }
+
+                # 如果启用工具，添加工具定义
+                if enable_tools:
+                    api_params['tools'] = AITools.get_tool_definitions()
+                    api_params['tool_choice'] = 'auto'
+
+                completion = self.client.chat.completions.create(**api_params)
+
+                assistant_message = completion.choices[0].message
+
+                # 检查是否有工具调用
+                if assistant_message.tool_calls:
+                    # 将助手消息添加到对话历史
+                    full_messages.append({
+                        'role': 'assistant',
+                        'content': assistant_message.content or '',
+                        'tool_calls': [
+                            {
+                                'id': tc.id,
+                                'type': tc.type,
+                                'function': {
+                                    'name': tc.function.name,
+                                    'arguments': tc.function.arguments
+                                }
+                            }
+                            for tc in assistant_message.tool_calls
+                        ]
+                    })
+
+                    # 执行每个工具调用
+                    for tool_call in assistant_message.tool_calls:
+                        function_name = tool_call.function.name
+                        function_args = json.loads(tool_call.function.arguments)
+
+                        # 记录工具调用
+                        tool_calls_history.append({
+                            'name': function_name,
+                            'arguments': function_args
+                        })
+
+                        # 执行工具
+                        function_response = AITools.execute_tool(function_name, function_args)
+
+                        # 将工具响应添加到对话历史
+                        full_messages.append({
+                            'role': 'tool',
+                            'tool_call_id': tool_call.id,
+                            'name': function_name,
+                            'content': function_response
+                        })
+
+                    # 继续循环，让AI处理工具响应
+                    continue
+
+                # 没有工具调用，获取最终响应
+                response_text = assistant_message.content
+                extracted_script = self._extract_script(response_text)
+
+                return {
+                    'success': True,
+                    'response': response_text,
+                    'script': extracted_script if extracted_script else current_script,
+                    'error': None,
+                    'tool_calls': tool_calls_history if tool_calls_history else None
+                }
+
+            # 达到最大迭代次数
             return {
-                'success': True,
-                'response': response_text,
-                'script': extracted_script if extracted_script else current_script,
-                'error': None
+                'success': False,
+                'response': None,
+                'script': current_script,
+                'error': '工具调用次数超过限制',
+                'tool_calls': tool_calls_history
             }
+
         except Exception as exc:  # pylint: disable=broad-except
             return {
                 'success': False,
                 'response': None,
                 'script': current_script,
-                'error': f'AI调用失败: {exc}'
+                'error': f'AI调用失败: {exc}',
+                'tool_calls': None
             }
 
     def generate_initial_script(

@@ -74,7 +74,7 @@ if [ ! -f ".env" ]; then
     echo "   - SECRET_KEY（Django 密钥）"
     echo "   - DATABASE_URL（PostgreSQL 连接）"
     echo "   - REDIS_URL（Redis 连接）"
-    echo "   - KIMI_API_KEY（AI 功能）"
+    echo "   - OPENAI_API_KEY（AI 功能，使用 Moonshot/Kimi）"
     echo "   - MINIMAX_API_KEY（语音合成）"
     echo ""
     read -p "按 Enter 继续编辑 .env 文件..."
