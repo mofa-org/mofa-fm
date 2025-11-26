@@ -4,87 +4,89 @@
       热门话题
     </button>
 
-    <div
-      v-if="panelVisible"
-      class="floating-container mofa-card"
-    >
-      <div class="panel-header">
-        <h3>热门话题</h3>
-        <button @click="togglePanel" class="close-btn">×</button>
-      </div>
-
-      <div class="panel-content">
-        <div v-if="loading" class="loading-state">加载热榜中...</div>
-
-        <div v-else-if="error" class="error-state">
-          <p>{{ error }}</p>
-          <button @click="loadAllRoutes" class="mofa-btn mofa-btn-sm">重试</button>
+    <Teleport to="body">
+      <div
+        v-if="panelVisible"
+        class="floating-container mofa-card"
+      >
+        <div class="panel-header">
+          <h3>热门话题</h3>
+          <button @click="togglePanel" class="close-btn">×</button>
         </div>
 
-        <div v-else class="sources-list">
-          <div
-            v-for="source in sources"
-            :key="source.name"
-            class="source-item"
-          >
-            <div class="source-header" @click="toggleSource(source.name)">
-              <div class="source-info">
-                <span class="expand-icon">{{ expandedSources.includes(source.name) ? '∨' : '>' }}</span>
-                <span class="source-title">{{ source.title || source.name }}</span>
-                <span v-if="source.total > 0" class="source-meta">
-                  <span class="item-count">{{ source.total }}条</span>
-                  <span v-if="source.updateTime" class="update-time">{{ formatUpdateTime(source.updateTime) }}</span>
-                </span>
-              </div>
-              <button
-                v-if="!expandedSources.includes(source.name)"
-                @click.stop="loadSourceData(source.name)"
-                class="load-btn"
-                :disabled="loadingSource === source.name"
-              >
-                {{ loadingSource === source.name ? '加载中...' : '加载' }}
-              </button>
-            </div>
+        <div class="panel-content">
+          <div v-if="loading" class="loading-state">加载热榜中...</div>
 
-            <div v-if="expandedSources.includes(source.name)" class="source-content">
-              <div v-if="loadingSource === source.name" class="loading-small">
-                <span class="loading-text">加载中...</span>
-              </div>
+          <div v-else-if="error" class="error-state">
+            <p>{{ error }}</p>
+            <button @click="loadAllRoutes" class="mofa-btn mofa-btn-sm">重试</button>
+          </div>
 
-              <div v-else-if="source.data && source.data.length > 0" class="trending-list">
-                <div
-                  v-for="(item, index) in source.data.slice(0, showAllItems[source.name] ? source.data.length : 10)"
-                  :key="item.id || index"
-                  class="trending-item"
-                  @click="selectTrendingItem(item, source)"
-                >
-                  <div class="item-rank">{{ index + 1 }}</div>
-                  <div class="item-content">
-                    <div class="item-title">{{ item.title }}</div>
-                    <div class="item-meta">
-                      <span v-if="item.hot" class="item-hot">{{ formatHot(item.hot) }}</span>
-                      <span v-if="item.author" class="item-author">{{ item.author }}</span>
-                    </div>
-                  </div>
+          <div v-else class="sources-list">
+            <div
+              v-for="source in sources"
+              :key="source.name"
+              class="source-item"
+            >
+              <div class="source-header" @click="toggleSource(source.name)">
+                <div class="source-info">
+                  <span class="expand-icon">{{ expandedSources.includes(source.name) ? '∨' : '>' }}</span>
+                  <span class="source-title">{{ source.title || source.name }}</span>
+                  <span v-if="source.total > 0" class="source-meta">
+                    <span class="item-count">{{ source.total }}条</span>
+                    <span v-if="source.updateTime" class="update-time">{{ formatUpdateTime(source.updateTime) }}</span>
+                  </span>
                 </div>
-
                 <button
-                  v-if="source.data.length > 10"
-                  @click.stop="showAllItems[source.name] = !showAllItems[source.name]"
-                  class="show-more-btn"
+                  v-if="!expandedSources.includes(source.name)"
+                  @click.stop="loadSourceData(source.name)"
+                  class="load-btn"
+                  :disabled="loadingSource === source.name"
                 >
-                  {{ showAllItems[source.name] ? '收起' : `查看全部 ${source.data.length} 条` }}
+                  {{ loadingSource === source.name ? '加载中...' : '加载' }}
                 </button>
               </div>
 
-              <div v-else class="empty-state-small">
-                暂无数据
+              <div v-if="expandedSources.includes(source.name)" class="source-content">
+                <div v-if="loadingSource === source.name" class="loading-small">
+                  <span class="loading-text">加载中...</span>
+                </div>
+
+                <div v-else-if="source.data && source.data.length > 0" class="trending-list">
+                  <div
+                    v-for="(item, index) in source.data.slice(0, showAllItems[source.name] ? source.data.length : 10)"
+                    :key="item.id || index"
+                    class="trending-item"
+                    @click="selectTrendingItem(item, source)"
+                  >
+                    <div class="item-rank">{{ index + 1 }}</div>
+                    <div class="item-content">
+                      <div class="item-title">{{ item.title }}</div>
+                      <div class="item-meta">
+                        <span v-if="item.hot" class="item-hot">{{ formatHot(item.hot) }}</span>
+                        <span v-if="item.author" class="item-author">{{ item.author }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    v-if="source.data.length > 10"
+                    @click.stop="showAllItems[source.name] = !showAllItems[source.name]"
+                    class="show-more-btn"
+                  >
+                    {{ showAllItems[source.name] ? '收起' : `查看全部 ${source.data.length} 条` }}
+                  </button>
+                </div>
+
+                <div v-else class="empty-state-small">
+                  暂无数据
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
