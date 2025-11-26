@@ -10,7 +10,7 @@
  * @returns {string} HTML 字符串
  */
 export function highlightText(text, keyword, className = 'highlight') {
-  if (!text || !keyword) return text
+  if (!text || !keyword) return text || ''
 
   const regex = new RegExp(`(${escapeRegExp(keyword)})`, 'gi')
   return text.replace(regex, `<span class="${className}">$1</span>`)
@@ -33,7 +33,7 @@ function escapeRegExp(string) {
  * @returns {string}
  */
 export function excerptText(text, keyword, contextLength = 50) {
-  if (!text || !keyword) return text
+  if (!text || !keyword) return text || ''
 
   const index = text.toLowerCase().indexOf(keyword.toLowerCase())
   if (index === -1) {

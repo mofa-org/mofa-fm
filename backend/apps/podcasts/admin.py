@@ -21,24 +21,90 @@ class TagAdmin(admin.ModelAdmin):
 
 @admin.register(Show)
 class ShowAdmin(admin.ModelAdmin):
-    list_display = ['title', 'creator', 'category', 'is_featured', 'episodes_count',
-                    'followers_count', 'total_plays', 'created_at']
-    list_filter = ['is_active', 'is_featured', 'category', 'created_at']
+    list_display = ['title', 'creator', 'category', 'content_type', 'visibility', 'is_featured',
+                    'is_active', 'episodes_count', 'followers_count', 'total_plays', 'created_at']
+    list_filter = ['is_active', 'is_featured', 'content_type', 'visibility', 'category', 'created_at']
     search_fields = ['title', 'description', 'creator__username']
     prepopulated_fields = {'slug': ('title',)}
     readonly_fields = ['episodes_count', 'followers_count', 'total_plays', 'created_at', 'updated_at']
-    filter_horizontal = ['tags']
+    filter_horizontal = ['tags', 'shared_with']
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('title', 'slug', 'description', 'cover', 'content_type', 'creator')
+        }),
+        ('分类标签', {
+            'fields': ('category', 'tags')
+        }),
+        ('可见性控制', {
+            'fields': ('visibility', 'shared_with')
+        }),
+        ('状态', {
+            'fields': ('is_active', 'is_featured')
+        }),
+        ('统计信息', {
+            'fields': ('episodes_count', 'followers_count', 'total_plays'),
+            'classes': ('collapse',)
+        }),
+        ('时间信息', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
 
 
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
-    list_display = ['title', 'show', 'status', 'duration', 'play_count', 'published_at', 'created_at']
-    list_filter = ['status', 'published_at', 'created_at']
-    search_fields = ['title', 'description', 'show__title']
+    list_display = ['title', 'show', 'status', 'visibility', 'duration_display', 'play_count',
+                    'like_count', 'comment_count', 'published_at']
+    list_filter = ['status', 'visibility', 'show__content_type', 'published_at', 'created_at']
+    search_fields = ['title', 'description', 'show__title', 'artist', 'album_name']
     prepopulated_fields = {'slug': ('title',)}
     readonly_fields = ['duration', 'file_size', 'play_count', 'like_count', 'comment_count',
-                      'created_at', 'updated_at', 'published_at']
+                      'created_at', 'updated_at', 'published_at', 'audio_url', 'cover_url']
+    filter_horizontal = ['shared_with']
     date_hierarchy = 'published_at'
+
+    fieldsets = (
+        ('基本信息', {
+            'fields': ('show', 'title', 'slug', 'description', 'cover')
+        }),
+        ('音频文件', {
+            'fields': ('audio_file', 'audio_url', 'duration', 'file_size')
+        }),
+        ('播客元数据', {
+            'fields': ('episode_number', 'season_number'),
+            'classes': ('collapse',)
+        }),
+        ('音乐元数据', {
+            'fields': ('artist', 'genre', 'album_name', 'release_date'),
+            'classes': ('collapse',)
+        }),
+        ('可见性控制', {
+            'fields': ('visibility', 'shared_with')
+        }),
+        ('状态', {
+            'fields': ('status', 'published_at')
+        }),
+        ('统计信息', {
+            'fields': ('play_count', 'like_count', 'comment_count'),
+            'classes': ('collapse',)
+        }),
+        ('时间信息', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+    def duration_display(self, obj):
+        """格式化显示时长"""
+        if obj.duration:
+            minutes = obj.duration // 60
+            seconds = obj.duration % 60
+            return f"{minutes}:{seconds:02d}"
+        return "-"
+    duration_display.short_description = '时长'
 
 
 class UploadedReferenceInline(admin.TabularInline):
