@@ -25,7 +25,7 @@ class SearchCommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        fields = ['id', 'text', 'user', 'episode', 'created_at', 'likes_count']
+        fields = ['id', 'text', 'user', 'episode', 'created_at', 'timestamp']
 
     def get_episode(self, obj):
         """获取 episode 信息，包括 show"""
