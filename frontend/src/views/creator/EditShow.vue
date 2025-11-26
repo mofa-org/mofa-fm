@@ -64,6 +64,12 @@
             </el-select>
           </el-form-item>
 
+          <el-divider />
+
+          <el-form-item label="">
+            <VisibilitySelector v-model="form.visibility" label="谁可以看到这个节目？" />
+          </el-form-item>
+
           <el-form-item>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
               保存修改
@@ -88,6 +94,7 @@ import { usePodcastsStore } from '@/stores/podcasts'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { Plus, Loading } from '@element-plus/icons-vue'
+import VisibilitySelector from '@/components/common/VisibilitySelector.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -104,7 +111,8 @@ const form = ref({
   title: '',
   description: '',
   category_id: null,
-  tag_ids: []
+  tag_ids: [],
+  visibility: 'public'
 })
 
 const categories = ref([])
@@ -144,6 +152,7 @@ onMounted(async () => {
     form.value.tag_ids = Array.isArray(show.tags)
       ? show.tags.map(tag => tag.id).filter(id => id !== null && id !== undefined)
       : []
+    form.value.visibility = show.visibility || 'public'
     coverPreview.value = show.cover_url
 
     // 所有数据加载完成后才显示表单
@@ -170,6 +179,7 @@ async function handleSubmit() {
     formData.append('content_type', form.value.content_type)
     formData.append('title', form.value.title)
     formData.append('description', form.value.description)
+    formData.append('visibility', form.value.visibility)
 
     // 只在有新封面时才上传
     if (coverFile.value) {

@@ -34,6 +34,7 @@ class ShowListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
             'content_type', 'creator', 'category', 'is_featured',
+            'visibility',
             'episodes_count', 'followers_count', 'total_plays',
             'created_at', 'updated_at'
         ]
@@ -55,12 +56,14 @@ class ShowDetailSerializer(serializers.ModelSerializer):
     tags = TagSerializer(many=True, read_only=True)
     cover_url = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    shared_with_users = UserSerializer(source='shared_with', many=True, read_only=True)
 
     class Meta:
         model = Show
         fields = [
             'id', 'title', 'slug', 'description', 'cover', 'cover_url',
             'content_type', 'creator', 'category', 'tags', 'is_featured', 'is_following',
+            'visibility', 'shared_with_users',
             'episodes_count', 'followers_count', 'total_plays',
             'created_at', 'updated_at'
         ]
@@ -90,14 +93,23 @@ class ShowCreateSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True
     )
+    shared_with_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True
+    )
 
     class Meta:
         model = Show
-        fields = ['title', 'description', 'cover', 'content_type', 'category_id', 'tag_ids']
+        fields = [
+            'title', 'description', 'cover', 'content_type',
+            'visibility', 'category_id', 'tag_ids', 'shared_with_ids'
+        ]
 
     def create(self, validated_data):
         category_id = validated_data.pop('category_id', None)
         tag_ids = validated_data.pop('tag_ids', [])
+        shared_with_ids = validated_data.pop('shared_with_ids', [])
 
         # 设置创作者
         validated_data['creator'] = self.context['request'].user
@@ -117,6 +129,12 @@ class ShowCreateSerializer(serializers.ModelSerializer):
             tags = Tag.objects.filter(id__in=tag_ids)
             show.tags.set(tags)
 
+        # 设置共享用户
+        if shared_with_ids:
+            from apps.users.models import User
+            users = User.objects.filter(id__in=shared_with_ids)
+            show.shared_with.set(users)
+
         return show
 
 
@@ -134,6 +152,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             'show', 'audio_file', 'audio_url', 'duration', 'file_size',
             'episode_number', 'season_number',
             'artist', 'genre', 'album_name', 'release_date',
+            'visibility',
             'status', 'play_count', 'like_count', 'comment_count',
             'published_at', 'created_at'
         ]
@@ -166,6 +185,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
     play_position = serializers.SerializerMethodField()
+    shared_with_users = UserSerializer(source='shared_with', many=True, read_only=True)
 
     class Meta:
         model = Episode
@@ -174,6 +194,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             'show', 'audio_file', 'audio_url', 'duration', 'file_size',
             'episode_number', 'season_number',
             'artist', 'genre', 'album_name', 'release_date',
+            'visibility', 'shared_with_users',
             'status', 'play_count', 'like_count', 'comment_count',
             'is_liked', 'play_position',
             'published_at', 'created_at', 'updated_at'
@@ -222,13 +243,19 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     show_id = serializers.IntegerField(required=False)
     audio_file = serializers.FileField(required=False)
+    shared_with_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True
+    )
 
     class Meta:
         model = Episode
         fields = [
             'show_id', 'title', 'description', 'cover',
             'audio_file', 'episode_number', 'season_number',
-            'artist', 'genre', 'album_name', 'release_date'
+            'artist', 'genre', 'album_name', 'release_date',
+            'visibility', 'shared_with_ids'
         ]
 
     def validate_show_id(self, value):
@@ -252,11 +279,19 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         show_id = validated_data.pop('show_id')
+        shared_with_ids = validated_data.pop('shared_with_ids', [])
+
         show = Show.objects.get(id=show_id)
         validated_data['show'] = show
         validated_data['status'] = 'processing'
 
         episode = Episode.objects.create(**validated_data)
+
+        # 设置共享用户
+        if shared_with_ids:
+            from apps.users.models import User
+            users = User.objects.filter(id__in=shared_with_ids)
+            episode.shared_with.set(users)
 
         # 触发音频处理任务
         from .tasks import process_episode_audio

@@ -61,6 +61,14 @@ class Show(models.Model):
         ('music', '音乐'),
     ]
 
+    VISIBILITY_CHOICES = [
+        ('public', '公开'),
+        ('unlisted', '不公开列出（仅链接可访问）'),
+        ('followers', '仅关注者'),
+        ('private', '私有'),
+        ('shared', '仅受邀用户'),
+    ]
+
     title = models.CharField('标题', max_length=255, db_index=True)
     slug = models.SlugField('URL标识', unique=True, max_length=255)
     description = models.TextField('描述')
@@ -84,6 +92,23 @@ class Show(models.Model):
         verbose_name='分类'
     )
     tags = models.ManyToManyField(Tag, blank=True, related_name='shows', verbose_name='标签')
+
+    # 可见性控制
+    visibility = models.CharField(
+        '可见性',
+        max_length=20,
+        choices=VISIBILITY_CHOICES,
+        default='public',
+        db_index=True,
+        help_text='控制谁可以看到这个节目'
+    )
+    shared_with = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='shared_shows',
+        verbose_name='共享给用户',
+        help_text='当可见性为"仅受邀用户"时生效'
+    )
 
     # 状态
     is_active = models.BooleanField('激活', default=True)
@@ -116,6 +141,45 @@ class Show(models.Model):
             self.slug = awesome_slugify(self.title)
         super().save(*args, **kwargs)
 
+    def can_view(self, user):
+        """检查用户是否可以查看此节目"""
+        # 未激活的节目只有创作者能看
+        if not self.is_active and (not user or user != self.creator):
+            return False
+
+        # 私有：仅创作者
+        if self.visibility == 'private':
+            return user and user == self.creator
+
+        # 仅受邀用户：创作者 + 受邀用户
+        if self.visibility == 'shared':
+            if not user:
+                return False
+            return user == self.creator or self.shared_with.filter(id=user.id).exists()
+
+        # 仅关注者：创作者 + 关注者
+        if self.visibility == 'followers':
+            if not user:
+                return False
+            if user == self.creator:
+                return True
+            return self.followers.filter(user=user).exists()
+
+        # 不公开列出：任何知道链接的人都能访问
+        if self.visibility == 'unlisted':
+            return True
+
+        # 公开：所有人
+        return True
+
+    def is_visible_in_list(self, user):
+        """检查节目是否应该在列表中显示"""
+        # 只有公开的节目才会在列表中显示
+        if self.visibility != 'public':
+            # 但创作者自己能看到自己的所有节目
+            return user and user == self.creator
+        return self.is_active
+
 
 class Episode(models.Model):
     """播客单集/音乐单曲"""
@@ -125,6 +189,15 @@ class Episode(models.Model):
         ('processing', '处理中'),
         ('published', '已发布'),
         ('failed', '处理失败'),
+    ]
+
+    VISIBILITY_CHOICES = [
+        ('inherit', '继承节目设置'),
+        ('public', '公开'),
+        ('unlisted', '不公开列出（仅链接可访问）'),
+        ('followers', '仅关注者'),
+        ('private', '私有'),
+        ('shared', '仅受邀用户'),
     ]
 
     show = models.ForeignKey(
@@ -137,6 +210,23 @@ class Episode(models.Model):
     slug = models.SlugField('URL标识', max_length=255)
     description = models.TextField('描述')
     cover = models.ImageField('封面', upload_to='episode_covers/%Y/%m/', blank=True, null=True)
+
+    # 可见性控制（可覆盖节目级别设置）
+    visibility = models.CharField(
+        '可见性',
+        max_length=20,
+        choices=VISIBILITY_CHOICES,
+        default='inherit',
+        db_index=True,
+        help_text='inherit 表示继承节目的可见性设置'
+    )
+    shared_with = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='shared_episodes',
+        verbose_name='共享给用户',
+        help_text='当可见性为"仅受邀用户"时生效'
+    )
 
     # 音频文件（统一MP3）
     audio_file = models.FileField('音频文件', upload_to='episodes/%Y/%m/')
@@ -197,6 +287,61 @@ class Episode(models.Model):
         if self.cover:
             return self.cover.url
         return self.show.cover.url if self.show.cover else None
+
+    def get_effective_visibility(self):
+        """获取实际生效的可见性（考虑继承）"""
+        if self.visibility == 'inherit':
+            return self.show.visibility
+        return self.visibility
+
+    def can_view(self, user):
+        """检查用户是否可以查看此单集"""
+        # 未发布的单集只有创作者能看
+        if self.status != 'published' and (not user or user != self.show.creator):
+            return False
+
+        # 首先检查节目级别权限
+        if not self.show.can_view(user):
+            return False
+
+        # 如果继承节目设置，直接返回节目权限
+        if self.visibility == 'inherit':
+            return True
+
+        # 否则检查单集自己的可见性设置
+        visibility = self.visibility
+
+        # 私有：仅创作者
+        if visibility == 'private':
+            return user and user == self.show.creator
+
+        # 仅受邀用户：创作者 + 受邀用户
+        if visibility == 'shared':
+            if not user:
+                return False
+            return user == self.show.creator or self.shared_with.filter(id=user.id).exists()
+
+        # 仅关注者：创作者 + 关注者
+        if visibility == 'followers':
+            if not user:
+                return False
+            if user == self.show.creator:
+                return True
+            return self.show.followers.filter(user=user).exists()
+
+        # 不公开列出、公开：都可访问
+        return True
+
+    def is_visible_in_list(self, user):
+        """检查单集是否应该在列表中显示"""
+        visibility = self.get_effective_visibility()
+
+        # 只有公开的单集才会在列表中显示
+        if visibility != 'public':
+            # 但创作者自己能看到自己的所有单集
+            return user and user == self.show.creator
+
+        return self.status == 'published'
 
 
 class ScriptSession(models.Model):

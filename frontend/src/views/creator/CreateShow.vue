@@ -64,6 +64,12 @@
             </el-select>
           </el-form-item>
 
+          <el-divider />
+
+          <el-form-item label="">
+            <VisibilitySelector v-model="form.visibility" label="谁可以看到这个节目？" />
+          </el-form-item>
+
           <el-form-item>
             <el-button type="primary" @click="handleSubmit" :loading="loading">
               创建节目
@@ -83,6 +89,7 @@ import { usePodcastsStore } from '@/stores/podcasts'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import VisibilitySelector from '@/components/common/VisibilitySelector.vue'
 
 const router = useRouter()
 const podcastsStore = usePodcastsStore()
@@ -98,7 +105,8 @@ const form = ref({
   description: '',
   cover: null,
   category_id: null,
-  tag_ids: []
+  tag_ids: [],
+  visibility: 'public'
 })
 
 const categories = ref([])
@@ -149,6 +157,7 @@ async function handleSubmit() {
     formData.append('title', form.value.title)
     formData.append('description', form.value.description)
     formData.append('cover', coverFile.value)
+    formData.append('visibility', form.value.visibility)
     if (form.value.category_id) {
       formData.append('category_id', form.value.category_id)
     }

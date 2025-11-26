@@ -6,7 +6,10 @@
         <img :src="episode.cover_url" :alt="episode.title" class="episode-cover" />
 
         <div class="episode-info">
-          <h1 class="episode-title">{{ episode.title }}</h1>
+          <div class="title-row">
+            <h1 class="episode-title">{{ episode.title }}</h1>
+            <VisibilityBadge :visibility="effectiveVisibility" />
+          </div>
 
           <router-link :to="`/shows/${episode.show.slug}`" class="show-name">
             {{ episode.show.title }}
@@ -75,6 +78,7 @@ import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoPlay, Star, UserFilled } from '@element-plus/icons-vue'
+import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -88,6 +92,14 @@ const commentText = ref('')
 const commenting = ref(false)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+
+const effectiveVisibility = computed(() => {
+  if (!episode.value) return 'public'
+  if (!episode.value.visibility || episode.value.visibility === 'inherit') {
+    return episode.value.show?.visibility || 'public'
+  }
+  return episode.value.visibility
+})
 
 onMounted(async () => {
   const { showSlug, episodeSlug } = route.params
@@ -166,10 +178,18 @@ function formatDate(date) {
   flex: 1;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
 .episode-title {
   font-size: var(--font-3xl);
   font-weight: var(--font-bold);
-  margin-bottom: var(--spacing-sm);
+  margin: 0;
 }
 
 .show-name {

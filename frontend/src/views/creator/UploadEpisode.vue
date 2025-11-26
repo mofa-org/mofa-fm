@@ -120,6 +120,16 @@
                         </el-form-item>
                     </template>
 
+                    <el-divider />
+
+                    <el-form-item label="">
+                        <VisibilitySelector
+                            v-model="form.visibility"
+                            label="单集可见性"
+                            :include-inherit="true"
+                        />
+                    </el-form-item>
+
                     <el-form-item>
                         <el-button
                             type="primary"
@@ -154,6 +164,7 @@ import { useRoute, useRouter } from "vue-router";
 import api from "@/api";
 import { ElMessage } from "element-plus";
 import { Upload, Headset } from "@element-plus/icons-vue";
+import VisibilitySelector from "@/components/common/VisibilitySelector.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -179,6 +190,8 @@ const form = ref({
     genre: "",
     album_name: "",
     release_date: null,
+    // 可见性
+    visibility: "inherit",
 });
 
 const uploadRules = {
@@ -236,6 +249,7 @@ async function handleUploadSubmit() {
         formData.append("title", form.value.title);
         formData.append("description", form.value.description);
         formData.append("audio_file", form.value.audio_file);
+        formData.append("visibility", form.value.visibility);
 
         // 播客字段
         if (showContentType.value === "podcast") {

@@ -7,6 +7,11 @@
           <VideoPlay />
         </el-icon>
       </div>
+      <!-- 可见性徽章 -->
+      <div v-if="visibilityBadge" class="visibility-badge" :class="`badge-${effectiveVisibility}`">
+        <el-icon><component :is="visibilityBadge.icon" /></el-icon>
+        <span>{{ visibilityBadge.text }}</span>
+      </div>
     </div>
 
     <div class="episode-info">
@@ -49,7 +54,7 @@
 import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
-import { VideoPlay } from '@element-plus/icons-vue'
+import { VideoPlay, Lock, View, User, Share } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -77,6 +82,32 @@ const emit = defineEmits(['deleted'])
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
+
+// 计算实际生效的可见性
+const effectiveVisibility = computed(() => {
+  if (!props.episode.visibility || props.episode.visibility === 'inherit') {
+    return props.episode.show?.visibility || 'public'
+  }
+  return props.episode.visibility
+})
+
+const visibilityBadge = computed(() => {
+  const visibility = effectiveVisibility.value
+
+  // 只对非公开的显示徽章
+  if (visibility === 'public') {
+    return null
+  }
+
+  const badges = {
+    private: { text: '私有', icon: Lock },
+    unlisted: { text: '不公开', icon: View },
+    followers: { text: '仅关注者', icon: User },
+    shared: { text: '已分享', icon: Share }
+  }
+
+  return badges[visibility] || null
+})
 
 const resolvedPlaylist = computed(() => {
   if (Array.isArray(props.playlist)) {
@@ -150,6 +181,44 @@ function formatDate(date) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 可见性徽章 */
+.episode-cover .visibility-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  color: white;
+  z-index: 2;
+}
+
+.episode-cover .visibility-badge .el-icon {
+  font-size: 11px;
+}
+
+.badge-private {
+  background: rgba(255, 81, 59, 0.95) !important;
+}
+
+.badge-unlisted {
+  background: rgba(255, 198, 62, 0.95) !important;
+}
+
+.badge-followers {
+  background: rgba(109, 202, 208, 0.95) !important;
+}
+
+.badge-shared {
+  background: rgba(253, 85, 63, 0.95) !important;
 }
 
 .play-overlay {

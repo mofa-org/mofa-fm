@@ -4,7 +4,10 @@
       <div class="show-header mofa-card">
         <img :src="show.cover_url" :alt="show.title" class="show-cover" />
         <div class="show-info">
-          <h1 class="show-title">{{ show.title }}</h1>
+          <div class="title-row">
+            <h1 class="show-title">{{ show.title }}</h1>
+            <VisibilityBadge :visibility="show.visibility" />
+          </div>
           <div class="creator-name">
             {{ show.creator.username }}
           </div>
@@ -48,6 +51,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
+import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
@@ -110,10 +114,18 @@ async function handleEpisodeDeleted(episodeId) {
   flex: 1;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
 .show-title {
   font-size: var(--font-3xl);
   font-weight: var(--font-bold);
-  margin-bottom: var(--spacing-sm);
+  margin: 0;
 }
 
 .creator-name {

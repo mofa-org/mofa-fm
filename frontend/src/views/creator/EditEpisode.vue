@@ -77,6 +77,16 @@
             </el-form-item>
           </template>
 
+          <el-divider />
+
+          <el-form-item label="">
+            <VisibilitySelector
+              v-model="form.visibility"
+              label="单集可见性"
+              :include-inherit="true"
+            />
+          </el-form-item>
+
           <el-form-item>
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
               保存修改
@@ -100,6 +110,7 @@ import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { Upload, Headset, Loading } from '@element-plus/icons-vue'
+import VisibilitySelector from '@/components/common/VisibilitySelector.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -121,7 +132,9 @@ const form = ref({
   artist: '',
   genre: '',
   album_name: '',
-  release_date: null
+  release_date: null,
+  // 可见性
+  visibility: 'inherit'
 })
 
 const rules = {
@@ -154,6 +167,9 @@ onMounted(async () => {
     form.value.album_name = episode.album_name || ''
     form.value.release_date = episode.release_date || null
 
+    // 可见性
+    form.value.visibility = episode.visibility || 'inherit'
+
     loading.value = false
   } catch (error) {
     console.error('加载单集信息失败：', error)
@@ -181,6 +197,7 @@ async function handleSubmit() {
     const formData = new FormData()
     formData.append('title', form.value.title)
     formData.append('description', form.value.description)
+    formData.append('visibility', form.value.visibility)
 
     // 只在有新音频文件时才上传
     if (form.value.audio_file) {
