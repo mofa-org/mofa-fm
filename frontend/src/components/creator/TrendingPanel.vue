@@ -1,81 +1,82 @@
 <template>
-  <div class="trending-panel mofa-card">
-    <div class="panel-header">
-      <div class="header-left">
-        <span class="header-icon">💡</span>
-        <h3>从热门话题获取灵感</h3>
-      </div>
-      <button @click="collapsed = !collapsed" class="toggle-btn">
-        {{ collapsed ? '展开' : '收起' }}
-      </button>
-    </div>
+  <div class="trending-panel-floating">
+    <button @click="togglePanel" class="floating-trigger mofa-btn mofa-btn-sm">
+      热门话题
+    </button>
 
-    <div v-if="!collapsed" class="panel-content">
-      <div v-if="loading" class="loading-state">加载热榜中...</div>
-
-      <div v-else-if="error" class="error-state">
-        <p>{{ error }}</p>
-        <button @click="loadAllRoutes" class="mofa-btn mofa-btn-sm">重试</button>
+    <div v-if="panelVisible" class="floating-container mofa-card">
+      <div class="panel-header">
+        <h3>热门话题</h3>
+        <button @click="togglePanel" class="close-btn">×</button>
       </div>
 
-      <div v-else class="sources-list">
-        <div
-          v-for="source in sources"
-          :key="source.name"
-          class="source-item"
-        >
-          <div class="source-header" @click="toggleSource(source.name)">
-            <div class="source-info">
-              <span class="expand-icon">{{ expandedSources.includes(source.name) ? '∨' : '>' }}</span>
-              <span class="source-title">{{ source.title || source.name }}</span>
-              <span class="source-meta">
-                <span class="item-count">{{ source.total || 0 }}条</span>
-                <span class="update-time">{{ formatUpdateTime(source.updateTime) }}</span>
-              </span>
-            </div>
-            <button
-              v-if="!expandedSources.includes(source.name)"
-              @click.stop="loadSourceData(source.name)"
-              class="load-btn"
-              :disabled="loadingSource === source.name"
-            >
-              {{ loadingSource === source.name ? '加载中...' : '加载' }}
-            </button>
-          </div>
+      <div class="panel-content">
+        <div v-if="loading" class="loading-state">加载热榜中...</div>
 
-          <div v-if="expandedSources.includes(source.name)" class="source-content">
-            <div v-if="loadingSource === source.name" class="loading-small">
-              <span class="loading-text">加载中...</span>
-            </div>
+        <div v-else-if="error" class="error-state">
+          <p>{{ error }}</p>
+          <button @click="loadAllRoutes" class="mofa-btn mofa-btn-sm">重试</button>
+        </div>
 
-            <div v-else-if="source.data && source.data.length > 0" class="trending-list">
-              <div
-                v-for="(item, index) in source.data.slice(0, showAllItems[source.name] ? source.data.length : 10)"
-                :key="item.id || index"
-                class="trending-item"
-                @click="selectTrendingItem(item, source)"
-              >
-                <div class="item-rank">{{ index + 1 }}</div>
-                <div class="item-content">
-                  <div class="item-title">{{ item.title }}</div>
-                  <div class="item-meta">
-                    <span v-if="item.hot" class="item-hot">🔥 {{ formatHot(item.hot) }}</span>
-                    <span v-if="item.author" class="item-author">{{ item.author }}</span>
-                  </div>
-                </div>
+        <div v-else class="sources-list">
+          <div
+            v-for="source in sources"
+            :key="source.name"
+            class="source-item"
+          >
+            <div class="source-header" @click="toggleSource(source.name)">
+              <div class="source-info">
+                <span class="expand-icon">{{ expandedSources.includes(source.name) ? '∨' : '>' }}</span>
+                <span class="source-title">{{ source.title || source.name }}</span>
+                <span v-if="source.total > 0" class="source-meta">
+                  <span class="item-count">{{ source.total }}条</span>
+                  <span v-if="source.updateTime" class="update-time">{{ formatUpdateTime(source.updateTime) }}</span>
+                </span>
               </div>
-
               <button
-                v-if="source.data.length > 10"
-                @click.stop="showAllItems[source.name] = !showAllItems[source.name]"
-                class="show-more-btn"
+                v-if="!expandedSources.includes(source.name)"
+                @click.stop="loadSourceData(source.name)"
+                class="load-btn"
+                :disabled="loadingSource === source.name"
               >
-                {{ showAllItems[source.name] ? '收起' : `查看全部 ${source.data.length} 条` }}
+                {{ loadingSource === source.name ? '加载中...' : '加载' }}
               </button>
             </div>
 
-            <div v-else class="empty-state-small">
-              暂无数据
+            <div v-if="expandedSources.includes(source.name)" class="source-content">
+              <div v-if="loadingSource === source.name" class="loading-small">
+                <span class="loading-text">加载中...</span>
+              </div>
+
+              <div v-else-if="source.data && source.data.length > 0" class="trending-list">
+                <div
+                  v-for="(item, index) in source.data.slice(0, showAllItems[source.name] ? source.data.length : 10)"
+                  :key="item.id || index"
+                  class="trending-item"
+                  @click="selectTrendingItem(item, source)"
+                >
+                  <div class="item-rank">{{ index + 1 }}</div>
+                  <div class="item-content">
+                    <div class="item-title">{{ item.title }}</div>
+                    <div class="item-meta">
+                      <span v-if="item.hot" class="item-hot">{{ formatHot(item.hot) }}</span>
+                      <span v-if="item.author" class="item-author">{{ item.author }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  v-if="source.data.length > 10"
+                  @click.stop="showAllItems[source.name] = !showAllItems[source.name]"
+                  class="show-more-btn"
+                >
+                  {{ showAllItems[source.name] ? '收起' : `查看全部 ${source.data.length} 条` }}
+                </button>
+              </div>
+
+              <div v-else class="empty-state-small">
+                暂无数据
+              </div>
             </div>
           </div>
         </div>
@@ -89,7 +90,7 @@ import { ref, onMounted, reactive } from 'vue'
 import api from '@/api'
 
 // 状态
-const collapsed = ref(false)
+const panelVisible = ref(false)
 const loading = ref(true)
 const error = ref('')
 const sources = ref([])
@@ -99,6 +100,11 @@ const showAllItems = reactive({})
 
 // Emit 事件
 const emit = defineEmits(['select-trending'])
+
+// 切换面板显示
+function togglePanel() {
+  panelVisible.value = !panelVisible.value
+}
 
 // 加载所有可用的热榜路由
 async function loadAllRoutes() {
@@ -173,6 +179,8 @@ function selectTrendingItem(item, source) {
     item,
     source: source.title || source.name
   })
+  // 选中后关闭面板
+  panelVisible.value = false
 }
 
 // 格式化热度
@@ -212,53 +220,66 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.trending-panel {
-  margin-bottom: var(--spacing-lg);
+.trending-panel-floating {
+  position: relative;
+}
+
+.floating-trigger {
+  margin-bottom: var(--spacing-md);
+}
+
+.floating-container {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  width: 400px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: var(--spacing-sm);
+  padding: var(--spacing-md);
   border-bottom: 2px solid var(--border-color);
-  margin-bottom: var(--spacing-md);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.header-icon {
-  font-size: 20px;
+  flex-shrink: 0;
 }
 
 .panel-header h3 {
   margin: 0;
-  font-size: var(--font-base);
+  font-size: var(--font-lg);
   font-weight: var(--font-semibold);
 }
 
-.toggle-btn {
+.close-btn {
   background: none;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 4px 12px;
-  font-size: var(--font-xs);
+  border: none;
+  font-size: 28px;
+  line-height: 1;
   cursor: pointer;
+  color: var(--color-text-tertiary);
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: var(--transition);
 }
 
-.toggle-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+.close-btn:hover {
+  color: var(--color-text-primary);
 }
 
 .panel-content {
-  max-height: 600px;
+  flex: 1;
   overflow-y: auto;
+  padding: var(--spacing-md);
 }
 
 .loading-state,
@@ -308,6 +329,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   flex: 1;
+  min-width: 0;
 }
 
 .expand-icon {
@@ -315,19 +337,22 @@ onMounted(() => {
   font-weight: bold;
   color: var(--color-text-tertiary);
   min-width: 16px;
+  flex-shrink: 0;
 }
 
 .source-title {
   font-weight: var(--font-semibold);
   font-size: var(--font-sm);
+  flex-shrink: 0;
 }
 
 .source-meta {
   display: flex;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   font-size: var(--font-xs);
   color: var(--color-text-tertiary);
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .item-count {
@@ -349,6 +374,7 @@ onMounted(() => {
   cursor: pointer;
   transition: var(--transition);
   margin-left: var(--spacing-sm);
+  flex-shrink: 0;
 }
 
 .load-btn:hover:not(:disabled) {
@@ -471,5 +497,13 @@ onMounted(() => {
   text-align: center;
   color: var(--color-text-tertiary);
   font-size: var(--font-sm);
+}
+
+@media (max-width: 768px) {
+  .floating-container {
+    right: 10px;
+    width: calc(100vw - 20px);
+    max-width: 400px;
+  }
 }
 </style>
