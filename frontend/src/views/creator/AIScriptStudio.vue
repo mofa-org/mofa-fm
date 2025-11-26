@@ -138,6 +138,9 @@
         <div class="workspace-content">
           <!-- 左侧：对话区 -->
           <div class="chat-panel mofa-card">
+            <!-- 热门话题面板 -->
+            <TrendingPanel @select-trending="handleTrendingSelect" />
+
             <div class="panel-header">
               <h3>对话</h3>
               <button @click="showUploadDialog = true" class="mofa-btn mofa-btn-sm">
@@ -429,6 +432,7 @@ import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import podcastsAPI from '@/api/podcasts'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import TrendingPanel from '@/components/creator/TrendingPanel.vue'
 
 const router = useRouter()
 
@@ -711,6 +715,28 @@ function toggleQueueFilter(status) {
     queueFilters.value.push(status)
   }
   loadGenerationQueue()
+}
+
+// 处理热搜选择
+function handleTrendingSelect({ item, source }) {
+  if (!currentSession.value?.id) {
+    ElMessage.warning('请先创建或选择一个会话')
+    return
+  }
+
+  // 自动填充到输入框
+  const prompt = `帮我基于"${item.title}"这个热门话题创作一个播客脚本。`
+  userMessage.value = prompt
+
+  ElMessage.success(`已选择来自 ${source} 的话题`)
+
+  // 可选：自动滚动到输入框
+  nextTick(() => {
+    const textarea = document.querySelector('.chat-input textarea')
+    if (textarea) {
+      textarea.focus()
+    }
+  })
 }
 
 // 发送消息
