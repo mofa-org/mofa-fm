@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 
 const client = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 120000,  // 增加到120秒，支持多轮搜索
   headers: {
     'Content-Type': 'application/json'
   }

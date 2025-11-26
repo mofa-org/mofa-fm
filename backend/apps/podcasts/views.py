@@ -426,19 +426,20 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             all_search_results = []
 
             # 限制最多8个查询
+            total_queries = min(len(search_queries), 8)
             for idx, query in enumerate(search_queries[:8], 1):
                 try:
                     search_result = AITools.execute_tool('tavily_search', {
                         'query': query,
                         'max_results': 6  # 每个查询返回6条结果，8个查询最多48条
                     })
-                    all_search_results.append(f"## 查询 {idx}: {query}\n{search_result}")
+                    all_search_results.append(f"## 查询 {idx}/{total_queries}: {query}\n{search_result}")
                 except Exception as e:
-                    all_search_results.append(f"## 查询 {idx}: {query}\n搜索失败: {str(e)}")
+                    all_search_results.append(f"## 查询 {idx}/{total_queries}: {query}\n搜索失败: {str(e)}")
 
             # 合并所有搜索结果
             combined_results = "\n\n".join(all_search_results)
-            pre_search_result = f"【搜索结果 - {current_date}】\n\n{combined_results}"
+            pre_search_result = f"【搜索结果 - {current_date}】\n已完成 {total_queries} 个查询\n\n{combined_results}"
 
             if reference_texts is None:
                 reference_texts = []

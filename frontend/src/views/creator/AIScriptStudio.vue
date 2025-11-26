@@ -766,7 +766,7 @@ async function sendMessage() {
   currentSession.value.chat_history.push(localMessage)
   const typingMessage = {
     role: 'assistant',
-    content: '',
+    content: '正在思考...',
     timestamp: null,
     typing: true
   }
@@ -775,6 +775,15 @@ async function sendMessage() {
   scrollToBottom()
 
   try {
+    // 检测是否可能需要搜索
+    const searchKeywords = ['今天', '昨天', '最近', '最新', '沪指', '股市', '新闻', '热点', '搜索', '查询']
+    const needsSearch = searchKeywords.some(keyword => message.includes(keyword))
+
+    if (needsSearch) {
+      typingMessage.content = '🔍 正在搜索实时信息...'
+      await nextTick()
+    }
+
     const data = await podcastsAPI.chatWithAI(currentSession.value.id, message)
     localMessage.pending = false
 
@@ -799,7 +808,18 @@ async function sendMessage() {
     localMessage.pending = false
     typingMessage.typing = false
 
-    const errorMsg = error.response?.data?.error || error.response?.data?.detail || '发送失败，请重试'
+    let errorMsg = '发送失败，请重试'
+
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMsg = '⏱️ 请求超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
+    } else if (error.response?.status === 500) {
+      errorMsg = '❌ 服务器错误，请刷新页面重新加载试试看。'
+    } else if (error.response?.status === 504) {
+      errorMsg = '⏱️ 网关超时，可能是搜索耗时较长。请刷新页面重新加载试试看。'
+    } else {
+      errorMsg = error.response?.data?.error || error.response?.data?.detail || '❌ 发送失败，请刷新页面重新加载试试看。'
+    }
+
     typingMessage.content = errorMsg
     typingMessage.timestamp = new Date().toISOString()
   } finally {
