@@ -26,7 +26,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Connection, Lock, View, User, Share, Check } from '@element-plus/icons-vue'
+import { Connection, Lock, View, User, Share, Check, Globe } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
