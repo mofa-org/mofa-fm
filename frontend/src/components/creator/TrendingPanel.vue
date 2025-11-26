@@ -230,11 +230,10 @@ onMounted(() => {
 
 .floating-container {
   position: fixed;
-  top: 50%;
-  right: 20px;
-  transform: translateY(-50%);
+  bottom: 20px;
+  left: 20px;
   width: 400px;
-  max-height: 80vh;
+  max-height: 70vh;
   display: flex;
   flex-direction: column;
   z-index: 1000;
@@ -501,7 +500,8 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .floating-container {
-    right: 10px;
+    left: 10px;
+    bottom: 10px;
     width: calc(100vw - 20px);
     max-width: 400px;
   }
