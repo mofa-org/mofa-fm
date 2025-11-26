@@ -7,15 +7,8 @@
     <div
       v-if="panelVisible"
       class="floating-container mofa-card"
-      :style="{
-        left: panelPosition.x + 'px',
-        bottom: panelPosition.y + 'px'
-      }"
     >
-      <div
-        class="panel-header"
-        @mousedown="startDrag"
-      >
+      <div class="panel-header">
         <h3>热门话题</h3>
         <button @click="togglePanel" class="close-btn">×</button>
       </div>
@@ -108,51 +101,12 @@ const expandedSources = ref([])
 const loadingSource = ref(null)
 const showAllItems = reactive({})
 
-// 拖动相关状态
-const isDragging = ref(false)
-const dragOffset = reactive({ x: 0, y: 0 })
-const panelPosition = reactive({ x: 20, y: 20 }) // 初始位置：左下角
-
 // Emit 事件
 const emit = defineEmits(['select-trending'])
 
 // 切换面板显示
 function togglePanel() {
   panelVisible.value = !panelVisible.value
-}
-
-// 拖动开始
-function startDrag(event) {
-  isDragging.value = true
-  const container = event.currentTarget.parentElement
-  const rect = container.getBoundingClientRect()
-  dragOffset.x = event.clientX - rect.left
-  dragOffset.y = event.clientY - rect.top
-
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', stopDrag)
-}
-
-// 拖动中
-function onDrag(event) {
-  if (!isDragging.value) return
-
-  panelPosition.x = event.clientX - dragOffset.x
-  panelPosition.y = event.clientY - dragOffset.y
-
-  // 限制在视窗范围内
-  const maxX = window.innerWidth - 400 // 400是面板宽度
-  const maxY = window.innerHeight - 100 // 留一些底部空间
-
-  panelPosition.x = Math.max(0, Math.min(panelPosition.x, maxX))
-  panelPosition.y = Math.max(0, Math.min(panelPosition.y, maxY))
-}
-
-// 拖动结束
-function stopDrag() {
-  isDragging.value = false
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', stopDrag)
 }
 
 // 加载所有可用的热榜路由
@@ -280,6 +234,8 @@ onMounted(() => {
 
 .floating-container {
   position: fixed;
+  bottom: 20px;
+  left: 20px;
   width: 400px;
   max-height: 70vh;
   display: flex;
@@ -295,8 +251,6 @@ onMounted(() => {
   padding: var(--spacing-md);
   border-bottom: 2px solid var(--border-color);
   flex-shrink: 0;
-  cursor: move;
-  user-select: none;
 }
 
 .panel-header h3 {
@@ -550,6 +504,8 @@ onMounted(() => {
 
 @media (max-width: 768px) {
   .floating-container {
+    left: 10px;
+    bottom: 10px;
     width: calc(100vw - 20px);
     max-width: 400px;
   }
