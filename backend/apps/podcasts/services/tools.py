@@ -19,7 +19,7 @@ class AITools:
                 "type": "function",
                 "function": {
                     "name": "tavily_search",
-                    "description": "当需要搜索最新信息、新闻、资料或者用户问题涉及实时数据时使用此工具。返回相关搜索结果摘要。",
+                    "description": "搜索最新的实时信息、新闻、数据。当用户询问涉及时效性的内容时（今天、最近、最新、当前、现在等），或需要具体的实时数据（股价、新闻、天气等），必须使用此工具。返回相关搜索结果摘要。",
                     "parameters": {
                         "type": "object",
                         "properties": {
