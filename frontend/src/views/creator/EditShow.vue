@@ -42,7 +42,7 @@
             <p class="form-hint">推荐尺寸：1400x1400 像素，留空则不更新封面</p>
           </el-form-item>
 
-          <el-form-item label="分类" prop="category_id" v-if="categories.length > 0">
+          <el-form-item label="分类" prop="category_id" v-if="categories.length > 0" v-show="false">
             <el-select v-model="form.category_id" placeholder="选择分类">
               <el-option
                 v-for="cat in categories"
@@ -53,7 +53,7 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="标签" v-if="tags.length > 0">
+          <el-form-item label="标签" v-if="tags.length > 0" v-show="false">
             <el-select v-model="form.tag_ids" multiple placeholder="选择标签（可选）">
               <el-option
                 v-for="tag in tags"

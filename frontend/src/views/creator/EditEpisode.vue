@@ -43,11 +43,11 @@
 
           <!-- 播客专用字段 -->
           <template v-if="showContentType === 'podcast'">
-            <el-form-item label="季数">
+            <el-form-item label="季数" v-show="false">
               <el-input-number v-model="form.season_number" :min="1" />
             </el-form-item>
 
-            <el-form-item label="集数">
+            <el-form-item label="集数" v-show="false">
               <el-input-number v-model="form.episode_number" :min="1" />
             </el-form-item>
           </template>

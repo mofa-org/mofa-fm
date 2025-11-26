@@ -72,6 +72,7 @@
             placeholder="分类"
             @change="handleSearch"
             clearable
+            v-show="false"
           >
             <el-option
               v-for="category in categories"

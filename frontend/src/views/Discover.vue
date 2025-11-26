@@ -4,7 +4,7 @@
       <h1 class="page-title">发现播客</h1>
 
       <!-- 分类过滤 -->
-      <div class="categories" v-if="categories && categories.length > 0">
+      <div class="categories" v-if="categories && categories.length > 0" v-show="false">
         <button
           v-for="cat in categories"
           :key="cat.id"
