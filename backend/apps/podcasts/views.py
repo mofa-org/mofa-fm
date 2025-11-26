@@ -327,6 +327,7 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
         # 调用轻量级模型快速判断
         from openai import OpenAI
         from django.conf import settings
+        import json
 
         judge_client = OpenAI(
             api_key=settings.OPENAI_API_KEY,
@@ -335,7 +336,7 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
         judge_prompt = f"""今天是 {current_date}。
 
-判断以下用户问题是否需要搜索实时信息。
+判断以下用户问题是否需要搜索实时信息，如需搜索，请提取多个关键搜索词。
 
 需要搜索的情况：
 1. 涉及时间相关词：今天、昨天、最近、最新、当前等
@@ -350,23 +351,64 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
 用户问题："{user_message}"
 
-如果需要搜索，请输出一个优化后的搜索查询词（不超过20字，包含关键信息和日期）。
-如果不需要搜索，只输出"NO"。
+输出 JSON 格式：
+{{
+  "need_search": true/false,
+  "queries": ["查询词1", "查询词2", "..."]
+}}
 
-输出格式：
-- 需要搜索：直接输出搜索查询词，如"2024年11月26日 上证指数收盘价"
-- 不需要搜索：NO"""
+说明：
+- 如果不需要搜索，返回 {{"need_search": false, "queries": []}}
+- 如果需要搜索，返回 1-8 个优化的搜索查询词（根据问题复杂度决定）
+- 每个查询词应该：
+  1. 包含准确的日期（如涉及"今天"用 {current_date}，"昨天"自动计算）
+  2. 关键信息提取（如"沪指"改为"上证指数"）
+  3. 不超过20字
+  4. 从不同角度覆盖用户问题
+
+查询数量建议：
+- 简单问题（1个指标）：1-2个查询
+- 中等复杂度（2-3个指标）：2-4个查询
+- 复杂问题（多维度/对比）：4-8个查询
+
+示例：
+用户："今天沪指和深证怎么样"
+输出：{{"need_search": true, "queries": ["{current_date} 上证指数收盘价", "{current_date} 深证成指收盘价"]}}
+
+用户："最近有什么科技新闻"
+输出：{{"need_search": true, "queries": ["{current_date} 科技新闻", "最新科技行业动态", "科技公司重大事件"]}}
+
+用户："今天股市行情怎么样，有哪些板块表现好"
+输出：{{"need_search": true, "queries": ["{current_date} 上证指数", "{current_date} 深证成指", "{current_date} 创业板指", "{current_date} 涨幅最大板块", "{current_date} 领涨行业"]}}
+
+只输出 JSON，不要其他文字。"""
 
         try:
             judge_response = judge_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[{'role': 'user', 'content': judge_prompt}],
                 temperature=0,
-                max_tokens=100
+                max_tokens=200
             )
 
-            search_query = judge_response.choices[0].message.content.strip()
-            needs_search = search_query != "NO"
+            response_text = judge_response.choices[0].message.content.strip()
+
+            # 尝试解析 JSON
+            try:
+                # 去除可能的 markdown 代码块标记
+                if response_text.startswith('```'):
+                    response_text = response_text.split('```')[1]
+                    if response_text.startswith('json'):
+                        response_text = response_text[4:]
+                response_text = response_text.strip()
+
+                result = json.loads(response_text)
+                needs_search = result.get('need_search', False)
+                search_queries = result.get('queries', [])
+            except json.JSONDecodeError:
+                # JSON 解析失败，回退
+                needs_search = response_text != "NO"
+                search_queries = [f"{current_date} {user_message}"] if needs_search else []
 
         except Exception as e:
             # AI判断失败，回退到关键词检测
@@ -377,18 +419,27 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
                 r'搜索|查询|查找|查一下|搜一下',
             ]
             needs_search = any(re.search(pattern, user_message, re.IGNORECASE) for pattern in search_keywords)
-            search_query = f"{current_date} {user_message}"
+            search_queries = [f"{current_date} {user_message}"] if needs_search else []
 
-        # 如果需要搜索，强制先执行搜索
-        if needs_search:
-            # 执行搜索
-            search_result = AITools.execute_tool('tavily_search', {
-                'query': search_query,
-                'max_results': 5
-            })
+        # 如果需要搜索，执行多轮查询
+        if needs_search and search_queries:
+            all_search_results = []
 
-            # 将搜索结果作为参考资料
-            pre_search_result = f"【搜索结果 - {current_date}】\n{search_result}"
+            # 限制最多8个查询
+            for idx, query in enumerate(search_queries[:8], 1):
+                try:
+                    search_result = AITools.execute_tool('tavily_search', {
+                        'query': query,
+                        'max_results': 6  # 每个查询返回6条结果，8个查询最多48条
+                    })
+                    all_search_results.append(f"## 查询 {idx}: {query}\n{search_result}")
+                except Exception as e:
+                    all_search_results.append(f"## 查询 {idx}: {query}\n搜索失败: {str(e)}")
+
+            # 合并所有搜索结果
+            combined_results = "\n\n".join(all_search_results)
+            pre_search_result = f"【搜索结果 - {current_date}】\n\n{combined_results}"
+
             if reference_texts is None:
                 reference_texts = []
             reference_texts.insert(0, pre_search_result)
