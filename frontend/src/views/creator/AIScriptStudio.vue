@@ -138,14 +138,14 @@
         <div class="workspace-content">
           <!-- 左侧：对话区 -->
           <div class="chat-panel mofa-card">
-            <!-- 热门话题面板 -->
-            <TrendingPanel @select-trending="handleTrendingSelect" />
-
             <div class="panel-header">
               <h3>对话</h3>
-              <button @click="showUploadDialog = true" class="mofa-btn mofa-btn-sm">
-                上传参考文件
-              </button>
+              <div class="header-actions">
+                <TrendingPanel @select-trending="handleTrendingSelect" />
+                <button @click="showUploadDialog = true" class="mofa-btn mofa-btn-sm">
+                  上传参考文件
+                </button>
+              </div>
             </div>
 
             <!-- 参考文件列表 -->
@@ -1386,6 +1386,12 @@ onMounted(() => {
 .panel-header h3 {
   font-size: var(--font-base);
   font-weight: var(--font-semibold);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
 }
 
 /* 参考文件 */
