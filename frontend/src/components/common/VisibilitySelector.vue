@@ -26,7 +26,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Globe, Lock, View, User, Share, Check } from '@element-plus/icons-vue'
+import { Connection, Lock, View, User, Share, Check } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -50,7 +50,7 @@ const baseOptions = [
     value: 'public',
     title: '公开',
     description: '所有人都可以看到和搜索到',
-    icon: Globe,
+    icon: Connection,
     color: 'linear-gradient(135deg, #6dcad0, #8ed9de)'
   },
   {
