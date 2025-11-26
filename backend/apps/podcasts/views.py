@@ -331,7 +331,8 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
         result = ai_service.chat(
             messages=messages_for_ai,
             reference_texts=reference_texts,
-            current_script=session.current_script
+            current_script=session.current_script,
+            enable_tools=True  # 启用工具调用（Tavily搜索等）
         )
 
         if not result['success']:
