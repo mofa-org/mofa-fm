@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import serializers
 from django.db.models import Q, F, Count, Case, When, IntegerField
 from django.utils import timezone
 from datetime import timedelta
@@ -12,7 +13,40 @@ from apps.podcasts.models import Show, Episode
 from apps.podcasts.serializers import ShowListSerializer, EpisodeListSerializer
 from apps.interactions.models import Comment
 from apps.interactions.serializers import CommentSerializer
+from apps.users.serializers import UserSerializer
 from .models import SearchHistory, PopularSearch
+
+
+class SearchCommentSerializer(serializers.ModelSerializer):
+    """搜索结果中的评论序列化器，包含完整的 episode 和 show 信息"""
+
+    user = UserSerializer(read_only=True)
+    episode = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ['id', 'text', 'user', 'episode', 'created_at', 'likes_count']
+
+    def get_episode(self, obj):
+        """获取 episode 信息，包括 show"""
+        if not obj.episode:
+            return None
+
+        episode_data = {
+            'id': obj.episode.id,
+            'title': obj.episode.title,
+            'slug': obj.episode.slug,
+        }
+
+        # 添加 show 信息
+        if obj.episode.show:
+            episode_data['show'] = {
+                'id': obj.episode.show.id,
+                'title': obj.episode.show.title,
+                'slug': obj.episode.show.slug,
+            }
+
+        return episode_data
 
 
 class SearchResultsPagination(PageNumberPagination):
@@ -209,7 +243,7 @@ def search(request):
     return Response({
         'shows': ShowListSerializer(shows_list, many=True, context={'request': request}).data,
         'episodes': EpisodeListSerializer(episodes_list, many=True, context={'request': request}).data,
-        'comments': CommentSerializer(comments_list, many=True).data,
+        'comments': SearchCommentSerializer(comments_list, many=True).data,
         'total': total_results,
         'query': query,
         'filters': {

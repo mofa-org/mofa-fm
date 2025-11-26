@@ -154,14 +154,16 @@
             <div v-for="comment in results.comments" :key="comment.id" class="comment-item mofa-card">
               <p class="comment-text" v-html="highlightExcerpt(comment.text, query, 80)"></p>
               <div class="comment-meta">
-                <span class="comment-author">{{ comment.user.username }}</span>
-                <span class="comment-separator">·</span>
-                <router-link
-                  :to="`/shows/${comment.episode.show.slug}/episodes/${comment.episode.slug}`"
-                  class="comment-link"
-                >
-                  {{ comment.episode.title }}
-                </router-link>
+                <span class="comment-author">{{ comment.user?.username || '匿名用户' }}</span>
+                <template v-if="comment.episode?.show?.slug && comment.episode?.slug">
+                  <span class="comment-separator">·</span>
+                  <router-link
+                    :to="`/shows/${comment.episode.show.slug}/episodes/${comment.episode.slug}`"
+                    class="comment-link"
+                  >
+                    {{ comment.episode.title || '未知单集' }}
+                  </router-link>
+                </template>
               </div>
             </div>
           </div>
