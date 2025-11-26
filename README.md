@@ -1,269 +1,290 @@
-# 🎙️ MoFA FM - 播客托管平台
+# MoFA FM - 播客托管平台
 
-MoFA FM 是一个现代化的播客托管平台，采用 Django + Vue 3 技术栈，具有马卡龙配色的独特设计语言。
+MoFA FM 是一个现代化的播客托管和分发平台，支持播客创作、AI 脚本生成、语音合成以及完整的社区互动功能。
 
-## ✨ 特性
+## 主要功能
 
-- 🎨 **马卡龙设计系统** - 参考 voice-webapp 的独特视觉风格
-- 🎵 **完整播客管理** - 创建节目、上传单集、播放器
-- 👥 **创作者验证** - 数学题验证成为创作者
-- 💬 **评论系统** - 嵌套评论支持
-- 🔍 **全文搜索** - 搜索节目、单集和评论
-- 📊 **播放历史** - 自动保存播放进度
-- ❤️ **互动功能** - 点赞、关注、收藏
+- 播客节目和单集管理
+- AI 辅助脚本创作
+- TTS 语音合成
+- 用户社区互动（评论、点赞、关注）
+- 全文搜索
+- 播放历史和进度保存
+- 创作者管理系统
 
-## 🏗️ 技术栈
+## 技术栈
 
 ### 后端
-- **Django 5.1** - Web框架
-- **Django REST Framework** - API
-- **Celery** - 异步任务（音频处理）
-- **Redis** - 缓存和消息队列
-- **PostgreSQL/SQLite** - 数据库
-- **pydub** - 音频处理
+- Django 5.1
+- Django REST Framework
+- Celery (异步任务)
+- Redis (缓存和消息队列)
+- PostgreSQL/SQLite
 
 ### 前端
-- **Vue 3** - 前端框架
-- **Vite** - 构建工具
-- **Pinia** - 状态管理
-- **Element Plus** - UI组件库
-- **Axios** - HTTP客户端
+- Vue 3
+- Vite
+- Pinia (状态管理)
+- Element Plus (UI组件)
 
-## 📦 安装和运行
+### AI 服务
+- Moonshot AI (脚本生成)
+- MiniMax (TTS语音合成)
+- Tavily (AI搜索)
+
+## 快速开始
 
 ### 前置要求
 
 - Python 3.10+
 - Node.js 18+
-- Redis (用于Celery)
-- FFmpeg (用于音频处理)
+- Redis
+- FFmpeg
 
-### 后端设置
+### 后端部署
 
-1. **创建虚拟环境并安装依赖**
+1. 创建虚拟环境并安装依赖
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements/dev.txt
+source venv/bin/activate
+pip install -r requirements/prod.txt
 ```
 
-2. **配置环境变量**
+2. 配置环境变量
+
+在项目根目录创建 `.env` 文件：
 
 ```bash
-cp .env.example .env
-# 编辑 .env 文件，设置 SECRET_KEY 等配置
+# Django
+DEBUG=False
+ALLOWED_HOSTS=your-domain.com
+SECRET_KEY=your-secret-key
+CSRF_TRUSTED_ORIGINS=https://your-domain.com
+
+# AI Services
+OPENAI_API_KEY=your-moonshot-api-key
+OPENAI_API_BASE=https://api.moonshot.cn/v1
+OPENAI_MODEL=moonshot-v1-8k
+
+MINIMAX_API_KEY=your-minimax-api-key
+TAVILY_API_KEY=your-tavily-api-key
 ```
 
-3. **初始化数据库**
+3. 初始化数据库
 
 ```bash
-python manage.py makemigrations
 python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+4. 创建管理员账号
+
+```bash
 python manage.py createsuperuser
 ```
 
-4. **创建初始分类数据**
-
-```python
-python manage.py shell
-
-from apps.podcasts.models import Category
-
-categories = [
-    {'name': '科技', 'slug': 'tech', 'icon': 'Monitor', 'color': '#ff513b'},
-    {'name': '商业', 'slug': 'business', 'icon': 'Briefcase', 'color': '#ffc63e'},
-    {'name': '文化', 'slug': 'culture', 'icon': 'Reading', 'color': '#6dcad0'},
-    {'name': '教育', 'slug': 'education', 'icon': 'School', 'color': '#fd553f'},
-    {'name': '娱乐', 'slug': 'entertainment', 'icon': 'Film', 'color': '#ff7b68'},
-]
-
-for cat in categories:
-    Category.objects.create(**cat)
-```
-
-5. **启动开发服务器**
+5. 启动服务
 
 ```bash
-# 启动 Django
-python manage.py runserver
+# 使用 gunicorn 启动 Django
+gunicorn config.wsgi:application --bind 0.0.0.0:8000
 
-# 新终端：启动 Redis
-redis-server
-
-# 新终端：启动 Celery Worker
+# 启动 Celery Worker
 celery -A config worker -l info
 
-# 新终端：启动 Celery Beat (定时任务)
+# 启动 Celery Beat
 celery -A config beat -l info
 ```
 
-### 前端设置
+### 前端部署
 
-1. **安装依赖**
+1. 安装依赖并构建
 
 ```bash
 cd frontend
 npm install
-```
-
-2. **启动开发服务器**
-
-```bash
-npm run dev
-```
-
-前端将在 http://localhost:5173 启动
-
-### 访问应用
-
-- **前端**: http://localhost:5173
-- **后端API**: http://localhost:8000/api
-- **API文档**: http://localhost:8000/swagger
-- **Django管理后台**: http://localhost:8000/admin
-
-## 📁 项目结构
-
-```
-mofa-fm/
-├── backend/                    # Django 后端
-│   ├── config/                 # Django 配置
-│   ├── apps/
-│   │   ├── users/              # 用户系统
-│   │   ├── podcasts/           # 播客核心
-│   │   ├── interactions/       # 互动功能
-│   │   └── search/             # 搜索
-│   └── utils/                  # 工具类
-│
-├── frontend/                   # Vue 3 前端
-│   ├── src/
-│   │   ├── assets/styles/      # 马卡龙设计系统
-│   │   ├── components/         # 组件
-│   │   ├── views/              # 页面
-│   │   ├── stores/             # Pinia状态
-│   │   ├── api/                # API客户端
-│   │   └── router/             # 路由
-│   └── package.json
-│
-└── media/                      # 媒体文件存储
-```
-
-## 🎨 马卡龙设计系统
-
-设计系统包含：
-- **色彩**: 红(#ff513b)、橙(#fd553f)、黄(#ffc63e)、青(#6dcad0)
-- **几何风格**: 3px粗边框 + 偏移阴影
-- **动画**: 平移式hover效果
-- **渐变**: 顶部彩色渐变条
-
-## 🚀 核心功能
-
-### 用户系统
-- 注册/登录
-- 创作者验证（数学题）
-- 用户资料管理
-
-### 播客管理
-- 创建播客节目
-- 上传音频文件
-- 自动音频处理（MP3转码、标准化）
-
-### 播放器
-- 全局底部播放器
-- 进度保存
-- 播放速度调整
-- 音量控制
-- 15秒快进/后退
-
-### 互动功能
-- 评论（嵌套回复）
-- 点赞单集
-- 关注节目
-- 播放历史
-
-### 搜索
-- 全文搜索（标题 + 评论）
-- 快速搜索（自动完成）
-
-## 📝 API 端点
-
-### 认证
-- `POST /api/auth/register/` - 注册
-- `POST /api/auth/login/` - 登录
-- `GET /api/auth/me/` - 当前用户
-
-### 播客
-- `GET /api/podcasts/shows/` - 节目列表
-- `GET /api/podcasts/shows/:slug/` - 节目详情
-- `GET /api/podcasts/episodes/` - 单集列表
-- `POST /api/podcasts/shows/create/` - 创建节目
-- `POST /api/podcasts/episodes/create/` - 上传单集
-
-### 互动
-- `GET /api/interactions/episodes/:id/comments/` - 评论列表
-- `POST /api/interactions/comments/create/` - 创建评论
-- `POST /api/interactions/episodes/:id/like/` - 点赞
-- `POST /api/interactions/shows/:id/follow/` - 关注
-- `POST /api/interactions/play/update/` - 更新播放进度
-
-### 搜索
-- `GET /api/search/?q=keyword` - 全局搜索
-
-## 🔧 开发提示
-
-### 添加新的分类
-
-```python
-from apps.podcasts.models import Category
-Category.objects.create(
-    name='音乐',
-    slug='music',
-    icon='Headset',
-    color='#6dcad0'
-)
-```
-
-### 创建超级用户
-
-```bash
-python manage.py createsuperuser
-```
-
-### 运行测试
-
-```bash
-# 后端
-python manage.py test
-
-# 前端
-npm run test
-```
-
-### 构建生产版本
-
-```bash
-# 后端
-pip install -r requirements/prod.txt
-python manage.py collectstatic
-
-# 前端
 npm run build
 ```
 
-## 📄 许可证
+2. 配置 Nginx
+
+将构建后的文件部署到 `/var/www/your-domain`，配置 Nginx 反向代理：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+
+    # Frontend
+    location / {
+        root /var/www/your-domain;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Backend API
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Django Admin
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # Static files
+    location /static/ {
+        alias /path/to/backend/staticfiles/;
+    }
+
+    # Media files
+    location /media/ {
+        alias /path/to/media/;
+    }
+}
+```
+
+## 使用指南
+
+### 访问管理后台
+
+管理后台地址：`https://your-domain.com/admin/`
+
+默认管理员账号：
+- 用户名：admin
+- 密码：mofamofa
+
+管理后台可以管理：
+- 用户和创作者
+- 播客节目和单集
+- 分类和标签
+- 评论和互动
+- 搜索记录
+
+### 查看系统状态
+
+系统状态页面：`https://your-domain.com/status`
+
+实时监控以下服务：
+- API 服务状态
+- 数据库连接
+- Redis 缓存
+- AI 脚本生成服务
+- TTS 语音合成服务
+- 搜索服务
+
+### API 文档
+
+- Swagger 文档：`https://your-domain.com/swagger/`
+- ReDoc 文档：`https://your-domain.com/redoc/`
+
+## 项目结构
+
+```
+mofa-fm/
+├── backend/                # Django 后端
+│   ├── apps/
+│   │   ├── users/          # 用户系统
+│   │   ├── podcasts/       # 播客管理
+│   │   ├── interactions/   # 社区互动
+│   │   ├── search/         # 搜索功能
+│   │   └── core/           # 核心功能
+│   ├── config/             # Django 配置
+│   └── utils/              # 工具类
+│
+├── frontend/               # Vue 3 前端
+│   ├── src/
+│   │   ├── components/     # 组件
+│   │   ├── views/          # 页面
+│   │   ├── stores/         # 状态管理
+│   │   ├── api/            # API 客户端
+│   │   └── router/         # 路由配置
+│   └── package.json
+│
+└── media/                  # 媒体文件存储
+```
+
+## 开发模式
+
+### 后端开发
+
+```bash
+cd backend
+source venv/bin/activate
+python manage.py runserver
+```
+
+### 前端开发
+
+```bash
+cd frontend
+npm run dev
+```
+
+访问地址：
+- 前端：http://localhost:5173
+- 后端 API：http://localhost:8000/api
+- API 文档：http://localhost:8000/swagger
+
+## 生产环境优化
+
+1. 使用 PostgreSQL 替代 SQLite
+2. 配置 Redis 持久化
+3. 启用 Nginx 缓存
+4. 配置 SSL 证书
+5. 设置 Celery 进程监控
+6. 配置日志收集和监控
+
+## 维护指南
+
+### 备份数据
+
+```bash
+# 备份数据库
+python manage.py dumpdata > backup.json
+
+# 备份媒体文件
+tar -czf media-backup.tar.gz media/
+```
+
+### 更新部署
+
+```bash
+# 拉取最新代码
+git pull
+
+# 更新后端
+cd backend
+source venv/bin/activate
+pip install -r requirements/prod.txt
+python manage.py migrate
+python manage.py collectstatic --noinput
+
+# 重启服务
+systemctl restart your-app-service
+
+# 更新前端
+cd frontend
+npm install
+npm run build
+```
+
+## 许可证
 
 MIT License
 
-## 🤝 贡献
+## 联系方式
 
-欢迎提交 Pull Request！
-
-## 📧 联系
-
+- Website: https://mofa.fm
 - Email: contact@mofa.ai
-- Website: https://mofa.ai
 
----
+## 技术支持
 
-**MoFA FM** - 让播客更精彩 🎵
+详细技术文档请参考 `README.bak.md`
