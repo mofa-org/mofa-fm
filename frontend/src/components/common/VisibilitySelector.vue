@@ -26,7 +26,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { Connection, Lock, View, User, Share, Check, Globe } from '@element-plus/icons-vue'
+import { Connection, Lock, View, User, Share, Check, Refresh } from '@element-plus/icons-vue'
 
 const props = defineProps({
   modelValue: {
@@ -87,7 +87,7 @@ const inheritOption = {
   value: 'inherit',
   title: '继承节目设置',
   description: '使用节目的可见性设置',
-  icon: Globe,
+  icon: Refresh,
   color: 'linear-gradient(135deg, #718096, #a0aec0)'
 }
 
