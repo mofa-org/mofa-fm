@@ -246,6 +246,12 @@ onMounted(() => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
+.floating-container:hover {
+  border-color: var(--border-color) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+  background: var(--color-white) !important;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
