@@ -105,6 +105,9 @@ class ShowCreateSerializer(serializers.ModelSerializer):
             'title', 'description', 'cover', 'content_type',
             'visibility', 'category_id', 'tag_ids', 'shared_with_ids'
         ]
+        extra_kwargs = {
+            'cover': {'required': False}  # 更新时封面可选
+        }
 
     def create(self, validated_data):
         category_id = validated_data.pop('category_id', None)
