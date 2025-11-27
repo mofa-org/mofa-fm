@@ -725,7 +725,7 @@ function handleTrendingSelect({ item, source }) {
   }
 
   // 自动填充到输入框
-  const prompt = `帮我基于"${item.title}"这个热门话题创作一个播客脚本。`
+  const prompt = `帮我基于"${item.title}"这个热门话题创作一个播客脚本。请先搜索获取最新信息。`
   userMessage.value = prompt
 
   ElMessage.success(`已选择来自 ${source} 的话题`)
