@@ -246,6 +246,9 @@ class Episode(models.Model):
     # 状态
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='draft')
 
+    # 脚本内容（可编辑，用于TTS微调）
+    script = models.TextField('脚本', blank=True, help_text='Markdown格式，包含【角色名】标签，创作者可编辑以调整TTS发音')
+
     # 统计
     play_count = models.IntegerField('播放次数', default=0)
     like_count = models.IntegerField('点赞数', default=0)

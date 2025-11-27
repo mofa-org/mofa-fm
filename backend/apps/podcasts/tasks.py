@@ -98,9 +98,10 @@ def generate_podcast_task(episode_id, script_content):
         
         # Generate
         generator.generate(script_content, full_path)
-        
+
         # Update episode
         episode.audio_file.name = relative_path
+        episode.script = script_content  # 保存脚本，默认使用AI生成的脚本
         episode.status = 'published'
         episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
         episode.file_size = os.path.getsize(full_path)

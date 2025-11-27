@@ -65,6 +65,16 @@
 
       <!-- 右侧：倍速控制 -->
       <div class="player-options">
+        <!-- 查看脚本按钮 -->
+        <button
+          v-if="currentEpisode.script"
+          class="player-btn player-btn-icon"
+          @click="showScriptDialog = true"
+          title="查看脚本"
+        >
+          <el-icon><Document /></el-icon>
+        </button>
+
         <el-dropdown @command="handleRateChange" trigger="click">
           <button class="player-btn player-btn-speed" title="播放速度">
             <span class="speed-text">{{ playbackRate }}x</span>
@@ -82,12 +92,30 @@
         </el-dropdown>
       </div>
     </div>
+
+    <!-- 脚本查看对话框 -->
+    <el-dialog
+      v-model="showScriptDialog"
+      title="播客脚本"
+      width="800px"
+      :close-on-click-modal="false"
+    >
+      <ScriptViewer
+        v-if="showScriptDialog && currentEpisode"
+        :episode-id="currentEpisode.id"
+        :script="currentEpisode.script"
+        :is-creator="isCreator"
+        @script-updated="handleScriptUpdated"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
+import { useAuthStore } from '@/stores/auth'
+import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import {
   VideoPlay,
   VideoPause,
@@ -96,13 +124,16 @@ import {
   ArrowLeftBold,
   ArrowRightBold,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Document
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
+const authStore = useAuthStore()
 
 const sliderValue = ref(0)
 const isCollapsed = ref(false)
+const showScriptDialog = ref(false)
 
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
@@ -118,6 +149,11 @@ const formattedDuration = computed(() => playerStore.formattedDuration)
 const hasPrevious = computed(() => playerStore.hasPrevious)
 const hasNext = computed(() => playerStore.hasNext)
 
+const isCreator = computed(() => {
+  if (!authStore.isAuthenticated || !currentEpisode.value) return false
+  return currentEpisode.value.show?.creator?.id === authStore.user?.id
+})
+
 // 同步进度条
 watch(() => playerStore.progress, (val) => {
   sliderValue.value = val
@@ -130,6 +166,13 @@ function handleSeek(val) {
 
 function handleRateChange(rate) {
   playerStore.setPlaybackRate(parseFloat(rate))
+}
+
+function handleScriptUpdated(updatedEpisode) {
+  // 更新播放器中的episode script
+  if (playerStore.currentEpisode && playerStore.currentEpisode.id === updatedEpisode.id) {
+    playerStore.currentEpisode.script = updatedEpisode.script
+  }
 }
 </script>
 
@@ -345,6 +388,13 @@ function handleRateChange(rate) {
 
 .player-btn-play:hover {
   box-shadow: 4px 4px 0 rgba(255, 81, 59, 0.3);
+}
+
+/* 图标按钮（查看脚本等） */
+.player-btn-icon {
+  width: 36px;
+  height: 36px;
+  color: var(--color-text-primary);
 }
 
 /* 速度按钮 */

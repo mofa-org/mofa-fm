@@ -234,6 +234,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             'visibility', 'shared_with_users',
             'status', 'play_count', 'like_count', 'comment_count',
             'is_liked', 'play_position',
+            'script',  # 添加脚本字段
             'published_at', 'created_at', 'updated_at'
         ]
 

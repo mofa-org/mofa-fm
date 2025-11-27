@@ -37,6 +37,16 @@
         </div>
       </div>
 
+      <!-- 脚本查看器 -->
+      <div v-if="episode.script" class="script-section">
+        <ScriptViewer
+          :episode-id="episode.id"
+          :script="episode.script"
+          :is-creator="isCreator"
+          @script-updated="handleScriptUpdated"
+        />
+      </div>
+
       <!-- 评论区 -->
       <div class="comments-section">
         <h2 class="section-title">评论 ({{ episode.comment_count }})</h2>
@@ -79,6 +89,7 @@ import api from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoPlay, Star, UserFilled } from '@element-plus/icons-vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
+import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -92,6 +103,11 @@ const commentText = ref('')
 const commenting = ref(false)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+
+const isCreator = computed(() => {
+  if (!isAuthenticated.value || !episode.value) return false
+  return episode.value.show.creator.id === authStore.user.id
+})
 
 const effectiveVisibility = computed(() => {
   if (!episode.value) return 'public'
@@ -154,6 +170,11 @@ function formatDuration(seconds) {
 function formatDate(date) {
   return dayjs(date).format('YYYY-MM-DD HH:mm')
 }
+
+function handleScriptUpdated(updatedEpisode) {
+  // 更新episode的script字段
+  episode.value.script = updatedEpisode.script
+}
 </script>
 
 <style scoped>
@@ -215,6 +236,10 @@ function formatDate(date) {
 .episode-actions {
   display: flex;
   gap: var(--spacing-md);
+}
+
+.script-section {
+  margin-top: var(--spacing-2xl);
 }
 
 .comments-section {

@@ -31,6 +31,7 @@ urlpatterns = [
     path('episodes/create/', views.EpisodeCreateView.as_view(), name='episode_create'),
     path('episodes/generate/', views.GenerateEpisodeView.as_view(), name='episode_generate'),
     path('episodes/<int:pk>/update/', views.EpisodeUpdateView.as_view(), name='episode_update'),
+    path('episodes/<int:pk>/update-script/', views.update_episode_script, name='episode_update_script'),
     path('episodes/<int:pk>/delete/', views.EpisodeDeleteView.as_view(), name='episode_delete'),
     path('shows/<slug:show_slug>/episodes/<slug:episode_slug>/',
          views.EpisodeDetailView.as_view(), name='episode_detail'),

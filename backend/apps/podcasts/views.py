@@ -161,6 +161,32 @@ class EpisodeDeleteView(generics.DestroyAPIView):
         return Episode.objects.filter(show__creator=self.request.user)
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_episode_script(request, pk):
+    """更新单集脚本 - 允许创作者微调TTS发音"""
+    try:
+        episode = Episode.objects.get(pk=pk, show__creator=request.user)
+    except Episode.DoesNotExist:
+        return Response(
+            {'error': '单集不存在或您没有权限'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    script = request.data.get('script', '')
+    if script is None:
+        return Response(
+            {'error': '请提供脚本内容'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    episode.script = script
+    episode.save(update_fields=['script', 'updated_at'])
+
+    serializer = EpisodeDetailSerializer(episode, context={'request': request})
+    return Response(serializer.data)
+
+
 # 统计
 
 @api_view(['GET'])
