@@ -137,6 +137,40 @@ class ShowCreateSerializer(serializers.ModelSerializer):
 
         return show
 
+    def update(self, instance, validated_data):
+        category_id = validated_data.pop('category_id', None)
+        tag_ids = validated_data.pop('tag_ids', None)
+        shared_with_ids = validated_data.pop('shared_with_ids', None)
+
+        # 如果 category_id 存在但为 None，则清除分类
+        if 'category_id' in self.initial_data:
+            if category_id:
+                try:
+                    category = Category.objects.get(id=category_id)
+                    instance.category = category
+                except Category.DoesNotExist:
+                    pass
+            else:
+                instance.category = None
+
+        # 更新基本字段
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # 更新标签
+        if tag_ids is not None:
+            tags = Tag.objects.filter(id__in=tag_ids)
+            instance.tags.set(tags)
+
+        # 更新共享用户
+        if shared_with_ids is not None:
+            from apps.users.models import User
+            users = User.objects.filter(id__in=shared_with_ids)
+            instance.shared_with.set(users)
+
+        return instance
+
 
 class EpisodeListSerializer(serializers.ModelSerializer):
     """单集/单曲列表序列化器"""

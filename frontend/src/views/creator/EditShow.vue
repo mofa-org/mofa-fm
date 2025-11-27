@@ -186,8 +186,11 @@ async function handleSubmit() {
       formData.append('cover', coverFile.value)
     }
 
+    // 如果没有选择分类，默认为科技类（ID=1）
     if (form.value.category_id) {
       formData.append('category_id', form.value.category_id)
+    } else {
+      formData.append('category_id', 1)
     }
 
     if (form.value.tag_ids.length > 0) {
