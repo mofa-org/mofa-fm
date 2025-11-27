@@ -353,6 +353,12 @@ button {
   box-shadow: var(--shadow-soft-lg) !important;
 }
 
+.el-dialog:hover {
+  border-color: var(--border-color) !important;
+  box-shadow: var(--shadow-soft-lg) !important;
+  background: var(--color-white) !important;
+}
+
 .el-dialog__header {
   background: var(--gradient-bar);
   padding: var(--spacing-md) var(--spacing-lg);
