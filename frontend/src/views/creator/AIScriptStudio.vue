@@ -1777,6 +1777,12 @@ onMounted(() => {
   max-width: 500px;
 }
 
+.modal-content:hover {
+  border-color: var(--border-color) !important;
+  box-shadow: var(--shadow-md) !important;
+  background: var(--color-white) !important;
+}
+
 .modal-content.version-modal {
   max-width: 800px;
   max-height: 80vh;
