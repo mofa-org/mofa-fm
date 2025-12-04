@@ -599,7 +599,7 @@ def trending_sources(request):
     import requests
     from django.conf import settings
 
-    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://mofa.fm:1145')
+    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://154.21.90.242:1145')
 
     try:
         response = requests.get(f'{trending_api_url}/all', timeout=10)
@@ -619,7 +619,7 @@ def trending_data(request, source):
     import requests
     from django.conf import settings
 
-    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://mofa.fm:1145')
+    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://154.21.90.242:1145')
 
     try:
         response = requests.get(f'{trending_api_url}/{source}', timeout=10)
