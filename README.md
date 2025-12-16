@@ -32,124 +32,67 @@ MoFA FM 是一个现代化的播客托管和分发平台，支持播客创作、
 - MiniMax (TTS语音合成)
 - Tavily (AI搜索)
 
-## 快速开始
+## 部署说明（当前线上环境）
 
-### 前置要求
+- 代码与数据路径：`/mnt/data/mofa-fm`，媒体 `/mnt/data/mofa-fm/media`，静态 `/mnt/data/mofa-fm/backend/staticfiles`，虚拟环境 `/mnt/data/mofa-fm/backend/venv`。
+- 依赖：Python 3.12，Node 18，Redis（apt 安装，127.0.0.1:6379），FFmpeg。
+- 数据库：默认 SQLite `/mnt/data/mofa-fm/backend/db.sqlite3`，可改为 PostgreSQL（改 `.env` 的 `DATABASE_URL`）。
+- 服务：Gunicorn 127.0.0.1:8000、Celery worker、Celery beat、Nginx（反代前后端，TLS via Certbot）。
+- 热搜接口：`TRENDING_API_URL` 默认 `http://154.21.90.242:1145`。
 
-- Python 3.10+
-- Node.js 18+
-- Redis
-- FFmpeg
+### 环境变量
 
-### 后端部署
-
-1. 创建虚拟环境并安装依赖
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements/prod.txt
+根目录 `.env` 示例（已部署：DJANGO_ENV=prod，HOST/CSRF/CORS 指向 `mofa.fm`）：
 ```
-
-2. 配置环境变量
-
-在项目根目录创建 `.env` 文件：
-
-```bash
-# Django
-DEBUG=False
-ALLOWED_HOSTS=your-domain.com
-SECRET_KEY=your-secret-key
-CSRF_TRUSTED_ORIGINS=https://your-domain.com
-
-# AI Services
-OPENAI_API_KEY=your-moonshot-api-key
+DJANGO_ENV=prod
+ALLOWED_HOSTS=mofa.fm,18.166.66.71,127.0.0.1,localhost
+CSRF_TRUSTED_ORIGINS=https://mofa.fm,http://localhost:8000,http://127.0.0.1:8000
+CORS_ALLOWED_ORIGINS=https://mofa.fm,http://localhost:5173,http://127.0.0.1:5173
+DATABASE_URL=sqlite:////mnt/data/mofa-fm/backend/db.sqlite3
+REDIS_URL=redis://localhost:6379/0
+MEDIA_ROOT=/mnt/data/mofa-fm/media
+STATIC_ROOT=/mnt/data/mofa-fm/backend/staticfiles
+TRENDING_API_URL=http://154.21.90.242:1145
+OPENAI_API_KEY=...
 OPENAI_API_BASE=https://api.moonshot.cn/v1
 OPENAI_MODEL=moonshot-v1-8k
-
-MINIMAX_API_KEY=your-minimax-api-key
-TAVILY_API_KEY=your-tavily-api-key
+MINIMAX_API_KEY=...
+TAVILY_API_KEY=...
 ```
 
-3. 初始化数据库
+### 一键更新脚本（推荐）
 
-```bash
+`sudo update-fm`  
+流程：git pull main（使用 ubuntu 用户 SSH key）→ 后端依赖 → migrate → collectstatic → 前端 `npm ci && npm run build` → 重启 `mofa-fm-gunicorn`、`mofa-fm-celery`、`mofa-fm-celery-beat`、`nginx`。  
+日志：`/mnt/data/mofa-fm/backend/logs/update-YYYYMMDD_HHMMSS.log`
+
+### 手动部署要点
+
+1) 后端依赖  
+```
+cd /mnt/data/mofa-fm/backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements/prod.txt
 python manage.py migrate
 python manage.py collectstatic --noinput
 ```
 
-4. 创建管理员账号
-
-```bash
-python manage.py createsuperuser
+2) 前端构建  
 ```
-
-5. 启动服务
-
-```bash
-# 使用 gunicorn 启动 Django
-gunicorn config.wsgi:application --bind 0.0.0.0:8000
-
-# 启动 Celery Worker
-celery -A config worker -l info
-
-# 启动 Celery Beat
-celery -A config beat -l info
-```
-
-### 前端部署
-
-1. 安装依赖并构建
-
-```bash
-cd frontend
-npm install
+cd /mnt/data/mofa-fm/frontend
+npm ci
 npm run build
 ```
 
-2. 配置 Nginx
+3) 服务与端口  
+- Gunicorn: 127.0.0.1:8000  
+- Celery worker/beat: 依赖 Redis  
+- Nginx: 443/80，前端根 `/mnt/data/mofa-fm/frontend/dist`，`/api`/`/admin` 反代 127.0.0.1:8000，静态 `/mnt/data/mofa-fm/backend/staticfiles`，媒体 `/mnt/data/mofa-fm/media`  
+- systemd：`mofa-fm-gunicorn`、`mofa-fm-celery`、`mofa-fm-celery-beat`
 
-将构建后的文件部署到 `/var/www/your-domain`，配置 Nginx 反向代理：
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name your-domain.com;
-
-    # Frontend
-    location / {
-        root /var/www/your-domain;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Backend API
-    location /api/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Django Admin
-    location /admin/ {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto https;
-    }
-
-    # Static files
-    location /static/ {
-        alias /path/to/backend/staticfiles/;
-    }
-
-    # Media files
-    location /media/ {
-        alias /path/to/media/;
-    }
-}
-```
+4) HTTPS  
+Certbot 证书路径：`/etc/letsencrypt/live/mofa.fm/`，已自动续期。
 
 ## 使用指南
 
