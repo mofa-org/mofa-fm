@@ -200,11 +200,20 @@ class Episode(models.Model):
         ('shared', '仅受邀用户'),
     ]
 
+    MODE_CHOICES = [
+        ('podcast', '播客'),
+        ('debate', '辩论'),
+        ('conference', '会议'),
+    ]
+
     show = models.ForeignKey(
         Show,
         on_delete=models.CASCADE,
         related_name='episodes',
-        verbose_name='播客节目'
+        verbose_name='播客节目',
+        null=True,
+        blank=True,
+        help_text='Debate/Conference模式可为空，发布音频时再关联'
     )
     title = models.CharField('标题', max_length=255, db_index=True)
     slug = models.SlugField('URL标识', max_length=255)
@@ -246,8 +255,34 @@ class Episode(models.Model):
     # 状态
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='draft')
 
+    # 生成模式（新增字段）
+    mode = models.CharField(
+        '生成模式',
+        max_length=20,
+        choices=MODE_CHOICES,
+        default='podcast',
+        db_index=True,
+        help_text='podcast: 传统播客, debate: AI辩论, conference: AI会议'
+    )
+
     # 脚本内容（可编辑，用于TTS微调）
     script = models.TextField('脚本', blank=True, help_text='Markdown格式，包含【角色名】标签，创作者可编辑以调整TTS发音')
+
+    # 对话记录（仅debate/conference模式使用）
+    dialogue = models.JSONField(
+        '对话记录',
+        null=True,
+        blank=True,
+        help_text='流式对话记录，格式: [{"participant": "llm1", "content": "...", "timestamp": "..."}, ...]'
+    )
+
+    # 参与者配置（仅debate/conference模式使用）
+    participants_config = models.JSONField(
+        '参与者配置',
+        null=True,
+        blank=True,
+        help_text='参与者角色和system prompt配置'
+    )
 
     # 统计
     play_count = models.IntegerField('播放次数', default=0)

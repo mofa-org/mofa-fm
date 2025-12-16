@@ -93,6 +93,24 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {
+      path: '/debates',
+      name: 'debate-list',
+      component: () => import('@/views/DebateList.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/debate/create',
+      name: 'create-debate',
+      component: () => import('@/views/creator/CreateDebate.vue'),
+      meta: { requiresAuth: true }  // 只需登录，不需要creator权限
+    },
+    {
+      path: '/debate/:episodeId',
+      name: 'debate-viewer',
+      component: () => import('@/views/creator/DebateViewer.vue'),
+      meta: { requiresAuth: true }  // 只需登录，不需要creator权限
+    },
+    {
       path: '/become-creator',
       name: 'become-creator',
       component: () => import('@/views/BecomeCreator.vue'),

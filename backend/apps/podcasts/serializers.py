@@ -207,7 +207,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
         if obj.cover:
             if request:
                 return request.build_absolute_uri(obj.cover.url)
-        elif obj.show.cover:
+        elif obj.show and obj.show.cover:
             if request:
                 return request.build_absolute_uri(obj.show.cover.url)
             return obj.show.cover.url
@@ -235,6 +235,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             'status', 'play_count', 'like_count', 'comment_count',
             'is_liked', 'play_position',
             'script',  # 添加脚本字段
+            'mode', 'dialogue', 'participants_config',  # Debate/Conference字段
             'published_at', 'created_at', 'updated_at'
         ]
 
@@ -251,7 +252,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
         if obj.cover:
             if request:
                 return request.build_absolute_uri(obj.cover.url)
-        elif obj.show.cover:
+        elif obj.show and obj.show.cover:
             if request:
                 return request.build_absolute_uri(obj.show.cover.url)
             return obj.show.cover.url

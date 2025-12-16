@@ -28,6 +28,10 @@
         <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-warning">
           AI 脚本创作
         </router-link>
+        <router-link to="/creator/debate/create" class="mofa-btn mofa-btn-success">
+          <el-icon><ChatDotRound /></el-icon>
+          AI 辩论 / 会议
+        </router-link>
       </div>
 
       <!-- 我的节目列表 -->
@@ -65,7 +69,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()

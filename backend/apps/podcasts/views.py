@@ -630,3 +630,169 @@ def trending_data(request, source):
             {'error': f'获取热搜数据失败: {str(e)}'},
             status=status.HTTP_503_SERVICE_UNAVAILABLE
         )
+
+
+# Debate/Conference 生成
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_debate(request):
+    """
+    生成Debate或Conference对话（纯文本，不关联Show）
+
+    Request body:
+    {
+        "title": "AI是否会取代程序员",
+        "topic": "AI是否会取代程序员？",
+        "mode": "debate",  # "debate" 或 "conference"
+        "rounds": 3
+    }
+    """
+    from .tasks import generate_debate_task
+    import logging
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"generate_debate called by user: {request.user}")
+    logger.info(f"Request data: {request.data}")
+
+    title = request.data.get('title')
+    topic = request.data.get('topic')
+    mode = request.data.get('mode', 'debate')
+    rounds = request.data.get('rounds', 3)
+
+    logger.info(f"Extracted - title: {title}, topic: {topic}, mode: {mode}, rounds: {rounds}")
+
+    # 验证
+    if not all([title, topic]):
+        return Response(
+            {'error': 'title, topic 必填'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if mode not in ['debate', 'conference']:
+        return Response(
+            {'error': 'mode 必须是 debate 或 conference'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 创建Episode（不关联show）
+    episode = Episode.objects.create(
+        title=title,
+        description=f"AI Generated {mode.capitalize()}",
+        status='processing',
+        mode=mode
+    )
+
+    # 触发异步任务
+    generate_debate_task.delay(episode.id, topic, mode, rounds)
+
+    return Response(
+        {
+            "message": f"{mode.capitalize()} generation started",
+            "episode_id": episode.id,
+            "mode": mode
+        },
+        status=status.HTTP_202_ACCEPTED
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_debate_audio(request, episode_id):
+    """
+    为已生成的Debate/Conference Episode生成音频并关联Show
+
+    Request body:
+    {
+        "show_id": 123  # 要关联的Show ID（必须是当前用户的）
+    }
+    """
+    from .tasks import generate_debate_audio_task
+
+    # 获取并验证Episode
+    try:
+        episode = Episode.objects.get(id=episode_id)
+    except Episode.DoesNotExist:
+        return Response(
+            {'error': 'Episode不存在'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 验证Episode有对话内容
+    if not episode.dialogue or not episode.participants_config:
+        return Response(
+            {'error': 'Episode缺少对话内容，无法生成音频'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 验证Episode还没有音频
+    if episode.audio_file:
+        return Response(
+            {'error': 'Episode已经有音频文件'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 获取show_id
+    show_id = request.data.get('show_id')
+    if not show_id:
+        return Response(
+            {'error': 'show_id 必填'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 验证Show存在且属于当前用户
+    try:
+        show = Show.objects.get(id=show_id, creator=request.user)
+    except Show.DoesNotExist:
+        return Response(
+            {'error': 'Show不存在或您没有权限'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 更新状态
+    episode.status = 'processing'
+    episode.save()
+
+    # 触发异步任务
+    generate_debate_audio_task.delay(episode_id, show_id)
+
+    return Response(
+        {
+            "message": "Audio generation started",
+            "episode_id": episode_id,
+            "show_id": show_id
+        },
+        status=status.HTTP_202_ACCEPTED
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_episode_by_id(request, episode_id):
+    """
+    根据ID获取Episode详情（用于Debate/Conference查看）
+    """
+    try:
+        episode = Episode.objects.select_related('show__creator').get(id=episode_id)
+    except Episode.DoesNotExist:
+        return Response(
+            {'error': 'Episode不存在'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = EpisodeDetailSerializer(episode, context={'request': request})
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_debates(request):
+    """
+    获取当前用户的辩论/会议历史记录（没有关联Show的Episode）
+    """
+    episodes = Episode.objects.filter(
+        show__isnull=True,  # 没有关联Show的Episode
+        mode__in=['debate', 'conference']  # 只获取辩论和会议模式
+    ).order_by('-created_at')
+
+    serializer = EpisodeDetailSerializer(episodes, many=True, context={'request': request})
+    return Response(serializer.data)

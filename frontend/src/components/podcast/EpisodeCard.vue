@@ -16,15 +16,22 @@
 
     <div class="episode-info">
       <router-link
+        v-if="episode.show"
         :to="`/shows/${episode.show.slug}/episodes/${episode.slug}`"
         class="episode-title"
       >
         {{ episode.title }}
       </router-link>
+      <div v-else class="episode-title">
+        {{ episode.title }}
+      </div>
 
-      <router-link :to="`/shows/${episode.show.slug}`" class="show-name">
+      <router-link v-if="episode.show" :to="`/shows/${episode.show.slug}`" class="show-name">
         {{ episode.show.title }}
       </router-link>
+      <div v-else class="show-name debate-badge">
+        {{ episode.mode === 'debate' ? 'AI辩论' : 'AI会议' }}
+      </div>
 
       <p class="episode-description">{{ episode.description }}</p>
 
@@ -36,7 +43,7 @@
     </div>
 
     <!-- 创作者操作按钮 -->
-    <div v-if="showCreatorActions && isCreator" class="episode-actions">
+    <div v-if="showCreatorActions && isCreator && episode.show" class="episode-actions">
       <router-link
         :to="`/creator/shows/${episode.show.slug}/episodes/${episode.slug}/edit`"
         class="mofa-btn mofa-btn-sm"

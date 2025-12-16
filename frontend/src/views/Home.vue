@@ -36,6 +36,37 @@
         </div>
       </section>
 
+      <!-- AI功能区 -->
+      <section class="section ai-features" v-if="isAuthenticated">
+        <h2 class="section-title">AI 创作工具</h2>
+        <div class="feature-cards">
+          <router-link to="/debates" class="feature-card mofa-card">
+            <div class="feature-icon">
+              <el-icon :size="32"><FolderOpened /></el-icon>
+            </div>
+            <h3 class="feature-title">我的辩论</h3>
+            <p class="feature-desc">查看所有辩论记录，随时回顾精彩内容</p>
+            <div class="feature-action">查看记录 →</div>
+          </router-link>
+          <router-link to="/debate/create" class="feature-card mofa-card">
+            <div class="feature-icon">
+              <el-icon :size="32"><ChatDotRound /></el-icon>
+            </div>
+            <h3 class="feature-title">AI 辩论</h3>
+            <p class="feature-desc">让AI参与激烈辩论，生成精彩对话内容</p>
+            <div class="feature-action">立即体验 →</div>
+          </router-link>
+          <router-link to="/creator/script-studio" class="feature-card mofa-card">
+            <div class="feature-icon">
+              <el-icon :size="32"><Edit /></el-icon>
+            </div>
+            <h3 class="feature-title">AI 脚本创作</h3>
+            <p class="feature-desc">智能生成播客脚本，提升创作效率</p>
+            <div class="feature-action">开始创作 →</div>
+          </router-link>
+        </div>
+      </section>
+
       <!-- 最新单集 -->
       <section class="section">
         <h2 class="section-title">最新单集</h2>
@@ -56,6 +87,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { ChatDotRound, Edit, FolderOpened } from '@element-plus/icons-vue'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 
@@ -177,6 +209,62 @@ function formatNumber(num) {
   gap: var(--spacing-md);
 }
 
+/* AI功能区 */
+.ai-features {
+  margin-bottom: var(--spacing-3xl);
+}
+
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+}
+
+.feature-card {
+  padding: var(--spacing-xl);
+  text-align: center;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  background: linear-gradient(135deg,
+    rgba(255, 81, 59, 0.02),
+    rgba(109, 202, 208, 0.02)
+  );
+  border: 2px solid transparent;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--color-primary);
+  box-shadow: 0 8px 24px rgba(255, 81, 59, 0.15);
+}
+
+.feature-icon {
+  font-size: 3rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.feature-title {
+  font-size: var(--font-xl);
+  font-weight: var(--font-bold);
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text-primary);
+}
+
+.feature-desc {
+  font-size: var(--font-base);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+  line-height: 1.6;
+}
+
+.feature-action {
+  font-size: var(--font-base);
+  color: var(--color-primary);
+  font-weight: var(--font-semibold);
+}
+
 /* 响应式优化 */
 @media (max-width: 1024px) {
   .stats {
@@ -233,6 +321,19 @@ function formatNumber(num) {
 
   .stat-label {
     font-size: var(--font-sm);
+  }
+
+  .feature-cards {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .feature-card {
+    padding: var(--spacing-lg);
+  }
+
+  .feature-icon {
+    font-size: 2.5rem;
   }
 
   .section {
