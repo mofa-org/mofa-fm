@@ -1,8 +1,8 @@
 # Dora Runtime Docker Image
-# 包含所有必需的依赖和预编译的 Rust 节点
+# 包含所有必需的依赖和 Dora CLI
 # 支持中文显示
 
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04
+FROM ubuntu:22.04
 
 # 设置非交互式安装
 ENV DEBIAN_FRONTEND=noninteractive
@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # 安装基础依赖 + 中文支持
 RUN apt-get update && apt-get install -y \
     curl git build-essential pkg-config \
-    python3.12 python3-pip python3.12-venv \
+    python3 python3-pip python3-venv \
     libssl-dev \
     locales \
     fonts-noto-cjk fonts-noto-cjk-extra \
@@ -29,26 +29,11 @@ ENV LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:en \
     PYTHONIOENCODING=utf-8
 
-# 创建 python3 符号链接
-RUN ln -s /usr/bin/python3.12 /usr/bin/python
+# 创建 python 符号链接
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# 安装 Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# 克隆并编译 Dora 主仓库（CLI 和基础组件）
-WORKDIR /tmp/dora-build
-RUN git clone https://github.com/dora-rs/dora.git && \
-    cd dora && \
-    cargo build --release \
-        -p dora-cli \
-        -p dora-coordinator \
-        -p dora-daemon
-
-# 安装 Dora CLI 和基础组件
-RUN cp /tmp/dora-build/dora/target/release/dora /usr/local/bin/ && \
-    cp /tmp/dora-build/dora/target/release/dora-coordinator /usr/local/bin/ && \
-    cp /tmp/dora-build/dora/target/release/dora-daemon /usr/local/bin/
+# 安装 Dora CLI（使用 pip，快速且轻量）
+RUN pip install --no-cache-dir dora-rs-cli
 
 # 复制 node-hub 到镜像
 COPY node-hub /app/node-hub
@@ -62,10 +47,8 @@ RUN for node in dora-asr dora-primespeech dora-kokoro-tts dora-speechmonitor dor
         fi \
     done
 
-# 清理构建缓存（保留 Rust 工具链）
-RUN rm -rf /tmp/dora-build/dora/target \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# 清理 apt 缓存
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /workspace

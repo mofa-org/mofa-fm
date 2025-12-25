@@ -29,10 +29,9 @@ fi
 echo "镜像名称: $IMAGE_NAME"
 echo "构建目录: $SCRIPT_DIR"
 echo ""
-echo "⚠️  注意: 构建过程可能需要 10-20 分钟"
+echo "⚠️  注意: 构建过程可能需要 5-10 分钟"
 echo "   - 下载基础镜像"
-echo "   - 安装 Rust 工具链"
-echo "   - 编译 Dora CLI"
+echo "   - 安装 Dora CLI"
 echo "   - 安装 Python 依赖"
 echo ""
 
@@ -52,7 +51,6 @@ cd "$SCRIPT_DIR"
 docker build \
     --tag "$IMAGE_NAME" \
     --file Dockerfile \
-    --progress=plain \
     .
 
 if [ $? -eq 0 ]; then
