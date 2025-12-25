@@ -1,0 +1,105 @@
+# Conference Controller with dora-maas-client
+# ws_server.py (external) → writes to /tmp/dora-ws-{port}/
+# dora-text-websocket (Rust) → reads files → sends text
+# dora-maas-client (Rust LLM) → receives text → calls OpenAI → sends text
+
+nodes:
+  # ============ File Readers (Rust) ============
+
+  - id: ws-judge
+    path: ../../target/release/dora-text-websocket
+    env:
+      PORT: "8001"
+    outputs:
+      - text
+
+  - id: ws-defense
+    path: ../../target/release/dora-text-websocket
+    env:
+      PORT: "8002"
+    outputs:
+      - text
+
+  - id: ws-prosecution
+    path: ../../target/release/dora-text-websocket
+    env:
+      PORT: "8003"
+    outputs:
+      - text
+
+  # ============ LLM Agents (Rust dora-maas-client) ============
+
+  - id: llm-judge
+    path: ../../target/release/dora-maas-client
+    inputs:
+      text: ws-judge/text
+    outputs:
+      - text
+      - status
+      - log
+    env:
+      MAAS_CONFIG_PATH: config_judge.toml
+      OPENAI_API_KEY: "YOUR_OPENAI_API_KEY_HERE"
+      LOG_LEVEL: INFO
+
+  - id: llm-defense
+    path: ../../target/release/dora-maas-client
+    inputs:
+      text: ws-defense/text
+    outputs:
+      - text
+      - status
+      - log
+    env:
+      MAAS_CONFIG_PATH: config_defense.toml
+      OPENAI_API_KEY: "YOUR_OPENAI_API_KEY_HERE"
+      LOG_LEVEL: INFO
+
+  - id: llm-prosecution
+    path: ../../target/release/dora-maas-client
+    inputs:
+      text: ws-prosecution/text
+    outputs:
+      - text
+      - status
+      - log
+    env:
+      MAAS_CONFIG_PATH: config_prosecution.toml
+      OPENAI_API_KEY: "YOUR_OPENAI_API_KEY_HERE"
+      LOG_LEVEL: INFO
+
+  # ============ Conference Controller ============
+
+  - id: conference-controller
+    path: ../../target/release/dora-conference-controller
+    env:
+      DORA_POLICY_PATTERN: "[judge → defense → prosecution]"
+      LOG_LEVEL: "INFO"
+    inputs:
+      judge: llm-judge/text
+      defense: llm-defense/text
+      prosecution: llm-prosecution/text
+    outputs:
+      - control
+      - status
+
+  # ============ Conference Bridge ============
+
+  - id: conference-bridge
+    path: ../../target/release/dora-conference-bridge
+    env:
+      LOG_LEVEL: "INFO"
+    inputs:
+      judge: llm-judge/text
+      defense: llm-defense/text
+      prosecution: llm-prosecution/text
+      control: conference-controller/control
+    outputs:
+      - text
+
+  # ============ Output ============
+
+  - id: terminal
+    path: ../../target/release/terminal-print
+    inputs:
+      data: conference-bridge/text

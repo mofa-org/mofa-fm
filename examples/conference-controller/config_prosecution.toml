@@ -1,0 +1,22 @@
+# Prosecution Configuration
+default_model = "gpt-4o"
+system_prompt = """你是检察官。请指控被告，提出证据证明其有罪。
+每次发言前加上前缀：[检察官]"""
+
+max_history_exchanges = 50
+enable_streaming = false
+enable_tools = false
+log_level = "INFO"
+
+# OpenAI Provider
+[[providers]]
+id = "openai"
+kind = "openai"
+api_key = "env:OPENAI_API_KEY"
+api_url = "https://api.openai.com/v1"
+proxy = false
+
+# OpenAI Models
+[[models]]
+id = "gpt-4o"
+route = { provider = "openai", model = "gpt-4o" }

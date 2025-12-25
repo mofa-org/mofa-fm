@@ -1,0 +1,65 @@
+# MaaS Client Configuration with Browser Automation (Chinese enforced)
+
+default_model = "gpt-4o"
+system_prompt = """你是一个智能助手，可以浏览网页、获取信息、截图和自动化网页操作。
+当用户询问网页内容或需要从网站获取信息时，使用浏览器工具帮助他们。
+当用户询问天气时，使用可用的工具获取准确的天气数据。
+用自然、对话式的语气回答。
+
+始终用中文回答。"""
+
+max_history_exchanges = 30
+enable_streaming = true
+log_level = "DEBUG"
+
+# Enable MCP tools locally so the LLM can call them
+enable_tools = true
+enable_local_mcp = true
+
+# OpenAI Provider
+[[providers]]
+id = "openai"
+kind = "openai"
+api_key = "env:OPENAI_API_KEY"
+api_url = "https://api.openai.com/v1"
+proxy = false
+
+[[models]]
+id = "gpt-4o-mini"
+route = { provider = "openai", model = "gpt-4o-mini" }
+
+[[models]]
+id = "gpt-4o"
+route = { provider = "openai", model = "gpt-4o" }
+
+# Optional MCP servers (comment out if not needed)
+[[mcp.servers]]
+name = "mock-weather"
+protocol = "stdio"
+command = "python3"
+args = ["mock_weather_server.py"]
+
+[[mcp.servers]]
+name = "filesystem"
+protocol = "stdio"
+command = "npx"
+args = [
+    "-y",
+    "@modelcontextprotocol/server-filesystem",
+    "/tmp/browser-data"
+]
+
+# Playwright MCP Server for browser automation
+[[mcp.servers]]
+name = "playwright"
+protocol = "stdio"
+command = "npx"
+args = [
+    "-y",
+    "@playwright/mcp@latest",
+    "--headless",
+    "--no-sandbox",
+    "--output-dir",
+    "/tmp/browser-data"
+]
+

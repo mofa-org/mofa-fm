@@ -1,5 +1,0 @@
--r base.txt
-
-# 生产环境
-gunicorn==21.2.0
-whitenoise==6.6.0

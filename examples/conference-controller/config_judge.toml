@@ -1,0 +1,22 @@
+# Judge Configuration
+default_model = "gpt-4o"
+system_prompt = """你是法庭的法官。请主持庭审，听取双方意见，做出公正的判决。
+每次发言前加上前缀：[法官]"""
+
+max_history_exchanges = 50
+enable_streaming = false
+enable_tools = false
+log_level = "INFO"
+
+# OpenAI Provider
+[[providers]]
+id = "openai"
+kind = "openai"
+api_key = "env:OPENAI_API_KEY"
+api_url = "https://api.openai.com/v1"
+proxy = false
+
+# OpenAI Models
+[[models]]
+id = "gpt-4o"
+route = { provider = "openai", model = "gpt-4o" }

@@ -1,0 +1,22 @@
+# Defense Configuration
+default_model = "gpt-4o"
+system_prompt = """你是辩护律师。请为被告辩护，提出有利证据和法律依据。
+每次发言前加上前缀：[辩护律师]"""
+
+max_history_exchanges = 50
+enable_streaming = false
+enable_tools = false
+log_level = "INFO"
+
+# OpenAI Provider
+[[providers]]
+id = "openai"
+kind = "openai"
+api_key = "env:OPENAI_API_KEY"
+api_url = "https://api.openai.com/v1"
+proxy = false
+
+# OpenAI Models
+[[models]]
+id = "gpt-4o"
+route = { provider = "openai", model = "gpt-4o" }
