@@ -1,0 +1,17 @@
+/opt/homebrew/lib/python3.11/site-packages/jieba/_compat.py:18: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+Traceback (most recent call last):
+  File "/opt/homebrew/bin/dora-asr", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/yao/Desktop/code/local-dev/mofa-fm-simple/dora/node-hub/dora-asr/dora_asr/main.py", line 38, in main
+    node = Node()
+           ^^^^^^
+RuntimeError: Could not initiate node from environment variable. For dynamic node, please add a node id in the initialization function.
+
+Caused by:
+   0: failed to init event stream
+   1: subscribe failed: Node maas-client exited before initializing dora. For more information, run `dora logs 019b562d-ec6c-730c-bd31-35cc306cbbe0 maas-client`.
+
+Location:
+    apis/rust/node/src/event_stream/mod.rs:139:17

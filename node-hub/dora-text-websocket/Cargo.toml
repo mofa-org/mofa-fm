@@ -1,0 +1,13 @@
+[package]
+name = "dora-text-websocket"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dora-node-api = { workspace = true }
+eyre = "0.6"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+serde_json = "1.0"
+arrow = { workspace = true }
