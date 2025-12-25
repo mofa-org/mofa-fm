@@ -1,18 +1,15 @@
-# Dora Pure Dataflow Examples
 
-这个仓库包含了精选的 Dora 框架示例，用于学习和参考。
-
-## 📦 仓库结构
+## 仓库结构
 
 ```
 .
-├── examples/           # 示例应用
+├── examples/           
 │   ├── chatbot-alicloud-0908/      # Alicloud 聊天机器人
 │   ├── chatbot-openai-0905/        # OpenAI 聊天机器人
 │   ├── chatbot-openai-websocket-browser/  # WebSocket 浏览器聊天机器人
 │   ├── conference/                 # 会议/辩论示例
 │   └── conference-controller/      # 会议控制器示例
-└── node-hub/           # Dora 节点（Python）
+└── node-hub/           
     ├── dora-asr/                   # 语音识别
     ├── dora-kokoro-tts/            # Kokoro TTS
     ├── dora-primespeech/           # PrimeSpeech TTS
@@ -20,7 +17,44 @@
     └── dora-text-segmenter/        # 文本分段
 ```
 
-## 🚀 快速开始
+## 🐳 Docker 快速开始（推荐）
+
+**零配置，一键启动！** 无需安装 Rust、Python 等依赖。
+
+### 前置条件
+
+- Docker Desktop 或 Docker Engine
+- 至少一个 API Key (OPENAI/ALIBABA_CLOUD/DEEPSEEK)
+
+### 使用步骤
+
+```bash
+# 1. 克隆仓库
+git clone -b pure-dataflow https://github.com/mofa-org/mofa-fm.git
+cd mofa-fm
+
+# 2. 构建 Docker 镜像（仅首次，约 10-20 分钟）
+./build-docker.sh
+
+# 3. 运行任意示例
+cd examples/chatbot-openai-0905
+export OPENAI_API_KEY="your-key-here"
+./docker-start.sh
+```
+
+**✨ 优势**：
+- ✅ 无需配置环境
+- ✅ 支持中文显示
+- ✅ 自动 GPU 加速（如果可用）
+- ✅ 环境完全隔离
+
+**📖 详细文档**: 查看 [DOCKER_GUIDE.md](./DOCKER_GUIDE.md)
+
+---
+
+## 🔧 本地开发模式
+
+如果需要修改代码或深度开发，可以使用本地安装方式：
 
 ### 前置条件
 
@@ -83,7 +117,7 @@ cd ../dora-text-segmenter
 pip install -e .
 ```
 
-## 🎯 启动脚本
+## 启动脚本
 
 每个示例都提供了便捷的启动脚本：
 
@@ -96,7 +130,7 @@ pip install -e .
 
 所有启动脚本都支持交互式配置，会自动检查依赖、设置路径、验证环境变量等。
 
-## 📚 示例说明
+## 示例说明
 
 ### 1. Chatbot OpenAI (chatbot-openai-0905)
 
@@ -201,79 +235,3 @@ export OPENAI_API_KEY="your-key-here"
 cd examples/chatbot-openai-websocket-browser
 # 查看 README 获取详细启动说明
 ```
-
-## 🔧 常见问题
-
-### Q: 找不到 Rust 可执行文件
-
-A: 确保已在 Dora 主仓库中编译了所需的 Rust 节点：
-```bash
-cd /path/to/dora
-cargo build --release
-```
-
-然后在启动脚本中指定正确的 `target/release` 目录。
-
-### Q: Python 模块导入错误
-
-A: 确保已安装所有 node-hub 节点：
-```bash
-cd node-hub/dora-xxx
-pip install -e .
-```
-
-### Q: API Key 错误
-
-A: 检查环境变量设置：
-```bash
-echo $OPENAI_API_KEY
-echo $ALIBABA_CLOUD_API_KEY
-```
-
-### Q: TTS 模型加载失败
-
-A: 需要下载 TTS 模型：
-```bash
-# 在 Dora 主仓库中
-cd examples/model-manager
-python download_models.py --download primespeech
-python download_models.py --download funasr
-```
-
-## 📖 学习路径建议
-
-1. **入门**：从 `chatbot-openai-0905` 开始
-   - 理解基本的 dataflow 结构
-   - 学习节点间的数据流动
-   - 熟悉 WebSocket 接口
-
-2. **进阶**：尝试 `conference`
-   - 理解多节点协作
-   - 学习 Conference Controller 的策略模式
-   - 掌握 TUI 界面开发
-
-3. **深入**：研究 `conference-controller`
-   - 对比不同的控制策略
-   - 修改参数观察行为变化
-   - 尝试实现自定义策略
-
-## 🔗 相关资源
-
-- [Dora 主仓库](https://github.com/dora-rs/dora)
-- [Dora 文档](https://dora-rs.github.io/dora/)
-- 完整 Dora 代码仓库（包含所有节点和工具）
-
-## 📝 注意事项
-
-1. 这是一个**精选**的示例集合，不包含完整的 Dora 框架
-2. 需要访问完整的 Dora 仓库来编译 Rust 节点
-3. 某些功能可能需要特定的硬件（如 GPU 加速）
-4. API 调用会产生费用，请合理使用
-
-## 🤝 贡献
-
-如果发现问题或有改进建议，欢迎提 Issue 或 Pull Request。
-
-## 📄 许可证
-
-遵循原 Dora 框架的许可证。

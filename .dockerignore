@@ -1,0 +1,23 @@
+# Git
+.git
+.gitignore
+
+# 临时文件
+*.pyc
+__pycache__/
+.pytest_cache/
+*.log
+*.tmp
+
+# 输出目录
+examples/*/out/
+*.wav
+*.mp3
+
+# IDE
+.vscode/
+.idea/
+
+# 本地配置
+*.local.toml
+.env
