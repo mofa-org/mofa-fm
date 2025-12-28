@@ -13,8 +13,80 @@ from .serializers import (
     UserSerializer,
     RegisterSerializer,
     CreatorVerificationSerializer,
-    VerifyAnswerSerializer
+    VerifyAnswerSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer
 )
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.core.mail import send_mail
+from django.conf import settings
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_request(request):
+    """请求重置密码"""
+    serializer = PasswordResetRequestSerializer(data=request.data)
+    if serializer.is_valid():
+        email = serializer.validated_data['email']
+        user = User.objects.get(email=email)
+        
+        # 生成 token 和 uid
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        # 构造链接
+        # 前端路由需匹配: /auth/reset-password/:uid/:token
+        reset_link = f"{settings.CORS_ALLOWED_ORIGINS[0]}/auth/reset-password/{uid}/{token}"
+        
+        # 发送邮件
+        subject = "MoFA FM - 重置密码"
+        message = f"""
+        您好 {user.username}，
+        
+        您收到了这封邮件是因为您请求重置密码。
+        请点击下面的链接来重置您的密码：
+        
+        {reset_link}
+        
+        如果您没有请求重置密码，请忽略此邮件。
+        """
+        
+        try:
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+            return Response({'message': '重置密码邮件已发送，请检查您的邮箱'})
+        except Exception as e:
+            return Response({'error': '邮件发送失败，请稍后重试'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_confirm(request):
+    """确认重置密码"""
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    if serializer.is_valid():
+        uidb64 = serializer.validated_data['uidb64']
+        token = serializer.validated_data['token']
+        password = serializer.validated_data['new_password']
+        
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+            
+        if user is not None and default_token_generator.check_token(user, token):
+            user.set_password(password)
+            user.save()
+            return Response({'message': '密码重置成功，请使用新密码登录'})
+        else:
+            return Response({'error': '无效的重置链接或链接已过期'}, status=status.HTTP_400_BAD_REQUEST)
+            
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])

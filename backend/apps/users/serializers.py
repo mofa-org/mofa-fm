@@ -70,3 +70,26 @@ class VerifyAnswerSerializer(serializers.Serializer):
     """验证答案序列化器"""
 
     answer = serializers.IntegerField(required=True)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """请求重置密码序列化器"""
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("该邮箱未注册")
+        return value
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """确认重置密码序列化器"""
+    new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    re_new_password = serializers.CharField(write_only=True, required=True)
+    uidb64 = serializers.CharField(required=True)
+    token = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['re_new_password']:
+            raise serializers.ValidationError({"new_password": "两次密码不一致"})
+        return attrs
