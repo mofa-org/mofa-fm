@@ -5,20 +5,27 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "vitest",
+    "test:discover-e2e": "playwright test tests/e2e/discover.e2e.spec.ts"
   },
   "dependencies": {
-    "vue": "^3.4.21",
-    "vue-router": "^4.3.0",
-    "pinia": "^2.1.7",
-    "axios": "^1.6.7",
-    "element-plus": "^2.6.0",
     "@element-plus/icons-vue": "^2.3.1",
-    "dayjs": "^1.11.10"
+    "axios": "^1.6.7",
+    "dayjs": "^1.11.10",
+    "element-plus": "^2.6.0",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
+    "@pinia/testing": "^1.0.3",
+    "@playwright/test": "^1.57.0",
     "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^27.4.0",
+    "sass": "^1.71.1",
     "vite": "^5.1.5",
-    "sass": "^1.71.1"
+    "vitest": "^4.0.16"
   }
 }
