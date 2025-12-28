@@ -72,13 +72,27 @@
             placeholder="分类"
             @change="handleSearch"
             clearable
-            v-show="false"
           >
             <el-option
               v-for="category in categories"
               :key="category.id"
               :label="category.name"
               :value="category.id"
+            />
+          </el-select>
+
+          <el-select
+            v-model="filters.tag"
+            placeholder="标签"
+            @change="handleSearch"
+            clearable
+            filterable
+          >
+            <el-option
+              v-for="tag in tags"
+              :key="tag.id"
+              :label="tag.name"
+              :value="tag.id"
             />
           </el-select>
 
@@ -231,11 +245,13 @@ const showSuggestions = ref(false)
 const popularSearches = ref([])
 const searchHistory = ref([])
 const categories = ref([])
+const tags = ref([])
 const dateRange = ref(null)
 
 const filters = ref({
   type: 'all',
   category: null,
+  tag: null,
   sort: 'relevance'
 })
 
@@ -243,6 +259,7 @@ const hasActiveFilters = computed(() => {
   return (
     filters.value.type !== 'all' ||
     filters.value.category ||
+    filters.value.tag ||
     filters.value.sort !== 'relevance' ||
     dateRange.value
   )
@@ -256,6 +273,8 @@ onMounted(async () => {
 
   // 加载分类
   await loadCategories()
+  // 加载标签
+  await loadTags()
 
   // 加载热门搜索和搜索历史
   await Promise.all([loadPopularSearches(), loadSearchHistory()])
@@ -264,6 +283,7 @@ onMounted(async () => {
     // 从 URL 恢复过滤器
     if (route.query.type) filters.value.type = route.query.type
     if (route.query.category) filters.value.category = parseInt(route.query.category)
+    if (route.query.tag) filters.value.tag = parseInt(route.query.tag)
     if (route.query.sort) filters.value.sort = route.query.sort
     if (route.query.date_from && route.query.date_to) {
       dateRange.value = [route.query.date_from, route.query.date_to]
@@ -293,6 +313,15 @@ async function loadCategories() {
     categories.value = data.results || data
   } catch (error) {
     console.error('加载分类失败:', error)
+  }
+}
+
+async function loadTags() {
+  try {
+    const data = await api.podcasts.getTags()
+    tags.value = data.results || data
+  } catch (error) {
+    console.error('加载标签失败:', error)
   }
 }
 
@@ -356,6 +385,7 @@ function handleSearch() {
   const queryParams = { q: query.value }
   if (filters.value.type !== 'all') queryParams.type = filters.value.type
   if (filters.value.category) queryParams.category = filters.value.category
+  if (filters.value.tag) queryParams.tag = filters.value.tag
   if (filters.value.sort !== 'relevance') queryParams.sort = filters.value.sort
   if (dateRange.value) {
     queryParams.date_from = dateRange.value[0]
@@ -377,6 +407,10 @@ async function performSearch() {
 
     if (filters.value.category) {
       params.category = filters.value.category
+    }
+
+    if (filters.value.tag) {
+      params.tag = filters.value.tag
     }
 
     if (dateRange.value) {
@@ -401,6 +435,7 @@ function clearFilters() {
   filters.value = {
     type: 'all',
     category: null,
+    tag: null,
     sort: 'relevance'
   }
   dateRange.value = null
