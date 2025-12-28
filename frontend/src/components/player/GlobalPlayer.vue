@@ -63,8 +63,23 @@
         </div>
       </div>
 
-      <!-- 右侧：倍速控制 -->
+      <!-- 右侧：倍速控制和队列 -->
       <div class="player-options">
+        <!-- 播放队列 -->
+        <el-popover
+          placement="top-end"
+          :width="400"
+          trigger="click"
+          popper-class="queue-popover"
+        >
+          <template #reference>
+            <button class="player-btn player-btn-icon" title="播放队列">
+              <el-icon><List /></el-icon>
+            </button>
+          </template>
+          <PlayQueue />
+        </el-popover>
+
         <!-- 音量控制 -->
         <el-popover
           placement="top"
@@ -154,10 +169,13 @@ import {
   ArrowRightBold,
   ArrowUp,
   ArrowDown,
+  ArrowDown,
   Document,
   Microphone,
-  Mute
+  Mute,
+  List
 } from '@element-plus/icons-vue'
+import PlayQueue from '@/components/player/PlayQueue.vue'
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
