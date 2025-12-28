@@ -14,7 +14,8 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const currentTime = ref(0)
   const duration = ref(0)
-  const volume = ref(0.8)
+  const volume = ref(parseFloat(localStorage.getItem('player_volume') || 0.8))
+  const isMuted = ref(localStorage.getItem('player_muted') === 'true')
   const playbackRate = ref(1.0)
   const isLoading = ref(false)
 
@@ -36,7 +37,8 @@ export const usePlayerStore = defineStore('player', () => {
     if (audio.value) return
 
     audio.value = new Audio()
-    audio.value.volume = volume.value
+    // 应用持久化的音量和静音状态
+    updateAudioVolume()
 
     // 时间更新
     audio.value.addEventListener('timeupdate', () => {
@@ -82,6 +84,13 @@ export const usePlayerStore = defineStore('player', () => {
         lastSaveTime = currentTime.value
       }
     })
+  }
+
+  // 更新音频音量状态
+  function updateAudioVolume() {
+    if (!audio.value) return
+    audio.value.volume = volume.value
+    audio.value.muted = isMuted.value
   }
 
   // 播放单集
@@ -179,9 +188,19 @@ export const usePlayerStore = defineStore('player', () => {
   // 设置音量
   function setVolume(vol) {
     volume.value = vol
-    if (audio.value) {
-      audio.value.volume = vol
+    localStorage.setItem('player_volume', vol)
+    if (isMuted.value && vol > 0) {
+      isMuted.value = false
+      localStorage.setItem('player_muted', 'false')
     }
+    updateAudioVolume()
+  }
+
+  // 切换静音
+  function toggleMute() {
+    isMuted.value = !isMuted.value
+    localStorage.setItem('player_muted', isMuted.value)
+    updateAudioVolume()
   }
 
   // 设置播放速度
@@ -229,6 +248,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentTime,
     duration,
     volume,
+    isMuted,
     playbackRate,
     isLoading,
     progress,
@@ -242,6 +262,7 @@ export const usePlayerStore = defineStore('player', () => {
     seek,
     skip,
     setVolume,
+    toggleMute,
     setPlaybackRate,
     playPrevious,
     playNext

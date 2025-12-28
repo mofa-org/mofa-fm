@@ -65,6 +65,35 @@
 
       <!-- 右侧：倍速控制 -->
       <div class="player-options">
+        <!-- 音量控制 -->
+        <el-popover
+          placement="top"
+          :width="40"
+          trigger="hover"
+          popper-class="volume-popover"
+        >
+          <template #reference>
+            <button class="player-btn player-btn-icon" @click="playerStore.toggleMute()">
+              <el-icon>
+                <Mute v-if="isMuted || volume === 0" />
+                <Microphone v-else />
+              </el-icon>
+            </button>
+          </template>
+          <div class="volume-slider-container">
+            <el-slider
+              v-model="volume"
+              vertical
+              height="100px"
+              :min="0"
+              :max="1"
+              :step="0.01"
+              :show-tooltip="false"
+              @input="playerStore.setVolume"
+            />
+          </div>
+        </el-popover>
+
         <!-- 查看脚本按钮 -->
         <button
           v-if="currentEpisode.script"
@@ -125,7 +154,9 @@ import {
   ArrowRightBold,
   ArrowUp,
   ArrowDown,
-  Document
+  Document,
+  Microphone,
+  Mute
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
@@ -148,6 +179,8 @@ const formattedCurrentTime = computed(() => playerStore.formattedCurrentTime)
 const formattedDuration = computed(() => playerStore.formattedDuration)
 const hasPrevious = computed(() => playerStore.hasPrevious)
 const hasNext = computed(() => playerStore.hasNext)
+const volume = computed(() => playerStore.volume)
+const isMuted = computed(() => playerStore.isMuted)
 
 const isCreator = computed(() => {
   if (!authStore.isAuthenticated || !currentEpisode.value) return false
@@ -162,6 +195,10 @@ watch(() => playerStore.progress, (val) => {
 function handleSeek(val) {
   const newTime = (val / 100) * duration.value
   playerStore.seek(newTime)
+}
+
+function handleVolumeChange(val) {
+  playerStore.setVolume(val / 100)
 }
 
 function handleRateChange(rate) {
@@ -613,5 +650,12 @@ function handleScriptUpdated(updatedEpisode) {
   .speed-text {
     font-size: var(--font-xs);
   }
+}
+
+.volume-slider-container {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+  height: 120px;
 }
 </style>
