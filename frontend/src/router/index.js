@@ -25,6 +25,16 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/auth/verify-email/:uid/:token',
+      name: 'verify-email',
+      component: () => import('../views/auth/VerifyEmail.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/app/login', // Deprecated path redirect
+      redirect: '/login'
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/auth/Login.vue'),

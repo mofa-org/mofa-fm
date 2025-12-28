@@ -65,6 +65,24 @@
         <!-- 账户信息 -->
         <div class="account-info">
           <h3>账户信息</h3>
+          
+          <div class="info-item">
+            <span class="label">邮箱验证:</span>
+            <div class="value-row">
+              <el-tag :type="user?.email_verified ? 'success' : 'warning'">
+                {{ user?.email_verified ? '已验证' : '未验证' }}
+              </el-tag>
+              <button 
+                v-if="!user?.email_verified" 
+                @click="sendVerificationEmail" 
+                class="text-btn"
+                :disabled="sendingEmail"
+              >
+                {{ sendingEmail ? '发送中...' : '发送验证邮件' }}
+              </button>
+            </div>
+          </div>
+
           <div class="info-item">
             <span class="label">创作者状态:</span>
             <el-tag :type="user?.is_creator ? 'success' : 'info'">
@@ -93,6 +111,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { UserFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -103,6 +122,7 @@ const authStore = useAuthStore()
 const formRef = ref()
 const avatarInput = ref()
 const saving = ref(false)
+const sendingEmail = ref(false)
 const avatarFile = ref(null)
 const previewUrl = ref('')
 
@@ -132,6 +152,20 @@ onMounted(() => {
     }
   }
 })
+
+async function sendVerificationEmail() {
+  if (sendingEmail.value) return
+  sendingEmail.value = true
+  try {
+    const res = await api.auth.sendVerificationEmail()
+    ElMessage.success(res.message || '验证邮件已发送，请查收')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error(error.response?.data?.error || '发送失败，请稍后重试')
+  } finally {
+    sendingEmail.value = false
+  }
+}
 
 function handleAvatarChange(event) {
   const file = event.target.files[0]
@@ -246,6 +280,30 @@ function formatDate(date) {
   color: var(--color-text-secondary);
   font-weight: var(--font-medium);
   min-width: 100px;
+}
+
+  min-width: 100px;
+}
+
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--font-sm);
+  text-decoration: underline;
+}
+
+.text-btn:disabled {
+  color: var(--color-text-tertiary);
+  cursor: not-allowed;
 }
 
 /* 响应式 */

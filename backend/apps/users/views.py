@@ -152,6 +152,62 @@ def login(request):
     })
 
 
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_verification_email(request):
+    """发送验证邮件"""
+    user = request.user
+    if user.email_verified:
+        return Response({'message': '您的邮箱已验证'})
+        
+    token = default_token_generator.make_token(user)
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    
+    verify_link = f"{settings.CORS_ALLOWED_ORIGINS[0]}/auth/verify-email/{uid}/{token}"
+    
+    subject = "MoFA FM - 验证您的邮箱"
+    message = f"""
+    您好 {user.username}，
+    
+    感谢注册 MoFA FM。请点击下面的链接验证您的邮箱地址：
+    
+    {verify_link}
+    """
+    
+    try:
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email])
+        return Response({'message': '验证邮件已发送'})
+    except Exception as e:
+        return Response({'error': '邮件发送失败'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_email_confirm(request):
+    """确认验证邮箱"""
+    uidb64 = request.data.get('uidb64')
+    token = request.data.get('token')
+    
+    if not uidb64 or not token:
+        return Response({'error': '无效的请求'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    try:
+        uid = force_str(urlsafe_base64_decode(uidb64))
+        user = User.objects.get(pk=uid)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response({'error': '用户不存在'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if user is not None and default_token_generator.check_token(user, token):
+        user.email_verified = True
+        user.save()
+        return Response({'message': '邮箱验证成功'})
+    else:
+        return Response({'error': '验证链接无效或已过期'}, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def current_user(request):

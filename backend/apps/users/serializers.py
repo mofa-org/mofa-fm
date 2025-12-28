@@ -15,10 +15,10 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'avatar', 'avatar_url', 'bio',
-            'is_creator', 'is_verified', 'shows_count', 'total_plays',
+            'is_creator', 'is_verified', 'email_verified', 'shows_count', 'total_plays',
             'created_at'
         ]
-        read_only_fields = ['id', 'is_creator', 'is_verified', 'shows_count', 'total_plays', 'created_at']
+        read_only_fields = ['id', 'is_creator', 'is_verified', 'email_verified', 'shows_count', 'total_plays', 'created_at']
 
     def get_avatar_url(self, obj):
         request = self.context.get('request')

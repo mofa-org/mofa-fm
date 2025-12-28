@@ -42,5 +42,15 @@ export default {
   // 确认重置密码
   confirmPasswordReset(data) {
     return client.post('/users/password-reset/confirm/', data)
+  },
+
+  // 发送验证邮件
+  sendVerificationEmail() {
+    return client.post('/users/verify-email/send/')
+  },
+
+  // 确认验证邮件
+  verifyEmail(data) {
+    return client.post('/users/verify-email/confirm/', data)
   }
 }

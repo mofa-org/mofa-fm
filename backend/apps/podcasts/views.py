@@ -75,7 +75,7 @@ class ShowDetailView(generics.RetrieveAPIView):
 class ShowCreateView(generics.CreateAPIView):
     """创建播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsCreatorOrReadOnly]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -84,7 +84,7 @@ class ShowCreateView(generics.CreateAPIView):
 class ShowUpdateView(generics.UpdateAPIView):
     """更新播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
@@ -93,7 +93,7 @@ class ShowUpdateView(generics.UpdateAPIView):
 
 class ShowDeleteView(generics.DestroyAPIView):
     """删除播客节目"""
-    permission_classes = [IsAuthenticated, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
