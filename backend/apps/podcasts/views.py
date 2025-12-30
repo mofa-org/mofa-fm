@@ -75,7 +75,7 @@ class ShowDetailView(generics.RetrieveAPIView):
 class ShowCreateView(generics.CreateAPIView):
     """创建播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsCreatorOrReadOnly]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -84,7 +84,7 @@ class ShowCreateView(generics.CreateAPIView):
 class ShowUpdateView(generics.UpdateAPIView):
     """更新播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
@@ -93,7 +93,7 @@ class ShowUpdateView(generics.UpdateAPIView):
 
 class ShowDeleteView(generics.DestroyAPIView):
     """删除播客节目"""
-    permission_classes = [IsAuthenticated, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
@@ -572,7 +572,7 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def generate_audio(self, request, pk=None):
-        """从脚本生成音频（占位，暂不实现）"""
+        """从脚本生成音频"""
         session = self.get_object()
 
         if not session.current_script:
@@ -580,14 +580,48 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
                 {'error': '当前没有脚本，请先生成脚本'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        if not session.show:
+             return Response(
+                {'error': '当前会话未关联节目，请先前往详情页关联节目'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        # TODO: 实现音频生成
-        # 这里暂时返回占位响应
+        from .tasks import generate_podcast_task
+        from uuid import uuid4
+        from django.core.files.base import ContentFile
+
+        # 如果已有单集，更新它；否则创建新的
+        if session.episode:
+            episode = session.episode
+            episode.script = session.current_script
+            episode.status = 'processing'
+            episode.save()
+        else:
+            placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+            title = session.title or f"AI生成 - {session.created_at.strftime('%Y-%m-%d %H:%M')}"
+            
+            episode = Episode.objects.create(
+                show=session.show,
+                title=title,
+                description="AI Generated Podcast based on script session",
+                status='processing',
+                audio_file=placeholder_file,
+                visibility='inherit', # 默认继承节目权限
+                script=session.current_script
+            )
+            session.episode = episode
+            session.save()
+
+        # 触发后台生成任务
+        generate_podcast_task.delay(episode.id, session.current_script)
+
         return Response({
-            'message': '音频生成功能即将上线',
-            'script': session.current_script,
-            'status': 'pending'
-        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+            'message': '音频生成任务已提交',
+            'episode_id': episode.id,
+            'status': 'processing',
+            'task_id': f"episode_{episode.id}" # 模拟任务ID
+        }, status=status.HTTP_202_ACCEPTED)
 
 
 # 热搜榜相关视图

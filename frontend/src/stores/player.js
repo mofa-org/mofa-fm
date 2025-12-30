@@ -14,7 +14,8 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const currentTime = ref(0)
   const duration = ref(0)
-  const volume = ref(0.8)
+  const volume = ref(parseFloat(localStorage.getItem('player_volume') || 0.8))
+  const isMuted = ref(localStorage.getItem('player_muted') === 'true')
   const playbackRate = ref(1.0)
   const isLoading = ref(false)
 
@@ -36,7 +37,8 @@ export const usePlayerStore = defineStore('player', () => {
     if (audio.value) return
 
     audio.value = new Audio()
-    audio.value.volume = volume.value
+    // 应用持久化的音量和静音状态
+    updateAudioVolume()
 
     // 时间更新
     audio.value.addEventListener('timeupdate', () => {
@@ -82,6 +84,13 @@ export const usePlayerStore = defineStore('player', () => {
         lastSaveTime = currentTime.value
       }
     })
+  }
+
+  // 更新音频音量状态
+  function updateAudioVolume() {
+    if (!audio.value) return
+    audio.value.volume = volume.value
+    audio.value.muted = isMuted.value
   }
 
   // 播放单集
@@ -179,9 +188,19 @@ export const usePlayerStore = defineStore('player', () => {
   // 设置音量
   function setVolume(vol) {
     volume.value = vol
-    if (audio.value) {
-      audio.value.volume = vol
+    localStorage.setItem('player_volume', vol)
+    if (isMuted.value && vol > 0) {
+      isMuted.value = false
+      localStorage.setItem('player_muted', 'false')
     }
+    updateAudioVolume()
+  }
+
+  // 切换静音
+  function toggleMute() {
+    isMuted.value = !isMuted.value
+    localStorage.setItem('player_muted', isMuted.value)
+    updateAudioVolume()
   }
 
   // 设置播放速度
@@ -229,6 +248,7 @@ export const usePlayerStore = defineStore('player', () => {
     currentTime,
     duration,
     volume,
+    isMuted,
     playbackRate,
     isLoading,
     progress,
@@ -242,8 +262,92 @@ export const usePlayerStore = defineStore('player', () => {
     seek,
     skip,
     setVolume,
+    toggleMute,
     setPlaybackRate,
     playPrevious,
-    playNext
+    playNext,
+    removeFromQueue,
+    clearQueue,
+    reorderQueue,
+    updateQueue
+  }
+
+  // 从队列移除
+  function removeFromQueue(index) {
+    if (index === currentIndex.value) {
+      // 如果移除的是当前播放的，自动播放下一首或停止
+      if (hasNext.value) {
+        playNext()
+        // 播放下一首后，索引会自动更新，但因为移除了一个元素，播放列表变更后的索引需要调整
+        // 这里简化处理：playNext已经更新了索引和currentEpisode，我们只需要从列表移除旧的
+        playlist.value.splice(index, 1)
+        currentIndex.value-- // 因为移除了前面的（或当前的），索引减一
+      } else if (hasPrevious.value) {
+        playPrevious()
+        playlist.value.splice(index, 1)
+      } else {
+        //只剩一首且被移除
+        pause()
+        currentEpisode.value = null
+        audio.value.src = ''
+        playlist.value = []
+        currentIndex.value = -1
+      }
+    } else {
+      playlist.value.splice(index, 1)
+      if (index < currentIndex.value) {
+        currentIndex.value--
+      }
+    }
+  }
+
+  // 清空队列
+  function clearQueue() {
+    // 保留当前播放的
+    if (currentEpisode.value) {
+      playlist.value = [currentEpisode.value]
+      currentIndex.value = 0
+    } else {
+      playlist.value = []
+      currentIndex.value = -1
+    }
+  }
+
+  // 重排队列（简单的交换位置）
+  function reorderQueue(fromIndex, toIndex) {
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= playlist.value.length || toIndex >= playlist.value.length) return
+    
+    // 如果移动的是当前播放的，更新索引
+    if (currentIndex.value === fromIndex) {
+      currentIndex.value = toIndex
+    } else if (currentIndex.value === toIndex) {
+      // 目标位置是当前播放的，现在的当前播放的会被挤走
+      // 这种情况比较复杂，简单处理：如果是当播放位置受影响
+      if (fromIndex < currentIndex.value && toIndex >= currentIndex.value) {
+        currentIndex.value--
+      } else if (fromIndex > currentIndex.value && toIndex <= currentIndex.value) {
+        currentIndex.value++
+      }
+    } else {
+      // 移动范围跨越了当前播放的
+        if (fromIndex < currentIndex.value && toIndex >= currentIndex.value) {
+        currentIndex.value--
+      } else if (fromIndex > currentIndex.value && toIndex <= currentIndex.value) {
+        currentIndex.value++
+      }
+    }
+
+    const item = playlist.value.splice(fromIndex, 1)[0]
+    playlist.value.splice(toIndex, 0, item)
+  }
+
+  // 直接更新队列（用于拖拽排序库）
+  function updateQueue(newPlaylist) {
+    // 找到当前播放的单集在新列表中的位置
+    const currentId = currentEpisode.value?.id
+    playlist.value = newPlaylist
+    if (currentId) {
+      currentIndex.value = newPlaylist.findIndex(e => e.id === currentId)
+    }
   }
 })

@@ -4,7 +4,7 @@
       <h1 class="page-title">发现播客</h1>
 
       <!-- 分类过滤 -->
-      <div class="categories" v-if="categories && categories.length > 0" v-show="false">
+      <div class="categories" v-if="categories && categories.length > 0">
         <button
           v-for="cat in categories"
           :key="cat.id"
@@ -27,35 +27,37 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
-import { usePodcastsStore } from '@/stores/podcasts'
-import api from '@/api'
-import ShowCard from '@/components/podcast/ShowCard.vue'
+import { ref, watch, onMounted } from "vue";
+import { usePodcastsStore } from "@/stores/podcasts";
+import api from "@/api";
+import ShowCard from "@/components/podcast/ShowCard.vue";
 
-const podcastsStore = usePodcastsStore()
+const podcastsStore = usePodcastsStore();
 
-const selectedCategory = ref(null)
-const shows = ref([])
-const loading = ref(false)
-const categories = ref([])
+const selectedCategory = ref(null);
+const shows = ref([]);
+const loading = ref(false);
+const categories = ref([]);
 
 onMounted(async () => {
-  categories.value = await podcastsStore.fetchCategories()
-  fetchShows()
-})
+  categories.value = await podcastsStore.fetchCategories();
+  fetchShows();
+});
 
 watch(selectedCategory, () => {
-  fetchShows()
-})
+  fetchShows();
+});
 
 async function fetchShows() {
-  loading.value = true
+  loading.value = true;
   try {
-    const params = selectedCategory.value ? { category: selectedCategory.value } : {}
-    const data = await api.podcasts.getShows(params)
-    shows.value = data.results || data
+    const params = selectedCategory.value
+      ? { category: selectedCategory.value }
+      : {};
+    const data = await api.podcasts.getShows(params);
+    shows.value = data.results || data;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>
@@ -82,6 +84,12 @@ async function fetchShows() {
   cursor: pointer;
   border: none;
   background: var(--color-white);
+}
+
+.category-btn.mofa-tag-primary {
+  background: var(--gradient-primary);
+  color: var(--color-white);
+  border: none;
 }
 
 .shows-grid {

@@ -42,8 +42,8 @@
             <p class="form-hint">推荐尺寸：1400x1400 像素</p>
           </el-form-item>
 
-          <el-form-item label="分类" prop="category_id" v-show="false">
-            <el-select v-model="form.category_id" placeholder="选择分类">
+          <el-form-item label="分类" prop="category_id">
+            <el-select v-model="form.category_id" placeholder="选择分类" clearable>
               <el-option
                 v-for="cat in (categories || [])"
                 :key="cat.id"
@@ -53,8 +53,8 @@
             </el-select>
           </el-form-item>
 
-          <el-form-item label="标签" v-show="false">
-            <el-select v-model="form.tag_ids" multiple placeholder="选择标签（可选）">
+          <el-form-item label="标签">
+            <el-select v-model="form.tag_ids" multiple filterable placeholder="选择标签（可选）">
               <el-option
                 v-for="tag in (tags || [])"
                 :key="tag.id"
@@ -158,12 +158,11 @@ async function handleSubmit() {
     formData.append('description', form.value.description)
     formData.append('cover', coverFile.value)
     formData.append('visibility', form.value.visibility)
-    // 如果没有选择分类，默认为科技类（ID=1）
+    
     if (form.value.category_id) {
       formData.append('category_id', form.value.category_id)
-    } else {
-      formData.append('category_id', 1)
     }
+    
     if (form.value.tag_ids.length > 0) {
       form.value.tag_ids.forEach(id => formData.append('tag_ids', id))
     }

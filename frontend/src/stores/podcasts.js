@@ -16,7 +16,7 @@ export const usePodcastsStore = defineStore('podcasts', () => {
 
     try {
       const data = await api.podcasts.getCategories()
-      categories.value = data || []
+      categories.value = data.results || data || []
       return categories.value
     } catch (error) {
       console.error('获取分类失败', error)
