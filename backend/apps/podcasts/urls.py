@@ -4,6 +4,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import sse_views
 
 app_name = 'podcasts'
 
@@ -30,6 +31,10 @@ urlpatterns = [
     path('episodes/', views.EpisodeListView.as_view(), name='episode_list'),
     path('episodes/create/', views.EpisodeCreateView.as_view(), name='episode_create'),
     path('episodes/generate/', views.GenerateEpisodeView.as_view(), name='episode_generate'),
+    path('episodes/generate-debate/', views.generate_debate, name='generate_debate'),
+    path('episodes/<int:episode_id>/', views.get_episode_by_id, name='get_episode_by_id'),
+    path('episodes/<int:episode_id>/stream/', sse_views.debate_stream, name='debate_stream'),  # SSE流
+    path('episodes/<int:episode_id>/generate-audio/', views.generate_debate_audio, name='generate_debate_audio'),
     path('episodes/<int:pk>/update/', views.EpisodeUpdateView.as_view(), name='episode_update'),
     path('episodes/<int:pk>/update-script/', views.update_episode_script, name='episode_update_script'),
     path('episodes/<int:pk>/delete/', views.EpisodeDeleteView.as_view(), name='episode_delete'),
@@ -40,6 +45,9 @@ urlpatterns = [
     path('creator/shows/', views.my_shows, name='my_shows'),
     path('creator/shows/<int:show_id>/episodes/', views.show_episodes, name='show_episodes'),
     path('creator/generation-queue/', views.generation_queue, name='generation_queue'),
+
+    # 辩论历史
+    path('debates/', views.my_debates, name='my_debates'),
 
     # AI脚本创作 (ViewSet路由)
     path('', include(router.urls)),

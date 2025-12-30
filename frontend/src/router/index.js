@@ -13,6 +13,28 @@ const router = createRouter({
       component: () => import('@/views/Home.vue')
     },
     {
+      path: '/auth/forgot-password',
+      name: 'forgot-password',
+      component: () => import('../views/auth/ForgotPassword.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/auth/reset-password/:uid/:token',
+      name: 'reset-password',
+      component: () => import('../views/auth/ResetPassword.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/auth/verify-email/:uid/:token',
+      name: 'verify-email',
+      component: () => import('../views/auth/VerifyEmail.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/app/login', // Deprecated path redirect
+      redirect: '/login'
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/auth/Login.vue'),
@@ -91,6 +113,24 @@ const router = createRouter({
       name: 'ai-studio',
       component: () => import('@/views/creator/AIScriptStudio.vue'),
       meta: { requiresAuth: true, requiresCreator: true }
+    },
+    {
+      path: '/debates',
+      name: 'debate-list',
+      component: () => import('@/views/DebateList.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/debate/create',
+      name: 'create-debate',
+      component: () => import('@/views/creator/CreateDebate.vue'),
+      meta: { requiresAuth: true }  // 只需登录，不需要creator权限
+    },
+    {
+      path: '/debate/:episodeId',
+      name: 'debate-viewer',
+      component: () => import('@/views/creator/DebateViewer.vue'),
+      meta: { requiresAuth: true }  // 只需登录，不需要creator权限
     },
     {
       path: '/become-creator',

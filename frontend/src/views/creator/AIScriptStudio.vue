@@ -246,6 +246,13 @@
                 </button>
                 <button
                   v-if="currentSession.current_script && !isEditingScript"
+                  @click="openVoiceConfig"
+                  class="mofa-btn mofa-btn-sm"
+                >
+                  声线配置
+                </button>
+                <button
+                  v-if="currentSession.current_script && !isEditingScript"
                   @click="copyScript"
                   class="mofa-btn mofa-btn-sm"
                 >
@@ -423,6 +430,15 @@
           </div>
         </div>
       </div>
+
+      <!-- 声线配置对话框 -->
+      <VoiceConfigDialog
+        v-model:visible="showVoiceConfigDialog"
+        :script-content="currentSession?.current_script || ''"
+        :initial-config="currentSession?.voice_config || {}"
+        :loading="savingVoiceConfig"
+        @save="saveVoiceConfig"
+      />
     </div>
   </div>
 </template>
@@ -433,6 +449,7 @@ import { useRouter } from 'vue-router'
 import podcastsAPI from '@/api/podcasts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TrendingPanel from '@/components/creator/TrendingPanel.vue'
+import VoiceConfigDialog from '@/components/creator/VoiceConfigDialog.vue'
 
 const router = useRouter()
 
@@ -515,6 +532,39 @@ const newSessionShowId = ref(null)
 // 历史版本查看
 const showVersionDialog = ref(false)
 const viewingVersion = ref(null)
+
+// 声线配置
+const showVoiceConfigDialog = ref(false)
+const savingVoiceConfig = ref(false)
+
+function openVoiceConfig() {
+  if (!currentSession.value?.current_script) {
+    ElMessage.warning('请先生成脚本')
+    return
+  }
+  showVoiceConfigDialog.value = true
+}
+
+async function saveVoiceConfig(config) {
+  if (!currentSession.value?.id) return
+  
+  savingVoiceConfig.value = true
+  try {
+    await podcastsAPI.updateScriptSession(currentSession.value.id, {
+      voice_config: config
+    })
+    
+    // 更新本地状态
+    currentSession.value.voice_config = config
+    showVoiceConfigDialog.value = false
+    ElMessage.success('声线配置已保存')
+  } catch (error) {
+    console.error('保存声线配置失败:', error)
+    ElMessage.error('保存失败，请稍后重试')
+  } finally {
+    savingVoiceConfig.value = false
+  }
+}
 
 // 加载会话列表
 async function loadSessions() {

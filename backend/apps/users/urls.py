@@ -12,6 +12,14 @@ urlpatterns = [
     path('register/', views.register, name='register'),
     path('login/', views.login, name='login'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # 密码重置
+    path('password-reset/', views.password_reset_request, name='password_reset_request'),
+    path('password-reset/confirm/', views.password_reset_confirm, name='password_reset_confirm'),
+
+    # 邮箱验证
+    path('verify-email/send/', views.send_verification_email, name='send_verification_email'),
+    path('verify-email/confirm/', views.verify_email_confirm, name='verify_email_confirm'),
 
     # 用户信息
     path('me/', views.current_user, name='current_user'),

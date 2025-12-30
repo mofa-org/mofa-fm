@@ -268,6 +268,134 @@ class PodcastGenerator:
 
         return output_path
 
+    def generate_multi(self, dialogue: List[Dict], participants_config: List[Dict], output_path: str) -> str:
+        """
+        Generate multi-person podcast audio from dialogue JSON (for debate/conference).
+
+        Args:
+            dialogue: List of dialogue entries [{"participant": "llm1", "content": "..."},...]
+            participants_config: List of participant configs [{"id": "llm1", "voice_id": "...", "role": "..."},...]
+            output_path: Where to save the generated MP3
+
+        Returns:
+            Path to the generated audio file
+        """
+        logger.info("MiniMax 多人播客生成开始 (%d 参与者, %d 对话条目)", len(participants_config), len(dialogue))
+
+        # Build voice configs for each participant
+        participant_voices = {}
+        for p_config in participants_config:
+            participant_id = p_config['id']
+            voice_id = p_config.get('voice_id')
+
+            if not voice_id:
+                logger.warning("参与者 %s 未配置 voice_id，跳过", participant_id)
+                continue
+
+            # Create MiniMax voice config
+            config = MiniMaxVoiceConfig(
+                api_key=self.api_key,
+                model=self.model,
+                voice_id=voice_id,
+                speed=1.0,
+                volume=1.0,
+                pitch=0,
+                sample_rate=self.sample_rate,
+                audio_bitrate=self.audio_bitrate,
+                audio_channel=self.audio_channel,
+                enable_english_normalization=self.enable_english_normalization,
+                batch_duration_ms=self.batch_duration_ms,
+            )
+            participant_voices[participant_id] = config
+
+        # Split long dialogue entries
+        segments = []
+        for entry in dialogue:
+            participant_id = entry['participant']
+            content = entry['content']
+
+            if participant_id not in participant_voices:
+                logger.warning("跳过未配置语音的参与者 %s", participant_id)
+                continue
+
+            # Split long content into smaller segments
+            parts = _split_long_text(content, self.max_segment_chars, self.punctuation_marks)
+            for part in parts:
+                if part:
+                    segments.append((participant_id, part))
+
+        logger.info("共 %d 个语音片段", len(segments))
+
+        if not segments:
+            raise ValueError("未找到有效的对话内容")
+
+        try:
+            audio_segments = asyncio.run(self._generate_multi_segments(segments, participant_voices))
+        except Exception as exc:
+            logger.exception("调用 MiniMax 生成多人音频失败: %s", exc)
+            raise
+
+        if not audio_segments:
+            raise ValueError("MiniMax 未生成任何音频片段")
+
+        # Concatenate with silence between speaker changes
+        final_audio = AudioSegment.silent(duration=0)
+        last_speaker: Optional[str] = None
+
+        for speaker, audio_chunk in audio_segments:
+            if last_speaker and last_speaker != speaker:
+                silence = random.randint(self.silence_min_ms, self.silence_max_ms)
+                final_audio += AudioSegment.silent(duration=silence)
+                logger.debug("插入静音 %sms (%s → %s)", silence, last_speaker, speaker)
+
+            final_audio += audio_chunk
+            last_speaker = speaker
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        final_audio.export(output_path, format="mp3")
+        logger.info("MiniMax 多人播客生成完成，输出路径: %s", output_path)
+
+        return output_path
+
+    async def _generate_multi_segments(
+        self,
+        segments: List[Tuple[str, str]],
+        participant_voices: Dict[str, MiniMaxVoiceConfig]
+    ) -> List[Tuple[str, AudioSegment]]:
+        """Generate audio for multi-person dialogue segments."""
+        results: List[Tuple[str, AudioSegment]] = []
+
+        for index, (participant_id, text) in enumerate(segments, start=1):
+            config = participant_voices.get(participant_id)
+            if not config:
+                logger.warning("跳过未配置语音的参与者 %s", participant_id)
+                continue
+
+            logger.info(
+                "MiniMax 生成片段 %s/%s (%s): '%s...' (len=%d)",
+                index, len(segments), participant_id, text[:30], len(text)
+            )
+
+            def client_logger(message: str, *, _pid=participant_id, _index=index):
+                logger.debug("[MiniMax][%s #%s] %s", _pid, _index, message)
+
+            # Get float32 audio array from MiniMax
+            sample_rate, audio_float32 = await synthesize_to_pcm(config, text, logger=client_logger)
+
+            # Convert float32 [-1, 1] back to int16 for pydub
+            audio_int16 = (audio_float32 * 32767).astype(np.int16)
+
+            # Create AudioSegment from int16 array
+            segment_audio = AudioSegment(
+                data=audio_int16.tobytes(),
+                sample_width=2,  # 16-bit
+                frame_rate=sample_rate,
+                channels=config.audio_channel,
+            )
+            results.append((participant_id, segment_audio))
+
+        return results
+
     def _parse_markdown(self, script_content: str) -> List[Tuple[str, str]]:
         segments: List[Tuple[str, str]] = []
         current_character: Optional[str] = None

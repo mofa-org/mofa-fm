@@ -141,5 +141,25 @@ export default {
 
   getTrendingData(source) {
     return client.get(`/podcasts/trending/${source}/`)
+  },
+
+  // Debate/Conference 生成
+  generateDebate(data) {
+    return client.post('/podcasts/episodes/generate-debate/', data)
+  },
+
+  // 获取Episode详情（by ID）
+  getEpisodeById(episodeId) {
+    return client.get(`/podcasts/episodes/${episodeId}/`)
+  },
+
+  // 为Debate/Conference生成音频
+  generateDebateAudio(episodeId, showId) {
+    return client.post(`/podcasts/episodes/${episodeId}/generate-audio/`, { show_id: showId })
+  },
+
+  // 获取我的辩论历史
+  getMyDebates() {
+    return client.get('/podcasts/debates/')
   }
 }

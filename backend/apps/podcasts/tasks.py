@@ -3,8 +3,10 @@
 """
 from celery import shared_task
 from django.utils import timezone
+from django.db import transaction
 import os
 from utils.audio_processor import process_audio, get_audio_duration
+import json
 
 
 @shared_task
@@ -119,3 +121,165 @@ def generate_podcast_task(episode_id, script_content):
             episode.status = 'failed'
             episode.save()
         raise
+
+
+@shared_task
+def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
+    """
+    Background task to generate debate/conference dialogue (text-only, no audio).
+
+    Args:
+        episode_id: Episode ID
+        topic: 对话主题（辩题或学习主题）
+        mode: 'debate' 或 'conference'
+        rounds: 对话轮数
+    """
+    from .models import Episode
+    from .services.conversation import ConversationManager
+    from .services.participants import get_participants_by_mode
+
+    episode = None
+    try:
+        episode = Episode.objects.get(id=episode_id)
+        episode.status = 'processing'
+        episode.save()
+
+        # 获取参与者配置
+        participants = get_participants_by_mode(mode)
+
+        # 保存参与者配置到Episode
+        episode.participants_config = [
+            {
+                "id": p.id,
+                "role": p.role,
+                "system_prompt": p.system_prompt,
+                "voice_id": p.voice_id
+            }
+            for p in participants
+        ]
+        episode.save()
+
+        # 创建对话管理器
+        manager = ConversationManager(
+            participants=participants,
+            policy="sequential",
+            rounds=rounds
+        )
+
+        # 生成对话（流式，每生成一条就保存）
+        dialogue_entries = []
+        for entry in manager.generate_dialogue(topic):
+            dialogue_entries.append(entry)
+
+            # 实时保存，让前端可以看到进度
+            episode.dialogue = dialogue_entries.copy()
+            episode.save(update_fields=['dialogue'])
+
+            # 显式提交事务，让SSE能立即看到更新
+            transaction.commit()
+
+        # 最终保存（确保完整）
+        episode.dialogue = dialogue_entries
+
+        # 将对话转换为脚本格式（用于兼容现有前端）
+        script_lines = []
+        for entry in dialogue_entries:
+            participant_config = next(
+                (p for p in participants if p.id == entry['participant']),
+                None
+            )
+            if participant_config:
+                role_name = participant_config.role
+                script_lines.append(f"【{role_name}】{entry['content']}\n")
+
+        episode.script = "\n".join(script_lines)
+
+        # 更新状态为已发布（因为是纯文本，无需音频处理）
+        episode.status = 'published'
+        episode.published_at = timezone.now()
+        episode.save()
+
+        # 更新节目统计（如果关联了show）
+        if episode.show_id:  # 使用show_id避免触发RelatedObjectDoesNotExist
+            show = episode.show
+            show.episodes_count = show.episodes.filter(status='published').count()
+            show.save()
+
+        return f"Debate/Conference {episode_id} generated successfully with {len(dialogue_entries)} entries"
+
+    except Exception as e:
+        print(f"Failed to generate debate for episode {episode_id}: {e}")
+        if episode:
+            episode.status = 'failed'
+            episode.save()
+        raise
+
+
+@shared_task
+def generate_debate_audio_task(episode_id, show_id):
+    """
+    Background task to generate audio for existing debate/conference Episode.
+
+    Args:
+        episode_id: Episode ID (must have dialogue and participants_config)
+        show_id: Show ID to associate with
+    """
+    from .models import Episode, Show
+    from .services.generator import PodcastGenerator
+    from pydub import AudioSegment
+    from django.conf import settings
+
+    episode = None
+    try:
+        episode = Episode.objects.get(id=episode_id)
+
+        # Validate Episode has dialogue
+        if not episode.dialogue or not episode.participants_config:
+            raise ValueError("Episode must have dialogue and participants_config")
+
+        # Validate and get Show
+        try:
+            show = Show.objects.get(id=show_id)
+        except Show.DoesNotExist:
+            raise ValueError(f"Show {show_id} does not exist")
+
+        episode.status = 'processing'
+        episode.save()
+
+        # Initialize generator
+        generator = PodcastGenerator()
+
+        # Define output path
+        filename = f"debate_{episode.slug}_{episode.id}.mp3"
+        relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
+        full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+
+        # Generate audio from dialogue
+        generator.generate_multi(
+            dialogue=episode.dialogue,
+            participants_config=episode.participants_config,
+            output_path=full_path
+        )
+
+        # Update episode with audio and show association
+        episode.audio_file.name = relative_path
+        episode.show = show
+        episode.status = 'published'
+        episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
+        episode.file_size = os.path.getsize(full_path)
+        episode.published_at = timezone.now()
+        episode.save()
+
+        # Update show statistics
+        show.episodes_count = show.episodes.filter(status='published').count()
+        show.save()
+
+        return f"Debate audio {episode_id} generated successfully and published to show {show_id}"
+
+    except Exception as e:
+        print(f"Failed to generate debate audio for episode {episode_id}: {e}")
+        if episode:
+            episode.status = 'failed'
+            episode.save()
+        raise
+

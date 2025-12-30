@@ -66,14 +66,16 @@
 
         <!-- 评论列表 -->
         <div class="comments-list">
-          <div v-for="comment in comments" :key="comment.id" class="comment-item mofa-card">
-            <div class="comment-user">
-              <el-avatar :size="40" :src="comment.user.avatar_url" :icon="UserFilled" />
-              <span class="username">{{ comment.user.username }}</span>
-              <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
-            </div>
-            <p class="comment-text">{{ comment.text }}</p>
-          </div>
+          <CommentItem
+            v-for="comment in comments"
+            :key="comment.id"
+            :comment="comment"
+            :episode-id="episode.id"
+            @reply-success="reloadComments"
+            @delete-success="reloadComments"
+          />
+          
+          <el-empty v-if="comments.length === 0" description="暂无评论，快来抢沙发吧" />
         </div>
       </div>
     </div>
@@ -90,6 +92,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoPlay, Star, UserFilled } from '@element-plus/icons-vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
+import CommentItem from '@/components/podcast/CommentItem.vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -120,10 +123,14 @@ const effectiveVisibility = computed(() => {
 onMounted(async () => {
   const { showSlug, episodeSlug } = route.params
   episode.value = await api.podcasts.getEpisode(showSlug, episodeSlug)
+  await reloadComments()
+})
 
+async function reloadComments() {
+  if (!episode.value) return
   const data = await api.interactions.getComments(episode.value.id)
   comments.value = data.results || data
-})
+}
 
 function handlePlay() {
   playerStore.play(episode.value)
@@ -150,10 +157,9 @@ async function handleComment() {
     })
     ElMessage.success('评论成功')
     commentText.value = ''
-
+    
     // 重新加载评论
-    const data = await api.interactions.getComments(episode.value.id)
-    comments.value = data.results || data
+    await reloadComments()
     episode.value.comment_count++
   } finally {
     commenting.value = false
