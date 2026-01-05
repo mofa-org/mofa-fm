@@ -624,6 +624,94 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             'task_id': f"episode_{episode.id}" # 模拟任务ID
         }, status=status.HTTP_202_ACCEPTED)
 
+    @action(detail=False, methods=['post'], url_path='import-github-readme')
+    def import_github_readme(self, request):
+        """从GitHub导入README并创建ScriptSession"""
+        from .services.github_fetcher import GitHubFetcher
+        from django.utils import timezone
+
+        # 验证参数
+        url = request.data.get('url', '').strip()
+        session_title = request.data.get('session_title', '').strip()
+
+        if not url:
+            return Response(
+                {'error': '请输入GitHub仓库地址'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取README内容
+        result = GitHubFetcher.import_github_readme(url)
+
+        if not result['success']:
+            return Response(
+                {'error': result.get('error', '导入失败')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 获取或创建"GitHub FM"节目
+        github_fm_show, created = Show.objects.get_or_create(
+            creator=request.user,
+            title='GitHub FM',
+            defaults={
+                'description': '从GitHub项目自动生成的播客',
+                'visibility': 'public'
+            }
+        )
+
+        # 创建会话标题
+        if not session_title:
+            session_title = f"{result['owner']}/{result['repo']}"
+
+        # 创建ScriptSession
+        session = ScriptSession.objects.create(
+            creator=request.user,
+            show=github_fm_show,
+            title=session_title,
+            status='active'
+        )
+
+        # 创建UploadedReference（GitHub来源）
+        reference = UploadedReference.objects.create(
+            session=session,
+            original_filename=result['path'],
+            file_type='md',
+            file_size=result['size'],
+            extracted_text=result['content'],
+            source_type='github',
+            source_url=url,
+            github_owner=result['owner'],
+            github_repo=result['repo'],
+            github_path=result['path'],
+            github_ref=result['ref']
+        )
+
+        # 添加系统欢迎消息
+        welcome_message = f"""已导入 GitHub 项目: **{result['owner']}/{result['repo']}**
+
+README 已作为参考文件加载（{result['size']} 字符）。
+
+请根据这个 GitHub 项目的 README，生成一期对话式播客脚本。要求：
+- 对话角色：【大牛】和【一帆】两人
+- 内容要点：项目背景、核心功能、技术亮点
+- 语气风格：轻松专业，适合开发者收听
+
+你可以开始提问或直接让我生成脚本！"""
+
+        session.add_message('system', welcome_message)
+
+        # 返回结果
+        serializer = ScriptSessionSerializer(session, context={'request': request})
+
+        return Response({
+            'session_id': session.id,
+            'show_id': github_fm_show.id,
+            'readme_size': result['size'],
+            'github_owner': result['owner'],
+            'github_repo': result['repo'],
+            'session': serializer.data
+        }, status=status.HTTP_201_CREATED)
+
 
 # 热搜榜相关视图
 

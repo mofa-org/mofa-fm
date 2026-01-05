@@ -502,6 +502,25 @@ class UploadedReference(models.Model):
     # 提取的文本内容
     extracted_text = models.TextField('提取的文本', blank=True, help_text='从文件中提取的纯文本内容')
 
+    # GitHub来源追踪字段
+    SOURCE_TYPE_CHOICES = [
+        ('upload', '用户上传'),
+        ('github', 'GitHub导入'),
+    ]
+
+    source_type = models.CharField(
+        '来源类型',
+        max_length=20,
+        choices=SOURCE_TYPE_CHOICES,
+        default='upload',
+        db_index=True
+    )
+    source_url = models.URLField('来源URL', max_length=500, blank=True, null=True)
+    github_owner = models.CharField('GitHub用户名/组织', max_length=255, blank=True, null=True)
+    github_repo = models.CharField('仓库名', max_length=255, blank=True, null=True)
+    github_path = models.CharField('文件路径', max_length=500, blank=True, null=True, default='README.md')
+    github_ref = models.CharField('分支/标签', max_length=100, blank=True, null=True, default='main')
+
     # 元数据
     uploaded_at = models.DateTimeField('上传时间', auto_now_add=True)
 

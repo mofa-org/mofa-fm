@@ -386,7 +386,9 @@ class UploadedReferenceSerializer(serializers.ModelSerializer):
         model = UploadedReference
         fields = [
             'id', 'original_filename', 'file_type', 'file_size',
-            'file_url', 'extracted_text', 'uploaded_at'
+            'file_url', 'extracted_text', 'uploaded_at',
+            'source_type', 'source_url', 'github_owner', 'github_repo',
+            'github_path', 'github_ref'
         ]
         read_only_fields = ['extracted_text', 'uploaded_at']
 
