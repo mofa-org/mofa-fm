@@ -36,6 +36,7 @@ drf-yasg==1.21.7
 # AI功能
 openai>=1.0.0  # Kimi API (兼容OpenAI SDK)
 websockets>=11.0.3  # MiniMax TTS
+tavily-python>=0.3.0  # Tavily Search API
 
 # 文件解析
 PyPDF2>=3.0.0  # PDF解析
