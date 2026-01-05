@@ -445,13 +445,14 @@
 
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import podcastsAPI from '@/api/podcasts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import TrendingPanel from '@/components/creator/TrendingPanel.vue'
 import VoiceConfigDialog from '@/components/creator/VoiceConfigDialog.vue'
 
 const router = useRouter()
+const route = useRoute()
 
 // 状态
 const loading = ref(false)
@@ -1138,10 +1139,18 @@ function formatMessage(content) {
   return text
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadSessions()
   loadMyShows()
   loadGenerationQueue()
+
+  // 检查URL参数，自动加载会话
+  const sessionId = route.query.session
+  const autoLoad = route.query.autoLoad
+
+  if (sessionId && autoLoad === 'true') {
+    await loadSession(parseInt(sessionId))
+  }
 })
 </script>
 

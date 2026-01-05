@@ -64,8 +64,22 @@
             <p class="feature-desc">智能生成播客脚本，提升创作效率</p>
             <div class="feature-action">开始创作 →</div>
           </router-link>
+          <div class="feature-card mofa-card" @click="showGitHubFMDialog = true">
+            <div class="feature-icon">
+              <el-icon :size="32"><Link /></el-icon>
+            </div>
+            <h3 class="feature-title">GitHub FM</h3>
+            <p class="feature-desc">从开源项目生成播客，让代码有声有色</p>
+            <div class="feature-action">导入项目 →</div>
+          </div>
         </div>
       </section>
+
+      <!-- GitHub FM 对话框 -->
+      <GitHubFMDialog
+        v-model="showGitHubFMDialog"
+        @success="handleGitHubFMSuccess"
+      />
 
       <!-- 最新单集 -->
       <section class="section">
@@ -86,17 +100,21 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ChatDotRound, Edit, FolderOpened } from '@element-plus/icons-vue'
+import { ChatDotRound, Edit, FolderOpened, Link } from '@element-plus/icons-vue'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
+import GitHubFMDialog from '@/components/creator/GitHubFMDialog.vue'
 
+const router = useRouter()
 const authStore = useAuthStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
 const stats = ref(null)
 const latestEpisodes = ref([])
+const showGitHubFMDialog = ref(false)
 
 onMounted(async () => {
   // 加载统计数据
@@ -120,6 +138,17 @@ function formatNumber(num) {
     return (num / 10000).toFixed(1) + 'w'
   }
   return num
+}
+
+function handleGitHubFMSuccess(data) {
+  // 跳转到AI脚本工坊，自动加载会话
+  router.push({
+    path: '/creator/ai-studio',
+    query: {
+      session: data.sessionId,
+      autoLoad: 'true'
+    }
+  })
 }
 </script>
 

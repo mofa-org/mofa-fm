@@ -161,5 +161,10 @@ export default {
   // 获取我的辩论历史
   getMyDebates() {
     return client.get('/podcasts/debates/')
+  },
+
+  // GitHub FM - 导入README
+  importGithubReadme(data) {
+    return client.post('/podcasts/script-sessions/import-github-readme/', data)
   }
 }
