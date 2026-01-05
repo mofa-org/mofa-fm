@@ -1,0 +1,19 @@
+[Unit]
+Description=MoFA-FM Test Celery Worker
+After=network.target redis.service
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/root/mofa-fm-test/backend
+Environment="PATH=/root/mofa-fm-test/backend/venv/bin"
+ExecStart=/root/mofa-fm-test/backend/venv/bin/celery -A config worker --loglevel=info --logfile=/var/log/mofa-fm-test/celery-worker.log --pidfile=/run/celery-worker-test.pid --detach
+ExecStop=/bin/kill -s TERM $MAINPID
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

@@ -69,3 +69,7 @@ htmlcov/
 *.bak
 *.tmp
 .sass-cache/
+
+# Backups & Local configs
+.backups/
+.claude/
