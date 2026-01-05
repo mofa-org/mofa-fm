@@ -75,12 +75,24 @@ class AITools:
 
             client = TavilyClient(api_key=api_key)
 
-            # 执行搜索
-            response = client.search(
-                query=query,
-                max_results=max_results,
-                search_depth="basic"  # 可选: "basic" 或 "advanced"
-            )
+            # 执行搜索，设置20秒超时
+            import signal
+
+            def timeout_handler(signum, frame):
+                raise TimeoutError("搜索超时")
+
+            # 设置超时信号
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(20)  # 20秒超时
+
+            try:
+                response = client.search(
+                    query=query,
+                    max_results=max_results,
+                    search_depth="basic"  # 可选: "basic" 或 "advanced"
+                )
+            finally:
+                signal.alarm(0)  # 取消超时
 
             # 格式化结果
             results = []
@@ -96,5 +108,7 @@ class AITools:
 
             return f"搜索 '{query}' 的结果：\n\n" + "\n\n".join(results)
 
+        except TimeoutError:
+            return f"搜索 '{query}' 超时，请稍后重试"
         except Exception as e:
             return f"搜索失败：{str(e)}"
