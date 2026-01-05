@@ -282,9 +282,6 @@ function formatDate(date) {
   min-width: 100px;
 }
 
-  min-width: 100px;
-}
-
 .value-row {
   display: flex;
   align-items: center;

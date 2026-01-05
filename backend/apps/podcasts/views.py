@@ -22,6 +22,7 @@ from .serializers import (
     UploadedReferenceSerializer
 )
 from .permissions import IsCreatorOrReadOnly, IsShowOwner
+from apps.users.permissions import IsEmailVerified
 
 User = get_user_model()
 

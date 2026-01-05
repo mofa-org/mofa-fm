@@ -169,7 +169,6 @@ import {
   ArrowRightBold,
   ArrowUp,
   ArrowDown,
-  ArrowDown,
   Document,
   Microphone,
   Mute,
