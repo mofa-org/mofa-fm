@@ -28,6 +28,7 @@ Pillow==10.2.0
 # 工具
 python-slugify==8.0.4
 python-decouple==3.8
+requests>=2.31.0  # GitHub API
 
 # API 文档
 drf-yasg==1.21.7
