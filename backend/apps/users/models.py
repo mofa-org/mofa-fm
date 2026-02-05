@@ -17,6 +17,9 @@ class User(AbstractUser):
     is_creator = models.BooleanField('创作者', default=False)
     is_verified = models.BooleanField('认证标记', default=False, help_text='官方认证')
 
+    # 邮箱验证
+    email_verified = models.BooleanField('邮箱已验证', default=False)
+
     # 统计字段（反范式）
     shows_count = models.IntegerField('节目数', default=0)
     total_plays = models.IntegerField('总播放量', default=0)

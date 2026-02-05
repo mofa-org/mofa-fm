@@ -107,24 +107,21 @@ def update_profile(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def become_creator(request):
-    """申请成为创作者 - 生成数学题"""
+    """申请成为创作者 - 直接通过"""
     user = request.user
 
     if user.is_creator:
         return Response({'error': '您已经是创作者了'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # 获取或创建验证记录
-    verification, created = CreatorVerification.objects.get_or_create(user=user)
+    # 直接设置为创作者
+    user.is_creator = True
+    user.save()
 
-    if created or not verification.question:
-        # 生成新的数学题
-        question, answer = generate_math_question()
-        verification.question = question
-        verification.answer = answer
-        verification.save()
-
-    serializer = CreatorVerificationSerializer(verification)
-    return Response(serializer.data)
+    return Response({
+        'success': True,
+        'message': '恭喜！您已成为创作者',
+        'user': UserSerializer(user).data
+    })
 
 
 @api_view(['POST'])
@@ -144,12 +141,7 @@ def verify_creator(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 检查尝试次数
-    if verification.attempts >= 3:
-        return Response(
-            {'error': '尝试次数过多，请稍后再试'},
-            status=status.HTTP_429_TOO_MANY_REQUESTS
-        )
+    # 尝试次数无限制
 
     serializer = VerifyAnswerSerializer(data=request.data)
     if not serializer.is_valid():

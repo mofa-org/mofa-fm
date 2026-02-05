@@ -7,20 +7,9 @@
         <p class="card-subtitle">完成简单验证即可开始创作播客</p>
 
         <div v-if="!verified" class="verification-section">
-          <div class="math-question">
-            <label class="question-label">请回答以下问题：</label>
-            <div class="question-text">{{ question }}</div>
-            <el-input
-              v-model="answer"
-              type="number"
-              size="large"
-              placeholder="输入答案"
-              @keyup.enter="handleVerify"
-            />
-            <p v-if="attemptsLeft < 3" class="hint-text">
-              剩余尝试次数：{{ attemptsLeft }}
-            </p>
-          </div>
+          <p style="text-align: center; color: var(--color-text-secondary); margin-bottom: var(--spacing-lg);">
+            点击下方按钮即可成为创作者
+          </p>
 
           <el-button
             type="primary"
@@ -30,7 +19,7 @@
             :loading="loading"
             @click="handleVerify"
           >
-            提交答案
+            确定
           </el-button>
         </div>
 
@@ -59,54 +48,34 @@ import { SuccessFilled } from '@element-plus/icons-vue'
 const router = useRouter()
 const authStore = useAuthStore()
 
-const question = ref('')
-const answer = ref('')
-const attemptsLeft = ref(3)
 const verified = ref(false)
 const loading = ref(false)
 
-onMounted(async () => {
+onMounted(() => {
   if (authStore.isCreator) {
     verified.value = true
-    return
-  }
-
-  try {
-    const data = await api.auth.becomeCreator()
-    question.value = data.question
-    attemptsLeft.value = 3 - data.attempts
-  } catch (error) {
-    // 如果用户已经是创作者，自动设置为已验证（不打印错误日志）
-    if (error.response?.status === 400 && error.response?.data?.error?.includes('已经是创作者')) {
-      verified.value = true
-    } else {
-      // 其他错误才打印日志
-      console.error('获取验证题目失败', error)
-    }
   }
 })
 
 async function handleVerify() {
-  if (!answer.value) {
-    ElMessage.warning('请输入答案')
-    return
-  }
-
   loading.value = true
   try {
-    const data = await api.auth.verifyCreator({ answer: parseInt(answer.value) })
+    const data = await api.auth.becomeCreator()
 
     if (data.success) {
       verified.value = true
       authStore.user.is_creator = true
-      ElMessage.success('验证成功！')
+      ElMessage.success('已成为创作者！')
     } else {
-      ElMessage.error(data.message)
-      attemptsLeft.value = data.attempts_left
-      answer.value = ''
+      ElMessage.error(data.message || '操作失败')
     }
   } catch (error) {
-    // 错误已处理
+    // 如果用户已经是创作者，自动设置为已验证
+    if (error.response?.status === 400 && error.response?.data?.error?.includes('已经是创作者')) {
+      verified.value = true
+    } else {
+      ElMessage.error('操作失败，请稍后重试')
+    }
   } finally {
     loading.value = false
   }
