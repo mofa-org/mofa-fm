@@ -84,6 +84,11 @@ export const usePlayerStore = defineStore('player', () => {
     })
   }
 
+  // 检测是否在App内
+  const isInApp = () => {
+    return navigator.userAgent.includes('MofaFMApp') || window.AndroidBridge !== undefined
+  }
+
   // 播放单集
   function play(episode, episodeList = null) {
     initAudio()

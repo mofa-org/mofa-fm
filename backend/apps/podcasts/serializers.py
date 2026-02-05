@@ -40,10 +40,7 @@ class ShowListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        request = self.context.get('request')
         if obj.cover:
-            if request:
-                return request.build_absolute_uri(obj.cover.url)
             return obj.cover.url
         return None
 
@@ -69,10 +66,7 @@ class ShowDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        request = self.context.get('request')
         if obj.cover:
-            if request:
-                return request.build_absolute_uri(obj.cover.url)
             return obj.cover.url
         return None
 
@@ -195,21 +189,14 @@ class EpisodeListSerializer(serializers.ModelSerializer):
         ]
 
     def get_audio_url(self, obj):
-        request = self.context.get('request')
         if obj.audio_file:
-            if request:
-                return request.build_absolute_uri(obj.audio_file.url)
             return obj.audio_file.url
         return None
 
     def get_cover_url(self, obj):
-        request = self.context.get('request')
         if obj.cover:
-            if request:
-                return request.build_absolute_uri(obj.cover.url)
+            return obj.cover.url
         elif obj.show and obj.show.cover:
-            if request:
-                return request.build_absolute_uri(obj.show.cover.url)
             return obj.show.cover.url
         return None
 
@@ -240,21 +227,14 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_audio_url(self, obj):
-        request = self.context.get('request')
         if obj.audio_file:
-            if request:
-                return request.build_absolute_uri(obj.audio_file.url)
             return obj.audio_file.url
         return None
 
     def get_cover_url(self, obj):
-        request = self.context.get('request')
         if obj.cover:
-            if request:
-                return request.build_absolute_uri(obj.cover.url)
+            return obj.cover.url
         elif obj.show and obj.show.cover:
-            if request:
-                return request.build_absolute_uri(obj.show.cover.url)
             return obj.show.cover.url
         return None
 
@@ -391,9 +371,8 @@ class UploadedReferenceSerializer(serializers.ModelSerializer):
         read_only_fields = ['extracted_text', 'uploaded_at']
 
     def get_file_url(self, obj):
-        request = self.context.get('request')
-        if obj.file and request:
-            return request.build_absolute_uri(obj.file.url)
+        if obj.file:
+            return obj.file.url
         return None
 
 

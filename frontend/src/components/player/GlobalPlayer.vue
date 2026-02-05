@@ -65,6 +65,16 @@
 
       <!-- 右侧：倍速控制 -->
       <div class="player-options">
+        <!-- 下载按钮 -->
+        <button
+          v-if="currentEpisode.audio_url"
+          class="player-btn player-btn-icon"
+          @click="handleDownload"
+          title="下载音频"
+        >
+          <el-icon><Download /></el-icon>
+        </button>
+
         <!-- 查看脚本按钮 -->
         <button
           v-if="currentEpisode.script"
@@ -112,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
@@ -125,21 +135,48 @@ import {
   ArrowRightBold,
   ArrowUp,
   ArrowDown,
-  Document
+  Document,
+  Download
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
 
+
 const sliderValue = ref(0)
 const isCollapsed = ref(false)
 const showScriptDialog = ref(false)
+const isInApp = ref(false)
+
+const currentEpisode = computed(() => playerStore.currentEpisode)
 
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
 }
 
-const currentEpisode = computed(() => playerStore.currentEpisode)
+function handleDownload() {
+  const episode = currentEpisode.value
+  if (!episode?.audio_url) return
+
+  if (isInApp.value && window.AndroidBridge) {
+    // App内：调用原生下载，App处理一切
+    window.AndroidBridge.downloadEpisode(
+      episode.id,
+      episode.audio_url,
+      episode.title,
+      episode.show?.title || '未知节目'
+    )
+  } else {
+    // 浏览器：直接下载
+    const link = document.createElement('a')
+    link.href = episode.audio_url
+    link.download = `${episode.title}.mp3`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+}
 const isPlaying = computed(() => playerStore.isPlaying)
 const currentTime = computed(() => playerStore.currentTime)
 const duration = computed(() => playerStore.duration)
@@ -152,6 +189,11 @@ const hasNext = computed(() => playerStore.hasNext)
 const isCreator = computed(() => {
   if (!authStore.isAuthenticated || !currentEpisode.value) return false
   return currentEpisode.value.show?.creator?.id === authStore.user?.id
+})
+
+// 检测是否在App内
+onMounted(() => {
+  isInApp.value = navigator.userAgent.includes('MofaFMApp') || window.AndroidBridge !== undefined
 })
 
 // 同步进度条
@@ -395,6 +437,18 @@ function handleScriptUpdated(updatedEpisode) {
   width: 36px;
   height: 36px;
   color: var(--color-text-primary);
+}
+
+/* 下载按钮状态 */
+.player-btn-icon.is-downloaded {
+  color: var(--color-success, #67c23a);
+  border-color: var(--color-success, #67c23a);
+}
+
+.player-btn-icon.is-downloading {
+  color: var(--color-primary);
+  opacity: 0.7;
+  cursor: wait;
 }
 
 /* 速度按钮 */
