@@ -93,6 +93,10 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresCreator: true }
     },
     {
+      path: '/creator/script-studio',
+      redirect: '/creator/ai-studio'
+    },
+    {
       path: '/debates',
       name: 'debate-list',
       component: () => import('@/views/DebateList.vue'),

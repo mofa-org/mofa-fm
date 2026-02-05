@@ -56,7 +56,7 @@
             <p class="feature-desc">让AI参与激烈辩论，生成精彩对话内容</p>
             <div class="feature-action">立即体验 →</div>
           </router-link>
-          <router-link to="/creator/script-studio" class="feature-card mofa-card">
+          <router-link to="/creator/ai-studio" class="feature-card mofa-card">
             <div class="feature-icon">
               <el-icon :size="32"><Edit /></el-icon>
             </div>

@@ -4,6 +4,7 @@ AI Tools for function calling
 from typing import List, Dict, Any
 from django.conf import settings
 from tavily import TavilyClient
+import threading
 
 
 class AITools:
@@ -75,20 +76,44 @@ class AITools:
 
             client = TavilyClient(api_key=api_key)
 
-            # 执行搜索
-            response = client.search(
-                query=query,
-                max_results=max_results,
-                search_depth="basic"  # 可选: "basic" 或 "advanced"
-            )
+            # 使用线程实现超时（signal不能在多线程中使用）
+            result = {}
+            error = {}
+
+            def do_search():
+                try:
+                    response = client.search(
+                        query=query,
+                        max_results=max_results,
+                        search_depth="basic"  # 可选: "basic" 或 "advanced"
+                    )
+                    result['response'] = response
+                except Exception as e:
+                    error['exception'] = e
+
+            # 启动搜索线程
+            search_thread = threading.Thread(target=do_search)
+            search_thread.start()
+            search_thread.join(timeout=20)  # 20秒超时
+
+            # 检查是否超时
+            if search_thread.is_alive():
+                return f"搜索 '{query}' 超时，请稍后重试"
+
+            # 检查是否有错误
+            if 'exception' in error:
+                raise error['exception']
+
+            # 获取结果
+            response = result.get('response', {})
 
             # 格式化结果
             results = []
-            for idx, result in enumerate(response.get('results', []), 1):
+            for idx, item in enumerate(response.get('results', []), 1):
                 results.append(
-                    f"{idx}. {result.get('title', 'N/A')}\n"
-                    f"   来源: {result.get('url', 'N/A')}\n"
-                    f"   摘要: {result.get('content', 'N/A')}"
+                    f"{idx}. {item.get('title', 'N/A')}\n"
+                    f"   来源: {item.get('url', 'N/A')}\n"
+                    f"   摘要: {item.get('content', 'N/A')}"
                 )
 
             if not results:
