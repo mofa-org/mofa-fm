@@ -42,6 +42,21 @@
       </div>
     </div>
 
+    <!-- App内下载按钮 -->
+    <div v-if="isInApp && episode.audio_url" class="episode-actions">
+      <button
+        class="mofa-btn mofa-btn-sm"
+        :class="{ 'is-downloaded': downloadStatus === 'downloaded' }"
+        :disabled="downloadStatus === 'downloading'"
+        @click.stop="handleDownload"
+      >
+        <el-icon v-if="downloadStatus === 'none'"><Download /></el-icon>
+        <el-icon v-else-if="downloadStatus === 'downloading'" class="is-loading"><Loading /></el-icon>
+        <el-icon v-else><CircleCheck /></el-icon>
+        {{ downloadBtnText }}
+      </button>
+    </div>
+
     <!-- 创作者操作按钮 -->
     <div v-if="showCreatorActions && isCreator && episode.show" class="episode-actions">
       <router-link
@@ -58,10 +73,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
-import { VideoPlay, Lock, View, User, Share } from '@element-plus/icons-vue'
+import { VideoPlay, Lock, View, User, Share, Download, Loading, CircleCheck } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -89,6 +104,24 @@ const emit = defineEmits(['deleted'])
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
+
+// 下载状态
+const downloadStatus = ref('none') // none | downloading | downloaded
+
+// 检测是否在App内
+const isInApp = computed(() => {
+  return navigator.userAgent.includes('MofaFMApp') || window.AndroidBridge !== undefined
+})
+
+// 下载按钮文字
+const downloadBtnText = computed(() => {
+  const texts = {
+    none: '下载',
+    downloading: '下载中',
+    downloaded: '已下载'
+  }
+  return texts[downloadStatus.value]
+})
 
 // 计算实际生效的可见性
 const effectiveVisibility = computed(() => {
@@ -166,6 +199,66 @@ function formatDuration(seconds) {
 function formatDate(date) {
   return dayjs(date).format('YYYY-MM-DD')
 }
+
+// 处理下载
+async function handleDownload() {
+  if (!isInApp.value || !props.episode.audio_url) return
+
+  if (downloadStatus.value === 'downloaded') {
+    ElMessage.info('该单集已下载')
+    return
+  }
+
+  if (downloadStatus.value === 'downloading') return
+
+  downloadStatus.value = 'downloading'
+
+  try {
+    if (window.AndroidBridge?.downloadEpisode) {
+      window.AndroidBridge.downloadEpisode(
+        props.episode.id.toString(),
+        props.episode.audio_url,
+        props.episode.title,
+        props.episode.show?.title || ''
+      )
+      ElMessage.success('开始下载...')
+    } else {
+      console.warn('AndroidBridge not available')
+      downloadStatus.value = 'none'
+    }
+  } catch (error) {
+    console.error('下载失败:', error)
+    downloadStatus.value = 'none'
+    ElMessage.error('下载失败')
+  }
+}
+
+// 检查下载状态
+async function checkDownloadStatus() {
+  if (!isInApp.value || !props.episode) {
+    downloadStatus.value = 'none'
+    return
+  }
+
+  try {
+    if (window.AndroidBridge?.getDownloadStatus) {
+      const status = await window.AndroidBridge.getDownloadStatus(props.episode.id.toString())
+      downloadStatus.value = status
+    }
+  } catch (e) {
+    downloadStatus.value = 'none'
+  }
+}
+
+// 组件挂载时检查状态
+checkDownloadStatus()
+
+// 监听下载完成回调
+watch(() => window.downloadCompleteEpisodeId, (newId) => {
+  if (newId === props.episode.id.toString()) {
+    downloadStatus.value = 'downloaded'
+  }
+})
 </script>
 
 <style scoped>
@@ -299,6 +392,21 @@ function formatDate(date) {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
+}
+
+.mofa-btn.is-downloaded {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #764ba2;
+}
+
+.mofa-btn .is-loading {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* 响应式设计 */

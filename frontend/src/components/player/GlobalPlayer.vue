@@ -65,6 +65,20 @@
 
       <!-- 右侧：倍速控制和队列 -->
       <div class="player-options">
+        <!-- App内下载按钮 -->
+        <button
+          v-if="isInApp && currentEpisode?.audio_url"
+          class="player-btn player-btn-icon"
+          :class="{ 'is-downloaded': downloadStatus === 'downloaded', 'is-downloading': downloadStatus === 'downloading' }"
+          :title="downloadBtnTitle"
+          @click="handleOfflineDownload"
+          :disabled="downloadStatus === 'downloading'"
+        >
+          <el-icon v-if="downloadStatus === 'none'"><Download /></el-icon>
+          <el-icon v-else-if="downloadStatus === 'downloading'" class="is-loading"><Loading /></el-icon>
+          <el-icon v-else><CircleCheck /></el-icon>
+        </button>
+
         <!-- 播放队列 -->
         <el-popover
           placement="top-end"
@@ -160,6 +174,7 @@ import { ref, computed, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
+import { ElMessage } from 'element-plus'
 import {
   VideoPlay,
   VideoPause,
@@ -172,7 +187,10 @@ import {
   Document,
   Microphone,
   Mute,
-  List
+  List,
+  Download,
+  Loading,
+  CircleCheck
 } from '@element-plus/icons-vue'
 import PlayQueue from '@/components/player/PlayQueue.vue'
 
@@ -182,6 +200,22 @@ const authStore = useAuthStore()
 const sliderValue = ref(0)
 const isCollapsed = ref(false)
 const showScriptDialog = ref(false)
+const downloadStatus = ref('none') // none | downloading | downloaded
+
+// 检测是否在App内
+const isInApp = computed(() => {
+  return navigator.userAgent.includes('MofaFMApp') || window.AndroidBridge !== undefined
+})
+
+// 下载按钮提示
+const downloadBtnTitle = computed(() => {
+  const titles = {
+    none: '下载到离线',
+    downloading: '下载中...',
+    downloaded: '已下载（点击播放离线版本）'
+  }
+  return titles[downloadStatus.value]
+})
 
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value
@@ -228,6 +262,80 @@ function handleScriptUpdated(updatedEpisode) {
     playerStore.currentEpisode.script = updatedEpisode.script
   }
 }
+
+// 处理离线下载
+async function handleOfflineDownload() {
+  if (!isInApp.value || !currentEpisode.value?.audio_url) return
+
+  if (downloadStatus.value === 'downloaded') {
+    // 已下载，通知App播放离线版本
+    if (window.AndroidBridge?.playOffline) {
+      window.AndroidBridge.playOffline(currentEpisode.value.id.toString())
+    }
+    return
+  }
+
+  if (downloadStatus.value === 'downloading') return
+
+  // 开始下载
+  downloadStatus.value = 'downloading'
+
+  try {
+    if (window.AndroidBridge?.downloadEpisode) {
+      window.AndroidBridge.downloadEpisode(
+        currentEpisode.value.id.toString(),
+        currentEpisode.value.audio_url,
+        currentEpisode.value.title,
+        currentEpisode.value.show?.title || ''
+      )
+      ElMessage.success('开始下载...')
+    } else {
+      console.warn('AndroidBridge not available')
+      downloadStatus.value = 'none'
+    }
+  } catch (error) {
+    console.error('下载失败:', error)
+    downloadStatus.value = 'none'
+    ElMessage.error('下载失败')
+  }
+}
+
+// 监听下载状态变化（App回调）
+window.onDownloadComplete = (episodeId) => {
+  if (episodeId === currentEpisode.value?.id.toString()) {
+    downloadStatus.value = 'downloaded'
+    ElMessage.success('下载完成')
+  }
+}
+
+window.onDownloadFailed = (episodeId) => {
+  if (episodeId === currentEpisode.value?.id.toString()) {
+    downloadStatus.value = 'none'
+    ElMessage.error('下载失败')
+  }
+}
+
+// 检查当前节目的下载状态
+async function checkDownloadStatus() {
+  if (!isInApp.value || !currentEpisode.value) {
+    downloadStatus.value = 'none'
+    return
+  }
+
+  try {
+    if (window.AndroidBridge?.getDownloadStatus) {
+      const status = await window.AndroidBridge.getDownloadStatus(currentEpisode.value.id.toString())
+      downloadStatus.value = status // 'none' | 'downloading' | 'downloaded'
+    }
+  } catch (e) {
+    downloadStatus.value = 'none'
+  }
+}
+
+// 切换节目时检查下载状态
+watch(() => currentEpisode.value?.id, () => {
+  checkDownloadStatus()
+}, { immediate: true })
 </script>
 
 <style scoped>
@@ -674,5 +782,26 @@ function handleScriptUpdated(updatedEpisode) {
   justify-content: center;
   padding: 10px 0;
   height: 120px;
+}
+
+/* 下载按钮样式 */
+.player-btn.is-downloaded {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #764ba2;
+}
+
+.player-btn.is-downloading {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.player-btn .is-loading {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -28,7 +28,7 @@
         <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-warning">
           AI 脚本创作
         </router-link>
-        <router-link to="/creator/debate/create" class="mofa-btn mofa-btn-success">
+        <router-link to="/debate/create" class="mofa-btn mofa-btn-success">
           <el-icon><ChatDotRound /></el-icon>
           AI 辩论 / 会议
         </router-link>

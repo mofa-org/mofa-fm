@@ -76,7 +76,7 @@ class ShowDetailView(generics.RetrieveAPIView):
 class ShowCreateView(generics.CreateAPIView):
     """创建播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsEmailVerified, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -85,7 +85,7 @@ class ShowCreateView(generics.CreateAPIView):
 class ShowUpdateView(generics.UpdateAPIView):
     """更新播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
@@ -94,7 +94,7 @@ class ShowUpdateView(generics.UpdateAPIView):
 
 class ShowDeleteView(generics.DestroyAPIView):
     """删除播客节目"""
-    permission_classes = [IsAuthenticated, IsEmailVerified, IsShowOwner]
+    permission_classes = [IsAuthenticated, IsShowOwner]
     lookup_field = 'slug'
 
     def get_queryset(self):
@@ -142,7 +142,7 @@ class EpisodeDetailView(generics.RetrieveAPIView):
 class EpisodeCreateView(generics.CreateAPIView):
     """上传单集"""
     serializer_class = EpisodeCreateSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
 
 class EpisodeUpdateView(generics.UpdateAPIView):
@@ -262,7 +262,7 @@ def generation_queue(request):
 class GenerateEpisodeView(generics.GenericAPIView):
     """生成播客单集"""
     serializer_class = PodcastGenerationSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_podcast_task

@@ -98,7 +98,8 @@ async function handleVerify() {
 
     if (data.success) {
       verified.value = true
-      authStore.user.is_creator = true
+      // 刷新用户信息以确保 is_creator 状态正确
+      await authStore.fetchCurrentUser()
       ElMessage.success('验证成功！')
     } else {
       ElMessage.error(data.message)
