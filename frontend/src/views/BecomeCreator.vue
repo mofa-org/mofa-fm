@@ -3,12 +3,12 @@
     <div class="container">
       <div class="creator-card mofa-card">
         <img src="/logo.png" alt="MoFA FM" class="card-logo" />
-        <h1 class="card-title">成为创作者</h1>
-        <p class="card-subtitle">完成简单验证即可开始创作播客</p>
+        <h1 class="card-title">开通工作台</h1>
+        <p class="card-subtitle">完成简单验证即可开始创作 AI 音频</p>
 
         <div v-if="!verified" class="verification-section">
           <p style="text-align: center; color: var(--color-text-secondary); margin-bottom: var(--spacing-lg);">
-            点击下方按钮即可成为创作者
+            点击下方按钮即可开通工作台
           </p>
 
           <el-button
@@ -27,9 +27,9 @@
           <el-icon class="success-icon" :size="80" color="#6dcad0">
             <SuccessFilled />
           </el-icon>
-          <h2 class="success-title">恭喜！您已成为创作者</h2>
+          <h2 class="success-title">恭喜！您已开通工作台</h2>
           <el-button type="primary" size="large" @click="goToCreatorDashboard">
-            前往创作中心
+            前往音频工作台
           </el-button>
         </div>
       </div>
@@ -65,7 +65,7 @@ async function handleVerify() {
     if (data.success) {
       verified.value = true
       authStore.user.is_creator = true
-      ElMessage.success('已成为创作者！')
+      ElMessage.success('已开通工作台！')
     } else {
       ElMessage.error(data.message || '操作失败')
     }

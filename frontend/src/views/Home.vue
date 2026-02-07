@@ -5,7 +5,7 @@
       <section class="hero">
         <img src="/logo.png" alt="MoFA FM" class="hero-logo float-animation" />
         <h1 class="hero-title">欢迎来到 MoFA FM</h1>
-        <p class="hero-subtitle">发现、收听、创作精彩播客</p>
+        <p class="hero-subtitle">人人可创作，人人可收听</p>
         <div class="hero-actions">
           <router-link v-if="!isAuthenticated" to="/register" class="mofa-btn mofa-btn-primary">
             立即开始
@@ -61,7 +61,7 @@
               <el-icon :size="32"><Edit /></el-icon>
             </div>
             <h3 class="feature-title">AI 脚本创作</h3>
-            <p class="feature-desc">智能生成播客脚本，提升创作效率</p>
+            <p class="feature-desc">智能生成 AI 音频脚本，提升创作效率</p>
             <div class="feature-action">开始创作 →</div>
           </router-link>
         </div>

@@ -75,6 +75,7 @@ def generate_podcast_task(episode_id, script_content):
     from pydub import AudioSegment
     import os
     from django.conf import settings
+    from .services.cover_ai import generate_episode_cover
     
     episode = None # Initialize episode to None for error handling
     try:
@@ -109,6 +110,13 @@ def generate_podcast_task(episode_id, script_content):
         episode.file_size = os.path.getsize(full_path)
         episode.published_at = timezone.now()
         episode.save()
+
+        # Try generating AI cover after audio is ready.
+        # Failure should not block publishing.
+        try:
+            generate_episode_cover(episode)
+        except Exception as cover_exc:
+            print(f"Failed to generate cover for episode {episode_id}: {cover_exc}")
 
         # 更新节目统计
         show = episode.show
@@ -282,4 +290,3 @@ def generate_debate_audio_task(episode_id, show_id):
             episode.status = 'failed'
             episode.save()
         raise
-

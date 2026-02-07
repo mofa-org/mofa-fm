@@ -7,10 +7,10 @@
                 <div class="ai-hint">
                     <div>
                         <h2>AI 来帮忙？</h2>
-                        <p>使用 AI 脚本创作中心生成脚本并一键提交播客任务。</p>
+                        <p>使用 AI 脚本工作台生成脚本并一键提交音频任务。</p>
                     </div>
                     <el-button type="primary" plain @click="goToAIStudio">
-                        前往 AI 脚本创作中心
+                        前往 AI 脚本工作台
                     </el-button>
                 </div>
 

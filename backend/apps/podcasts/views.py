@@ -17,7 +17,7 @@ from .serializers import (
     CategorySerializer, TagSerializer,
     ShowListSerializer, ShowDetailSerializer, ShowCreateSerializer,
     EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer,
-    PodcastGenerationSerializer,
+    PodcastGenerationSerializer, RSSPodcastGenerationSerializer,
     ScriptSessionSerializer, ScriptSessionCreateSerializer, ScriptChatSerializer,
     UploadedReferenceSerializer
 )
@@ -287,6 +287,64 @@ class GenerateEpisodeView(generics.GenericAPIView):
             {
                 "message": "Podcast generation started",
                 "episode_id": episode.id
+            },
+            status=status.HTTP_202_ACCEPTED
+        )
+
+
+class GenerateEpisodeFromRSSView(generics.GenericAPIView):
+    """从 RSS 源生成播客单集"""
+    serializer_class = RSSPodcastGenerationSerializer
+    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+
+    def post(self, request, *args, **kwargs):
+        from .tasks import generate_podcast_task
+        from .services.rss_ingest import generate_script_from_rss
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        rss_result = generate_script_from_rss(
+            rss_url=data['rss_url'],
+            max_items=data.get('max_items', 8),
+        )
+        script = rss_result['script']
+        feed_title = rss_result['feed_title']
+        items = rss_result['items']
+
+        if data.get('dry_run', False):
+            return Response(
+                {
+                    "message": "RSS parsed and script generated",
+                    "feed_title": feed_title,
+                    "item_count": len(items),
+                    "items": items,
+                    "script": script,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        title = data.get('title') or f"{feed_title} 快报"
+        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+
+        episode = Episode.objects.create(
+            show=show,
+            title=title,
+            description=f"AI Generated Podcast from RSS: {data['rss_url']}",
+            status='processing',
+            audio_file=placeholder_file
+        )
+
+        generate_podcast_task.delay(episode.id, script)
+
+        return Response(
+            {
+                "message": "RSS podcast generation started",
+                "episode_id": episode.id,
+                "feed_title": feed_title,
+                "item_count": len(items),
             },
             status=status.HTTP_202_ACCEPTED
         )

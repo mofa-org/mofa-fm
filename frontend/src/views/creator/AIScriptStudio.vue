@@ -42,6 +42,43 @@
           </div>
         </div>
 
+        <div class="rss-section mofa-card">
+          <div class="section-header">
+            <h2>RSS 快速生成</h2>
+          </div>
+          <div class="rss-form">
+            <div class="form-group">
+              <label>RSS 地址</label>
+              <input v-model="rssUrl" type="text" class="form-input" placeholder="https://news.ycombinator.com/rss" />
+            </div>
+            <div class="form-group">
+              <label>关联节目</label>
+              <select v-model="rssShowId" class="form-select">
+                <option :value="null">请选择节目</option>
+                <option v-for="show in myShows" :key="show.id" :value="show.id">{{ show.title }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>标题（可选）</label>
+              <input v-model="rssTitle" type="text" class="form-input" placeholder="不填则自动命名" />
+            </div>
+            <div class="form-group">
+              <label>条目数</label>
+              <input v-model.number="rssMaxItems" type="number" min="1" max="20" class="form-input" />
+            </div>
+          </div>
+          <p v-if="rssError" class="error-message">{{ rssError }}</p>
+          <div class="rss-actions">
+            <button class="mofa-btn" :disabled="rssSubmitting" @click="previewRSSScript">
+              {{ rssSubmitting ? '处理中...' : '预览脚本' }}
+            </button>
+            <button class="mofa-btn mofa-btn-success" :disabled="rssSubmitting" @click="generateFromRSS">
+              {{ rssSubmitting ? '提交中...' : '生成播客' }}
+            </button>
+          </div>
+          <pre v-if="rssScriptPreview" class="script-text rss-preview">{{ rssScriptPreview }}</pre>
+        </div>
+
         <div class="generation-section mofa-card">
           <div class="section-header">
             <h2>生成记录</h2>
@@ -516,6 +553,15 @@ const newSessionShowId = ref(null)
 const showVersionDialog = ref(false)
 const viewingVersion = ref(null)
 
+// RSS 快速生成
+const rssUrl = ref('https://news.ycombinator.com/rss')
+const rssShowId = ref(null)
+const rssTitle = ref('')
+const rssMaxItems = ref(2)
+const rssSubmitting = ref(false)
+const rssError = ref('')
+const rssScriptPreview = ref('')
+
 // 加载会话列表
 async function loadSessions() {
   loading.value = true
@@ -554,13 +600,63 @@ async function loadGenerationQueue() {
   }
 }
 
-// 加载我的节目
+// 加载我的音频
 async function loadMyShows() {
   try {
     const data = await podcastsAPI.getMyShows()
     myShows.value = Array.isArray(data) ? data : (data.results || [])
+    if (!rssShowId.value && myShows.value.length > 0) {
+      rssShowId.value = myShows.value[0].id
+    }
   } catch (error) {
     console.error('加载节目失败:', error)
+  }
+}
+
+async function previewRSSScript() {
+  if (!rssUrl.value.trim() || !rssShowId.value) {
+    rssError.value = '请填写 RSS 地址并选择节目'
+    return
+  }
+  rssSubmitting.value = true
+  rssError.value = ''
+  try {
+    const data = await podcastsAPI.generateEpisodeFromRSS({
+      show_id: Number(rssShowId.value),
+      rss_url: rssUrl.value.trim(),
+      max_items: Number(rssMaxItems.value) || 2,
+      dry_run: true
+    })
+    rssScriptPreview.value = data.script || ''
+    ElMessage.success(`已解析 ${data.item_count || 0} 条并生成脚本`)
+  } catch (error) {
+    rssError.value = error.response?.data?.error || error.message || '预览失败'
+  } finally {
+    rssSubmitting.value = false
+  }
+}
+
+async function generateFromRSS() {
+  if (!rssUrl.value.trim() || !rssShowId.value) {
+    rssError.value = '请填写 RSS 地址并选择节目'
+    return
+  }
+  rssSubmitting.value = true
+  rssError.value = ''
+  try {
+    await podcastsAPI.generateEpisodeFromRSS({
+      show_id: Number(rssShowId.value),
+      rss_url: rssUrl.value.trim(),
+      title: rssTitle.value.trim() || undefined,
+      max_items: Number(rssMaxItems.value) || 2,
+      dry_run: false
+    })
+    ElMessage.success('RSS 生成任务已提交')
+    await loadGenerationQueue()
+  } catch (error) {
+    rssError.value = error.response?.data?.error || error.message || '提交失败'
+  } finally {
+    rssSubmitting.value = false
   }
 }
 
@@ -1925,6 +2021,27 @@ onMounted(() => {
   padding: var(--spacing-xl);
 }
 
+.rss-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.rss-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.rss-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.rss-preview {
+  margin-top: var(--spacing-md);
+  max-height: 280px;
+  overflow: auto;
+}
+
 .code-block {
   background: var(--color-bg-secondary);
   padding: var(--spacing-sm);
@@ -1967,6 +2084,10 @@ onMounted(() => {
   .workspace-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .rss-form {
+    grid-template-columns: 1fr;
   }
 }
 </style>

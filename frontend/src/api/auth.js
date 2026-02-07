@@ -24,7 +24,7 @@ export default {
     return client.put('/auth/me/update/', data)
   },
 
-  // 申请成为创作者
+  // 申请开通工作台
   becomeCreator() {
     return client.post('/auth/creator/become/')
   },

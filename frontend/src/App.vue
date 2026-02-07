@@ -37,10 +37,10 @@
           <!-- 用户菜单 -->
           <template v-if="isAuthenticated">
             <router-link v-if="isCreator" to="/creator" class="mofa-btn mofa-btn-primary">
-              创作中心
+              音频工作台
             </router-link>
             <router-link v-else to="/become-creator" class="mofa-btn mofa-btn-warning">
-              成为创作者
+              开通工作台
             </router-link>
 
             <el-dropdown @command="handleCommand">
@@ -100,10 +100,10 @@
           </router-link>
           <template v-if="isAuthenticated">
             <router-link v-if="isCreator" to="/creator" class="mobile-nav-item" @click="showMobileMenu = false">
-              创作中心
+              音频工作台
             </router-link>
             <router-link v-else to="/become-creator" class="mobile-nav-item" @click="showMobileMenu = false">
-              成为创作者
+              开通工作台
             </router-link>
             <router-link to="/profile" class="mobile-nav-item" @click="showMobileMenu = false">
               个人资料

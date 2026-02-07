@@ -357,6 +357,24 @@ class PodcastGenerationSerializer(serializers.Serializer):
             raise serializers.ValidationError("节目不存在或您没有权限")
 
 
+class RSSPodcastGenerationSerializer(serializers.Serializer):
+    """RSS 播客生成请求"""
+
+    title = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    show_id = serializers.IntegerField(required=True)
+    rss_url = serializers.URLField(required=True)
+    max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+    def validate_show_id(self, value):
+        user = self.context['request'].user
+        try:
+            Show.objects.get(id=value, creator=user)
+            return value
+        except Show.DoesNotExist:
+            raise serializers.ValidationError("节目不存在或您没有权限")
+
+
 class UploadedReferenceSerializer(serializers.ModelSerializer):
     """上传的参考文件序列化器"""
 

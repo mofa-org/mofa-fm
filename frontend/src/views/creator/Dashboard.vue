@@ -1,13 +1,13 @@
 <template>
   <div class="creator-dashboard">
     <div class="container">
-      <h1 class="page-title">创作者中心</h1>
+      <h1 class="page-title">音频工作台</h1>
 
       <!-- 统计卡片 -->
       <div class="stats-grid">
         <div class="stat-card mofa-card">
           <div class="stat-value">{{ stats.shows_count }}</div>
-          <div class="stat-label">我的节目</div>
+          <div class="stat-label">我的音频</div>
         </div>
         <div class="stat-card mofa-card">
           <div class="stat-value">{{ shows.reduce((sum, s) => sum + s.episodes_count, 0) }}</div>
@@ -34,8 +34,8 @@
         </router-link>
       </div>
 
-      <!-- 我的节目列表 -->
-      <h2 class="section-title">我的节目</h2>
+      <!-- 我的音频列表 -->
+      <h2 class="section-title">我的音频</h2>
       <div class="shows-list">
         <div v-for="show in shows" :key="show.id" class="show-item mofa-card">
           <img :src="show.cover_url" :alt="show.title" class="show-cover" />
