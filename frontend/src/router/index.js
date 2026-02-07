@@ -54,43 +54,43 @@ const router = createRouter({
       path: '/creator',
       name: 'creator-dashboard',
       component: () => import('@/views/creator/Dashboard.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/shows/create',
       name: 'create-show',
       component: () => import('@/views/creator/CreateShow.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/shows/:slug',
       name: 'manage-show',
       component: () => import('@/views/creator/ManageShow.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/shows/:slug/edit',
       name: 'edit-show',
       component: () => import('@/views/creator/EditShow.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/shows/:slug/episodes/create',
       name: 'upload-episode',
       component: () => import('@/views/creator/UploadEpisode.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/shows/:showSlug/episodes/:episodeSlug/edit',
       name: 'edit-episode',
       component: () => import('@/views/creator/EditEpisode.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/ai-studio',
       name: 'ai-studio',
       component: () => import('@/views/creator/AIScriptStudio.vue'),
-      meta: { requiresAuth: true, requiresCreator: true }
+      meta: { requiresAuth: true }
     },
     {
       path: '/creator/script-studio',
@@ -141,12 +141,6 @@ router.beforeEach(async (to, from, next) => {
   // 需要认证的路由
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
-    return
-  }
-
-  // 需要创作者权限的路由
-  if (to.meta.requiresCreator && !authStore.isCreator) {
-    next({ name: 'become-creator' })
     return
   }
 

@@ -282,4 +282,37 @@ async function handleSubmit() {
   color: var(--color-text-tertiary);
   margin-top: var(--spacing-xs);
 }
+
+@media (max-width: 768px) {
+  .edit-episode-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-2xl);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .form-card {
+    padding: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .edit-episode-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-xl);
+  }
+
+  .form-card {
+    padding: var(--spacing-md);
+  }
+
+  .audio-info {
+    flex-wrap: wrap;
+  }
+}
 </style>

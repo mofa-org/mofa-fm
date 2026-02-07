@@ -71,4 +71,30 @@ onMounted(async () => {
   flex-direction: column;
   gap: var(--spacing-md);
 }
+
+@media (max-width: 768px) {
+  .library-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-2xl);
+  }
+
+  .shows-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .library-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-xl);
+    margin-bottom: var(--spacing-md);
+  }
+}
 </style>

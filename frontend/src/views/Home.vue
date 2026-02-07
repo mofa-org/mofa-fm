@@ -16,7 +16,7 @@
         </div>
       </section>
 
-      <section v-if="isAuthenticated && isCreator" class="section">
+      <section v-if="isAuthenticated" class="section">
         <div class="quick-create mofa-card">
           <div class="quick-header">
             <h2 class="section-title">一键生成音频</h2>
@@ -75,7 +75,7 @@
         </div>
         <div class="stat-card mofa-card">
           <div class="stat-value">{{ stats.total_creators }}</div>
-          <div class="stat-label">创作者</div>
+          <div class="stat-label">创作用户</div>
         </div>
         <div class="stat-card mofa-card">
           <div class="stat-value">{{ formatNumber(stats.total_plays) }}</div>
@@ -85,31 +85,23 @@
 
       <!-- AI功能区 -->
       <section class="section ai-features" v-if="isAuthenticated">
-        <h2 class="section-title">AI 创作工具</h2>
+        <h2 class="section-title">创作入口</h2>
         <div class="feature-cards">
-          <router-link to="/debates" class="feature-card mofa-card">
-            <div class="feature-icon">
-              <el-icon :size="32"><FolderOpened /></el-icon>
-            </div>
-            <h3 class="feature-title">我的辩论</h3>
-            <p class="feature-desc">查看所有辩论记录，随时回顾精彩内容</p>
-            <div class="feature-action">查看记录 →</div>
-          </router-link>
-          <router-link to="/debate/create" class="feature-card mofa-card">
-            <div class="feature-icon">
-              <el-icon :size="32"><ChatDotRound /></el-icon>
-            </div>
-            <h3 class="feature-title">AI 辩论</h3>
-            <p class="feature-desc">让AI参与激烈辩论，生成精彩对话内容</p>
-            <div class="feature-action">立即体验 →</div>
-          </router-link>
           <router-link to="/creator/ai-studio" class="feature-card mofa-card">
             <div class="feature-icon">
               <el-icon :size="32"><Edit /></el-icon>
             </div>
-            <h3 class="feature-title">AI 脚本创作</h3>
-            <p class="feature-desc">智能生成 AI 音频脚本，提升创作效率</p>
-            <div class="feature-action">开始创作 →</div>
+            <h3 class="feature-title">开始创作</h3>
+            <p class="feature-desc">链接、RSS、脚本、辩论模式统一在同一创作页完成</p>
+            <div class="feature-action">进入创作 →</div>
+          </router-link>
+          <router-link to="/creator" class="feature-card mofa-card">
+            <div class="feature-icon">
+              <el-icon :size="32"><ChatDotRound /></el-icon>
+            </div>
+            <h3 class="feature-title">内容管理</h3>
+            <p class="feature-desc">统一管理我的音频、节目与发布记录</p>
+            <div class="feature-action">进入管理 →</div>
           </router-link>
         </div>
       </section>
@@ -155,7 +147,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ChatDotRound, Edit, FolderOpened } from '@element-plus/icons-vue'
+import { ChatDotRound, Edit } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
@@ -163,7 +155,6 @@ import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 const authStore = useAuthStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const isCreator = computed(() => authStore.isCreator)
 
 const stats = ref(null)
 const recommendedItems = ref([])
@@ -209,7 +200,7 @@ onMounted(async () => {
     console.error('加载推荐位失败', error)
   }
 
-  if (isAuthenticated.value && isCreator.value) {
+  if (isAuthenticated.value) {
     try {
       const data = await api.podcasts.getMyShows()
       myShows.value = Array.isArray(data) ? data : (data.results || [])
@@ -543,6 +534,10 @@ async function handleQuickGenerate() {
     font-size: var(--font-xl);
   }
 
+  .section-header {
+    align-items: flex-end;
+  }
+
   .quick-grid {
     grid-template-columns: 1fr;
   }
@@ -598,6 +593,12 @@ async function handleQuickGenerate() {
 
   .section-title {
     font-size: var(--font-lg);
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
   }
 
   .shows-grid {

@@ -24,7 +24,7 @@ from .serializers import (
     ScriptSessionSerializer, ScriptSessionCreateSerializer, ScriptChatSerializer,
     UploadedReferenceSerializer
 )
-from .permissions import IsCreatorOrReadOnly, IsShowOwner
+from .permissions import IsShowOwner
 
 User = get_user_model()
 
@@ -78,7 +78,7 @@ class ShowDetailView(generics.RetrieveAPIView):
 class ShowCreateView(generics.CreateAPIView):
     """创建播客节目"""
     serializer_class = ShowCreateSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -144,7 +144,7 @@ class EpisodeDetailView(generics.RetrieveAPIView):
 class EpisodeCreateView(generics.CreateAPIView):
     """上传单集"""
     serializer_class = EpisodeCreateSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
 
 class EpisodeUpdateView(generics.UpdateAPIView):
@@ -488,7 +488,7 @@ def apply_cover_option(request, episode_id):
 class GenerateEpisodeView(generics.GenericAPIView):
     """生成播客单集"""
     serializer_class = PodcastGenerationSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_podcast_task
@@ -529,7 +529,7 @@ class GenerateEpisodeView(generics.GenericAPIView):
 class GenerateEpisodeFromRSSView(generics.GenericAPIView):
     """从 RSS 源生成播客单集"""
     serializer_class = RSSPodcastGenerationSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_rss_podcast_task
@@ -621,7 +621,7 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
 class GenerateEpisodeFromSourceView(generics.GenericAPIView):
     """从链接源（RSS/网页）生成播客单集"""
     serializer_class = SourcePodcastGenerationSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_source_podcast_task

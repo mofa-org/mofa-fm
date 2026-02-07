@@ -21,16 +21,13 @@
 
       <!-- 操作按钮 -->
       <div class="actions">
-        <router-link to="/creator/shows/create" class="mofa-btn mofa-btn-primary">
-          <el-icon><Plus /></el-icon>
-          创建新节目
-        </router-link>
-        <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-warning">
-          AI 脚本创作
-        </router-link>
-        <router-link to="/creator/debate/create" class="mofa-btn mofa-btn-success">
+        <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-primary">
           <el-icon><ChatDotRound /></el-icon>
-          AI 辩论 / 会议
+          开始创作
+        </router-link>
+        <router-link to="/creator/shows/create" class="mofa-btn mofa-btn-warning">
+          <el-icon><Plus /></el-icon>
+          新建节目
         </router-link>
       </div>
 
@@ -203,5 +200,64 @@ async function handleDeleteShow(show) {
   display: flex;
   gap: var(--spacing-sm);
   align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .show-item {
+    align-items: flex-start;
+  }
+
+  .show-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .creator-dashboard {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-2xl);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .show-item {
+    flex-direction: column;
+  }
+
+  .show-cover {
+    width: 100%;
+    max-width: 220px;
+    height: auto;
+    aspect-ratio: 1 / 1;
+  }
+
+  .show-info {
+    width: 100%;
+  }
+
+  .show-actions {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .creator-dashboard {
+    padding: var(--spacing-md) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-xl);
+  }
 }
 </style>

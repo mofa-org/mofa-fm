@@ -24,6 +24,12 @@ class OperationsAPITests(APITestCase):
             password='test-pass-123',
             is_creator=True,
         )
+        self.normal_user = User.objects.create_user(
+            username='normal-user',
+            email='normal-user@example.com',
+            password='test-pass-123',
+            is_creator=False,
+        )
 
         self.show_a = Show.objects.create(
             title='Show A',
@@ -124,4 +130,22 @@ class OperationsAPITests(APITestCase):
         episode = Episode.objects.get(id=response.data['episode_id'])
         self.assertEqual(episode.show.creator_id, self.user.id)
         self.assertTrue(episode.show.slug.startswith(f'audio-workbench-{self.user.id}'))
+        mock_delay.assert_called_once()
+
+    @patch('apps.podcasts.tasks.generate_source_podcast_task.delay')
+    def test_non_creator_can_generate_from_source(self, mock_delay):
+        self.client.force_authenticate(self.normal_user)
+        url = reverse('podcasts:episode_generate_from_source')
+        payload = {
+            'source_url': 'https://news.ycombinator.com/',
+            'template': 'news_flash',
+            'max_items': 2,
+            'dry_run': False,
+        }
+        response = self.client.post(url, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        episode = Episode.objects.get(id=response.data['episode_id'])
+        self.assertEqual(episode.show.creator_id, self.normal_user.id)
+        self.assertTrue(episode.show.slug.startswith(f'audio-workbench-{self.normal_user.id}'))
         mock_delay.assert_called_once()

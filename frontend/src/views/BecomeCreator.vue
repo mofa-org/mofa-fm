@@ -177,4 +177,42 @@ function goToCreatorDashboard() {
   font-weight: var(--font-bold);
   color: var(--color-text-primary);
 }
+
+@media (max-width: 768px) {
+  .become-creator-page {
+    padding: var(--spacing-lg);
+  }
+
+  .creator-card {
+    padding: var(--spacing-xl);
+  }
+
+  .card-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .card-title {
+    font-size: var(--font-2xl);
+  }
+
+  .success-title {
+    font-size: var(--font-xl);
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .become-creator-page {
+    padding: var(--spacing-sm);
+  }
+
+  .creator-card {
+    padding: var(--spacing-lg);
+  }
+
+  .card-title {
+    font-size: var(--font-xl);
+  }
+}
 </style>

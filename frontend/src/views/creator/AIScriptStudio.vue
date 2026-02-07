@@ -1,7 +1,7 @@
 <template>
   <div class="ai-script-studio">
     <div class="container">
-      <h1 class="page-title">AI 脚本创作</h1>
+      <h1 class="page-title">AI 音频创作</h1>
 
       <!-- 会话列表视图 -->
       <div v-if="!currentSession" class="session-list-view">
@@ -15,7 +15,7 @@
 
         <div v-else-if="sessions.length === 0" class="empty-state">
           <p>还没有创作会话</p>
-          <p class="hint">点击上方按钮开始创作你的第一个播客脚本</p>
+          <p class="hint">点击上方按钮开始创作你的第一条音频内容</p>
         </div>
 
         <div v-else class="sessions-grid">
@@ -106,6 +106,51 @@
             </button>
           </div>
           <pre v-if="rssScriptPreview" class="script-text rss-preview">{{ rssScriptPreview }}</pre>
+        </div>
+
+        <div class="debate-section mofa-card">
+          <div class="section-header">
+            <h2>辩论 / 会议模式</h2>
+            <router-link to="/debates" class="section-link">查看历史</router-link>
+          </div>
+          <p class="section-tip">此模式已并入创作流程，生成后可直接查看与转音频。</p>
+          <div class="rss-form">
+            <div class="form-group">
+              <label>模式</label>
+              <select v-model="debateMode" class="form-select">
+                <option value="debate">辩论</option>
+                <option value="conference">会议</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>标题</label>
+              <input
+                v-model="debateTitle"
+                type="text"
+                class="form-input"
+                placeholder="例如：AI是否会取代程序员"
+              />
+            </div>
+            <div class="form-group debate-topic">
+              <label>{{ debateMode === 'debate' ? '辩题' : '主题' }}</label>
+              <textarea
+                v-model="debateTopic"
+                rows="4"
+                class="form-input"
+                :placeholder="debateMode === 'debate' ? '输入辩题与双方立场' : '输入会议讨论主题'"
+              ></textarea>
+            </div>
+            <div class="form-group">
+              <label>轮数</label>
+              <input v-model.number="debateRounds" type="number" min="2" max="8" class="form-input" />
+            </div>
+          </div>
+          <p v-if="debateError" class="error-message">{{ debateError }}</p>
+          <div class="rss-actions">
+            <button class="mofa-btn mofa-btn-primary" :disabled="debateSubmitting" @click="createDebateFromStudio">
+              {{ debateSubmitting ? '生成中...' : '生成辩论/会议' }}
+            </button>
+          </div>
         </div>
 
         <div class="generation-section mofa-card">
@@ -730,6 +775,12 @@ const rssScheduledAtLocal = ref('')
 const rssSubmitting = ref(false)
 const rssError = ref('')
 const rssScriptPreview = ref('')
+const debateMode = ref('debate')
+const debateTitle = ref('')
+const debateTopic = ref('')
+const debateRounds = ref(3)
+const debateSubmitting = ref(false)
+const debateError = ref('')
 
 // 加载会话列表
 async function loadSessions() {
@@ -838,6 +889,35 @@ async function generateFromRSS() {
     rssError.value = error.response?.data?.error || error.message || '提交失败'
   } finally {
     rssSubmitting.value = false
+  }
+}
+
+async function createDebateFromStudio() {
+  if (!debateTitle.value.trim() || !debateTopic.value.trim()) {
+    debateError.value = '请填写标题与主题'
+    return
+  }
+
+  debateSubmitting.value = true
+  debateError.value = ''
+  try {
+    const data = await podcastsAPI.generateDebate({
+      title: debateTitle.value.trim(),
+      topic: debateTopic.value.trim(),
+      mode: debateMode.value,
+      rounds: Number(debateRounds.value) || 3
+    })
+
+    ElMessage.success('辩论/会议任务已创建')
+    debateTitle.value = ''
+    debateTopic.value = ''
+    if (data?.episode_id) {
+      router.push({ name: 'debate-viewer', params: { episodeId: data.episode_id } })
+    }
+  } catch (error) {
+    debateError.value = error.response?.data?.error || error.message || '提交失败'
+  } finally {
+    debateSubmitting.value = false
   }
 }
 
@@ -1640,6 +1720,12 @@ onMounted(() => {
 .section-header h2 {
   margin: 0;
   font-size: var(--font-xl);
+  font-weight: var(--font-semibold);
+}
+
+.section-link {
+  color: var(--color-primary);
+  font-size: var(--font-sm);
   font-weight: var(--font-semibold);
 }
 
@@ -2511,10 +2597,23 @@ onMounted(() => {
   margin-bottom: var(--spacing-xl);
 }
 
+.debate-section {
+  margin-bottom: var(--spacing-xl);
+}
+
 .rss-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-md);
+}
+
+.section-tip {
+  margin: 0 0 var(--spacing-md);
+  color: var(--color-text-secondary);
+}
+
+.debate-topic {
+  grid-column: 1 / -1;
 }
 
 .rss-checkbox {

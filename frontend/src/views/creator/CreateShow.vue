@@ -230,4 +230,39 @@ async function handleSubmit() {
   color: var(--color-text-tertiary);
   margin-top: var(--spacing-xs);
 }
+
+@media (max-width: 768px) {
+  .create-show-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-2xl);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .form-card {
+    padding: var(--spacing-lg);
+  }
+
+  .cover-preview,
+  .cover-uploader-icon {
+    width: 160px;
+    height: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .create-show-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .page-title {
+    font-size: var(--font-xl);
+  }
+
+  .form-card {
+    padding: var(--spacing-md);
+  }
+}
 </style>

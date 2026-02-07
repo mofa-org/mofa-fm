@@ -7,10 +7,10 @@
                 <div class="ai-hint">
                     <div>
                         <h2>AI 来帮忙？</h2>
-                        <p>使用 AI 脚本工作台生成脚本并一键提交音频任务。</p>
+                        <p>在创作页可用链接、RSS、脚本或辩论模式直接生成音频任务。</p>
                     </div>
                     <el-button type="primary" plain @click="goToAIStudio">
-                        前往 AI 脚本工作台
+                        前往创作页
                     </el-button>
                 </div>
 
@@ -340,5 +340,43 @@ async function handleUploadSubmit() {
     font-size: var(--font-sm);
     color: var(--color-text-tertiary);
     margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 768px) {
+    .upload-episode-page {
+        padding: var(--spacing-lg) 0;
+    }
+
+    .page-title {
+        font-size: var(--font-2xl);
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .form-card {
+        padding: var(--spacing-lg);
+    }
+
+    .ai-hint {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .upload-episode-page {
+        padding: var(--spacing-md) 0;
+    }
+
+    .page-title {
+        font-size: var(--font-xl);
+    }
+
+    .form-card {
+        padding: var(--spacing-md);
+    }
+
+    .audio-info {
+        flex-wrap: wrap;
+    }
 }
 </style>

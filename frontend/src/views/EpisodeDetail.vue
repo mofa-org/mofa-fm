@@ -62,7 +62,7 @@
       <el-dialog
         v-model="shareDialogVisible"
         title="分享卡片"
-        width="540px"
+        width="min(540px, 92vw)"
       >
         <div class="share-panel">
           <img
@@ -388,11 +388,13 @@ function downloadSharePoster() {
   gap: var(--spacing-lg);
   margin-bottom: var(--spacing-lg);
   color: var(--color-text-tertiary);
+  flex-wrap: wrap;
 }
 
 .episode-actions {
   display: flex;
   gap: var(--spacing-md);
+  flex-wrap: wrap;
 }
 
 .script-section {
@@ -477,5 +479,91 @@ function downloadSharePoster() {
 .comment-text {
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
+}
+
+@media (max-width: 1024px) {
+  .episode-header {
+    gap: var(--spacing-lg);
+  }
+
+  .episode-cover {
+    width: 240px;
+    height: 240px;
+  }
+
+  .episode-title {
+    font-size: var(--font-2xl);
+  }
+}
+
+@media (max-width: 768px) {
+  .episode-detail-page {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .episode-header {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .episode-cover {
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+  }
+
+  .episode-title {
+    font-size: var(--font-xl);
+  }
+
+  .show-name {
+    font-size: var(--font-base);
+  }
+
+  .episode-meta {
+    gap: var(--spacing-sm);
+    font-size: var(--font-sm);
+  }
+
+  .episode-actions :deep(.el-button) {
+    flex: 1 1 auto;
+  }
+
+  .share-actions {
+    justify-content: stretch;
+  }
+
+  .share-actions :deep(.el-button) {
+    flex: 1 1 0;
+  }
+
+  .comment-user {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .episode-detail-page {
+    padding: var(--spacing-md) 0;
+  }
+
+  .episode-header {
+    padding: var(--spacing-md);
+  }
+
+  .episode-title {
+    font-size: var(--font-lg);
+  }
+
+  .section-title {
+    font-size: var(--font-xl);
+  }
+
+  .comment-item {
+    padding: var(--spacing-sm);
+  }
 }
 </style>

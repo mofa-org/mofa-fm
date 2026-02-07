@@ -142,4 +142,39 @@ async function handleSubmit() {
 .link:hover {
   text-decoration: underline;
 }
+
+@media (max-width: 768px) {
+  .auth-container {
+    max-width: 100%;
+    padding: var(--spacing-xl);
+  }
+
+  .auth-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .auth-title {
+    font-size: var(--font-2xl);
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-page {
+    padding: var(--spacing-sm);
+  }
+
+  .auth-container {
+    padding: var(--spacing-lg);
+  }
+
+  .auth-title {
+    font-size: var(--font-xl);
+  }
+
+  .auth-subtitle,
+  .auth-footer {
+    font-size: var(--font-sm);
+  }
+}
 </style>

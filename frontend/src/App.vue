@@ -36,11 +36,8 @@
 
           <!-- 用户菜单 -->
           <template v-if="isAuthenticated">
-            <router-link v-if="isCreator" to="/creator" class="mofa-btn mofa-btn-primary">
-              音频工作台
-            </router-link>
-            <router-link v-else to="/become-creator" class="mofa-btn mofa-btn-warning">
-              开通工作台
+            <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-primary">
+              创作
             </router-link>
 
             <el-dropdown @command="handleCommand">
@@ -99,11 +96,8 @@
             我的收听
           </router-link>
           <template v-if="isAuthenticated">
-            <router-link v-if="isCreator" to="/creator" class="mobile-nav-item" @click="showMobileMenu = false">
-              音频工作台
-            </router-link>
-            <router-link v-else to="/become-creator" class="mobile-nav-item" @click="showMobileMenu = false">
-              开通工作台
+            <router-link to="/creator/ai-studio" class="mobile-nav-item" @click="showMobileMenu = false">
+              创作
             </router-link>
             <router-link to="/profile" class="mobile-nav-item" @click="showMobileMenu = false">
               个人资料
@@ -142,7 +136,6 @@ const searchQuery = ref('')
 const showMobileMenu = ref(false)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const isCreator = computed(() => authStore.isCreator)
 const user = computed(() => authStore.user)
 const currentEpisode = computed(() => playerStore.currentEpisode)
 
@@ -334,7 +327,7 @@ function handleLogout() {
   }
 
   .search-input {
-    width: 100px;
+    display: none;
   }
 
   .logo-image {

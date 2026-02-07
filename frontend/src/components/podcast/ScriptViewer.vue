@@ -295,4 +295,44 @@ const saveScript = async () => {
 .tip .el-icon {
   flex-shrink: 0;
 }
+
+@media (max-width: 768px) {
+  .script-viewer {
+    padding: 16px;
+  }
+
+  .script-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .script-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .script-display {
+    max-height: 460px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .script-viewer {
+    padding: 12px;
+  }
+
+  .script-header h3 {
+    font-size: 16px;
+  }
+
+  .speaker-tag,
+  .dialogue-text,
+  .normal-text,
+  .heading {
+    font-size: 13px;
+  }
+}
 </style>
