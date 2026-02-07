@@ -29,9 +29,21 @@
               <el-icon><VideoPlay /></el-icon>
               播放
             </el-button>
+            <el-button
+              v-if="isAuthenticated"
+              :type="isFollowing ? 'success' : 'warning'"
+              @click="handleFollow"
+            >
+              <el-icon><Bell /></el-icon>
+              {{ isFollowing ? '已订阅' : '订阅此节目' }}
+            </el-button>
             <el-button v-if="isAuthenticated" @click="handleLike">
               <el-icon><Star :style="episode.is_liked ? { color: '#ffc63e' } : {}" /></el-icon>
               {{ episode.is_liked ? '已点赞' : '点赞' }}
+            </el-button>
+            <el-button @click="openShareCard" :loading="shareLoading">
+              <el-icon><Share /></el-icon>
+              分享卡片
             </el-button>
           </div>
         </div>
@@ -46,6 +58,30 @@
           @script-updated="handleScriptUpdated"
         />
       </div>
+
+      <el-dialog
+        v-model="shareDialogVisible"
+        title="分享卡片"
+        width="540px"
+      >
+        <div class="share-panel">
+          <img
+            v-if="sharePosterDataUrl"
+            :src="sharePosterDataUrl"
+            alt="分享海报"
+            class="share-poster"
+          />
+          <p v-if="shareError" class="share-error">{{ shareError }}</p>
+          <p v-else-if="shareCardData" class="share-text">{{ shareCardData.share_text }}</p>
+          <div class="share-actions">
+            <el-button @click="copyShareText" :disabled="!shareCardData">复制文案</el-button>
+            <el-button type="primary" @click="downloadSharePoster" :disabled="!sharePosterDataUrl">
+              下载卡片
+            </el-button>
+          </div>
+        </div>
+        <canvas ref="shareCanvasRef" width="1080" height="1920" class="hidden-canvas"></canvas>
+      </el-dialog>
 
       <!-- 评论区 -->
       <div class="comments-section">
@@ -81,19 +117,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { VideoPlay, Star, UserFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { VideoPlay, Star, UserFilled, Bell, Share } from '@element-plus/icons-vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import dayjs from 'dayjs'
 
 const route = useRoute()
-const router = useRouter()
 const authStore = useAuthStore()
 const playerStore = usePlayerStore()
 
@@ -101,6 +136,12 @@ const episode = ref(null)
 const comments = ref([])
 const commentText = ref('')
 const commenting = ref(false)
+const shareDialogVisible = ref(false)
+const shareLoading = ref(false)
+const shareError = ref('')
+const shareCardData = ref(null)
+const sharePosterDataUrl = ref('')
+const shareCanvasRef = ref(null)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
@@ -108,6 +149,7 @@ const isCreator = computed(() => {
   if (!isAuthenticated.value || !episode.value) return false
   return episode.value.show.creator.id === authStore.user.id
 })
+const isFollowing = computed(() => Boolean(episode.value?.show?.is_following))
 
 const effectiveVisibility = computed(() => {
   if (!episode.value) return 'public'
@@ -127,6 +169,17 @@ onMounted(async () => {
 
 function handlePlay() {
   playerStore.play(episode.value)
+}
+
+async function handleFollow() {
+  try {
+    const data = await api.interactions.toggleFollow(episode.value.show.id)
+    episode.value.show.is_following = data.following
+    episode.value.show.followers_count = data.followers_count
+    ElMessage.success(data.following ? '订阅成功' : '已取消订阅')
+  } catch (error) {
+    ElMessage.error('订阅操作失败')
+  }
 }
 
 async function handleLike() {
@@ -174,6 +227,110 @@ function formatDate(date) {
 function handleScriptUpdated(updatedEpisode) {
   // 更新episode的script字段
   episode.value.script = updatedEpisode.script
+}
+
+async function openShareCard() {
+  if (!episode.value?.id) return
+  shareDialogVisible.value = true
+  shareLoading.value = true
+  shareError.value = ''
+  try {
+    shareCardData.value = await api.podcasts.getEpisodeShareCard(episode.value.id)
+    await nextTick()
+    await renderSharePoster()
+  } catch (error) {
+    shareError.value = error.response?.data?.error || error.message || '获取分享卡片失败'
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+async function renderSharePoster() {
+  const canvas = shareCanvasRef.value
+  if (!canvas || !shareCardData.value) return
+  const ctx = canvas.getContext('2d')
+  const data = shareCardData.value
+
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
+  gradient.addColorStop(0, '#111827')
+  gradient.addColorStop(1, '#1f2937')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+  ctx.fillRect(60, 60, canvas.width - 120, canvas.height - 120)
+
+  if (data.cover_url) {
+    try {
+      const coverImage = await loadImage(data.cover_url)
+      ctx.drawImage(coverImage, 120, 180, 840, 840)
+    } catch (error) {
+      // ignore cover rendering errors
+    }
+  }
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 64px sans-serif'
+  drawWrappedText(ctx, data.title || '', 120, 1090, 840, 88)
+
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '44px sans-serif'
+  drawWrappedText(ctx, data.show_title || '', 120, 1280, 840, 60)
+
+  ctx.fillStyle = '#d1d5db'
+  ctx.font = '36px sans-serif'
+  drawWrappedText(ctx, data.description || '', 120, 1360, 840, 52)
+
+  ctx.fillStyle = '#f59e0b'
+  ctx.font = 'bold 36px sans-serif'
+  drawWrappedText(ctx, data.share_url || '', 120, 1670, 840, 46)
+
+  sharePosterDataUrl.value = canvas.toDataURL('image/png')
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+  if (!text) return
+  const chars = String(text).split('')
+  let line = ''
+  let offsetY = 0
+  for (const char of chars) {
+    const testLine = line + char
+    const testWidth = ctx.measureText(testLine).width
+    if (testWidth > maxWidth && line) {
+      ctx.fillText(line, x, y + offsetY)
+      line = char
+      offsetY += lineHeight
+    } else {
+      line = testLine
+    }
+  }
+  if (line) {
+    ctx.fillText(line, x, y + offsetY)
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = src
+  })
+}
+
+async function copyShareText() {
+  if (!shareCardData.value?.share_text) return
+  await navigator.clipboard.writeText(shareCardData.value.share_text)
+  ElMessage.success('文案已复制')
+}
+
+function downloadSharePoster() {
+  if (!sharePosterDataUrl.value) return
+  const link = document.createElement('a')
+  link.href = sharePosterDataUrl.value
+  link.download = `${episode.value?.title || 'share-card'}.png`
+  link.click()
 }
 </script>
 
@@ -240,6 +397,37 @@ function handleScriptUpdated(updatedEpisode) {
 
 .script-section {
   margin-top: var(--spacing-2xl);
+}
+
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.share-poster {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+}
+
+.share-text {
+  color: var(--color-text-secondary);
+  white-space: pre-line;
+}
+
+.share-error {
+  color: var(--color-danger);
+}
+
+.share-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+.hidden-canvas {
+  display: none;
 }
 
 .comments-section {

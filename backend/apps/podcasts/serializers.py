@@ -264,7 +264,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 class EpisodeCreateSerializer(serializers.ModelSerializer):
     """创建单集/单曲序列化器"""
 
-    show_id = serializers.IntegerField(required=False)
+    show_id = serializers.IntegerField(required=False, allow_null=True)
     audio_file = serializers.FileField(required=False)
     shared_with_ids = serializers.ListField(
         child=serializers.IntegerField(),
@@ -283,6 +283,8 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     def validate_show_id(self, value):
         """验证播客节目归属"""
+        if not value:
+            return value
         user = self.context['request'].user
         try:
             show = Show.objects.get(id=value, creator=user)
@@ -292,19 +294,21 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """验证数据"""
-        # 创建时必须提供 show_id 和 audio_file
+        # 创建时必须提供音频
         if not self.instance:
-            if 'show_id' not in attrs:
-                raise serializers.ValidationError({'show_id': '创建单集时必须指定所属节目'})
             if 'audio_file' not in attrs:
                 raise serializers.ValidationError({'audio_file': '创建单集时必须上传音频文件'})
         return attrs
 
     def create(self, validated_data):
-        show_id = validated_data.pop('show_id')
+        show_id = validated_data.pop('show_id', None)
         shared_with_ids = validated_data.pop('shared_with_ids', [])
 
-        show = Show.objects.get(id=show_id)
+        if show_id:
+            show = Show.objects.get(id=show_id)
+        else:
+            from .services.default_show import get_or_create_default_show
+            show, _ = get_or_create_default_show(self.context['request'].user)
         validated_data['show'] = show
         validated_data['status'] = 'processing'
 
@@ -349,10 +353,12 @@ class PodcastGenerationSerializer(serializers.Serializer):
     """播客生成请求序列化器"""
 
     title = serializers.CharField(max_length=255, required=True)
-    show_id = serializers.IntegerField(required=True)
+    show_id = serializers.IntegerField(required=False, allow_null=True)
     script = serializers.CharField(required=True, style={'base_template': 'textarea.html'})
 
     def validate_show_id(self, value):
+        if not value:
+            return value
         user = self.context['request'].user
         try:
             show = Show.objects.get(id=value, creator=user)
@@ -365,7 +371,7 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
     """RSS 播客生成请求"""
 
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    show_id = serializers.IntegerField(required=True)
+    show_id = serializers.IntegerField(required=False, allow_null=True)
     rss_url = serializers.URLField(required=False, allow_blank=True)
     rss_urls = serializers.ListField(
         child=serializers.URLField(),
@@ -384,6 +390,8 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField(required=False, default=False)
 
     def validate_show_id(self, value):
+        if not value:
+            return value
         user = self.context['request'].user
         try:
             Show.objects.get(id=value, creator=user)
@@ -419,13 +427,15 @@ class SourcePodcastGenerationSerializer(serializers.Serializer):
     """链接源（RSS/网页）播客生成请求"""
 
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    show_id = serializers.IntegerField(required=True)
+    show_id = serializers.IntegerField(required=False, allow_null=True)
     source_url = serializers.URLField(required=True)
     template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
 
     def validate_show_id(self, value):
+        if not value:
+            return value
         user = self.context['request'].user
         try:
             Show.objects.get(id=value, creator=user)

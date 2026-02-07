@@ -261,6 +261,119 @@ def generation_queue(request):
     return Response(serializer.data)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def recommended_episodes(request):
+    """站内推荐位：返回可直接展示的单集列表"""
+    from apps.interactions.models import Follow, PlayHistory
+
+    raw_limit = request.query_params.get('limit', 6)
+    try:
+        limit = max(1, min(int(raw_limit), 20))
+    except (TypeError, ValueError):
+        limit = 6
+
+    base_queryset = Episode.objects.filter(
+        status='published',
+        show__is_active=True,
+    ).select_related('show__creator', 'show__category')
+
+    ranked = []
+    seen_episode_ids = set()
+
+    def append_queryset(queryset, reason):
+        for item in queryset:
+            if item.id in seen_episode_ids:
+                continue
+            seen_episode_ids.add(item.id)
+            ranked.append((item, reason))
+            if len(ranked) >= limit:
+                break
+
+    if request.user.is_authenticated:
+        followed_show_ids = list(
+            Follow.objects.filter(user=request.user).values_list('show_id', flat=True)
+        )
+        if followed_show_ids:
+            append_queryset(
+                base_queryset.filter(show_id__in=followed_show_ids).order_by('-published_at')[: limit * 3],
+                '来自你订阅的内容',
+            )
+
+        recent_show_ids = list(
+            PlayHistory.objects.filter(user=request.user)
+            .values_list('episode__show_id', flat=True)
+            .distinct()[:20]
+        )
+        if recent_show_ids:
+            append_queryset(
+                base_queryset.filter(show_id__in=recent_show_ids).order_by('-play_count', '-published_at')[: limit * 3],
+                '与你近期收听相关',
+            )
+
+    append_queryset(
+        base_queryset.order_by('-play_count', '-like_count', '-published_at')[: limit * 4],
+        '站内热门',
+    )
+    append_queryset(
+        base_queryset.order_by('-published_at')[: limit * 4],
+        '最新上架',
+    )
+
+    payload = []
+    for item, reason in ranked[:limit]:
+        payload.append({
+            'reason': reason,
+            'episode': EpisodeListSerializer(item, context={'request': request}).data,
+        })
+
+    return Response({
+        'count': len(payload),
+        'items': payload,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def episode_share_card(request, episode_id):
+    """生成分享卡片所需信息（前端据此绘制海报）"""
+    episode = get_object_or_404(
+        Episode.objects.select_related('show', 'show__creator'),
+        id=episode_id,
+        status='published',
+    )
+
+    if not episode.show:
+        return Response(
+            {'error': '该单集未绑定节目，暂不可生成分享卡片'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    show_path = f"/shows/{episode.show.slug}/episodes/{episode.slug}"
+    share_url = request.build_absolute_uri(show_path)
+    description = re.sub(r'\s+', ' ', (episode.description or '').strip())
+    if len(description) > 120:
+        description = description[:117] + '...'
+
+    share_text = (
+        f"{episode.title} | {episode.show.title}\n"
+        f"{description}\n"
+        f"收听链接：{share_url}"
+    )
+
+    return Response({
+        'title': episode.title,
+        'show_title': episode.show.title,
+        'creator_name': episode.show.creator.username,
+        'description': description,
+        'cover_url': episode.cover_url,
+        'share_url': share_url,
+        'web_path': show_path,
+        'share_text': share_text,
+        'published_at': episode.published_at,
+    })
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def retry_generation(request, episode_id):
@@ -379,12 +492,16 @@ class GenerateEpisodeView(generics.GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_podcast_task
+        from .services.default_show import get_or_create_default_show
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
-        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        if data.get('show_id'):
+            show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        else:
+            show, _ = get_or_create_default_show(request.user)
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
 
         episode = Episode.objects.create(
@@ -416,6 +533,7 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_rss_podcast_task
+        from .services.default_show import get_or_create_default_show
         from .services.rss_ingest import generate_script_from_rss_sources
 
         serializer = self.get_serializer(data=request.data)
@@ -448,7 +566,10 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
                 status=status.HTTP_200_OK
             )
 
-        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        if data.get('show_id'):
+            show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        else:
+            show, _ = get_or_create_default_show(request.user)
         raw_title = (data.get('title') or '').strip()
         auto_title = not raw_title
         title = raw_title or f"RSS 任务 {uuid4().hex[:6]}"
@@ -504,6 +625,7 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
 
     def post(self, request, *args, **kwargs):
         from .tasks import generate_source_podcast_task
+        from .services.default_show import get_or_create_default_show
         from .services.source_ingest import generate_script_from_source
 
         serializer = self.get_serializer(data=request.data)
@@ -532,7 +654,10 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
                 status=status.HTTP_200_OK
             )
 
-        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        if data.get('show_id'):
+            show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        else:
+            show, _ = get_or_create_default_show(request.user)
         raw_title = (data.get('title') or '').strip()
         auto_title = not raw_title
         title = raw_title or f"链接任务 {uuid4().hex[:6]}"
@@ -1065,10 +1190,11 @@ def generate_debate_audio(request, episode_id):
 
     Request body:
     {
-        "show_id": 123  # 要关联的Show ID（必须是当前用户的）
+        "show_id": 123  # 可选；不传则自动使用默认节目
     }
     """
     from .tasks import generate_debate_audio_task
+    from .services.default_show import get_or_create_default_show
 
     # 获取并验证Episode
     try:
@@ -1093,22 +1219,19 @@ def generate_debate_audio(request, episode_id):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 获取show_id
+    # show_id 可选；未传则自动落到默认节目
     show_id = request.data.get('show_id')
-    if not show_id:
-        return Response(
-            {'error': 'show_id 必填'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # 验证Show存在且属于当前用户
-    try:
-        show = Show.objects.get(id=show_id, creator=request.user)
-    except Show.DoesNotExist:
-        return Response(
-            {'error': 'Show不存在或您没有权限'},
-            status=status.HTTP_404_NOT_FOUND
-        )
+    if show_id:
+        try:
+            show = Show.objects.get(id=show_id, creator=request.user)
+        except Show.DoesNotExist:
+            return Response(
+                {'error': 'Show不存在或您没有权限'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    else:
+        show, _ = get_or_create_default_show(request.user)
+        show_id = show.id
 
     # 更新状态
     episode.status = 'processing'

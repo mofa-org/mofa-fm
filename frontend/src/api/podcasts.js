@@ -46,6 +46,11 @@ export default {
     return client.get('/podcasts/episodes/', { params })
   },
 
+  // 运营推荐位
+  getRecommendedEpisodes(params) {
+    return client.get('/podcasts/recommendations/episodes/', { params })
+  },
+
   // 单集详情
   getEpisode(showSlug, episodeSlug) {
     return client.get(`/podcasts/shows/${showSlug}/episodes/${episodeSlug}/`)
@@ -186,6 +191,11 @@ export default {
   // 获取Episode详情（by ID）
   getEpisodeById(episodeId) {
     return client.get(`/podcasts/episodes/${episodeId}/`)
+  },
+
+  // 获取分享卡片数据
+  getEpisodeShareCard(episodeId) {
+    return client.get(`/podcasts/episodes/${episodeId}/share-card/`)
   },
 
   // 为Debate/Conference生成音频

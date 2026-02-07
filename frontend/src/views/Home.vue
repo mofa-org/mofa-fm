@@ -30,6 +30,7 @@
               clearable
             />
             <el-select v-model="quickShowId" placeholder="选择节目">
+              <el-option label="默认节目（自动）" :value="null" />
               <el-option
                 v-for="show in myShows"
                 :key="show.id"
@@ -113,6 +114,27 @@
         </div>
       </section>
 
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">为你推荐</h2>
+          <router-link class="section-more" to="/discover">查看全部</router-link>
+        </div>
+        <div class="recommended-list" v-if="recommendedItems.length > 0">
+          <div
+            v-for="item in recommendedItems"
+            :key="item.episode.id"
+            class="recommended-item"
+          >
+            <div class="recommended-reason">{{ item.reason }}</div>
+            <EpisodeCard
+              :episode="item.episode"
+              :playlist="recommendedEpisodes"
+            />
+          </div>
+        </div>
+        <el-empty v-else description="推荐位加载中" />
+      </section>
+
       <!-- 最新单集 -->
       <section class="section">
         <h2 class="section-title">最新单集</h2>
@@ -144,6 +166,7 @@ const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isCreator = computed(() => authStore.isCreator)
 
 const stats = ref(null)
+const recommendedItems = ref([])
 const latestEpisodes = ref([])
 const myShows = ref([])
 const quickSourceUrl = ref('https://news.ycombinator.com/rss')
@@ -158,6 +181,9 @@ const templateOptions = [
   { value: 'news_flash', label: '新闻快报' },
   { value: 'deep_dive', label: '深度长谈' }
 ]
+const recommendedEpisodes = computed(() =>
+  recommendedItems.value.map(item => item.episode).filter(Boolean)
+)
 
 onMounted(async () => {
   // 加载统计数据
@@ -175,13 +201,18 @@ onMounted(async () => {
     console.error('加载最新单集失败', error)
   }
 
+  // 加载推荐位
+  try {
+    const data = await api.podcasts.getRecommendedEpisodes({ limit: 6 })
+    recommendedItems.value = data.items || []
+  } catch (error) {
+    console.error('加载推荐位失败', error)
+  }
+
   if (isAuthenticated.value && isCreator.value) {
     try {
       const data = await api.podcasts.getMyShows()
       myShows.value = Array.isArray(data) ? data : (data.results || [])
-      if (!quickShowId.value && myShows.value.length > 0) {
-        quickShowId.value = myShows.value[0].id
-      }
     } catch (error) {
       console.error('加载节目失败', error)
     }
@@ -196,22 +227,25 @@ function formatNumber(num) {
 }
 
 async function handleQuickGenerate() {
-  if (!quickSourceUrl.value.trim() || !quickShowId.value) {
-    quickError.value = '请填写链接并选择节目'
+  if (!quickSourceUrl.value.trim()) {
+    quickError.value = '请填写链接'
     return
   }
 
   quickSubmitting.value = true
   quickError.value = ''
   try {
-    const response = await api.podcasts.generateEpisodeFromSource({
-      show_id: Number(quickShowId.value),
+    const payload = {
       source_url: quickSourceUrl.value.trim(),
       title: quickTitle.value.trim() || undefined,
       template: quickTemplate.value,
       max_items: 6,
       dry_run: false,
-    })
+    }
+    if (quickShowId.value) {
+      payload.show_id = Number(quickShowId.value)
+    }
+    const response = await api.podcasts.generateEpisodeFromSource(payload)
     ElMessage.success(`任务已提交（${response.source_type || 'source'}）`)
     quickTitle.value = ''
   } catch (error) {
@@ -289,6 +323,18 @@ async function handleQuickGenerate() {
   margin-bottom: var(--spacing-3xl);
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.section-more {
+  color: var(--color-primary);
+  font-weight: var(--font-semibold);
+}
+
 .quick-create {
   padding: var(--spacing-lg);
 }
@@ -338,6 +384,28 @@ async function handleQuickGenerate() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+}
+
+.recommended-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.recommended-item {
+  position: relative;
+}
+
+.recommended-reason {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  z-index: 2;
+  background: rgba(13, 21, 49, 0.75);
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: var(--font-xs);
 }
 
 /* AI功能区 */

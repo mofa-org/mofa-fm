@@ -19,6 +19,7 @@ urlpatterns = [
 
     # 统计
     path('stats/', views.stats, name='stats'),
+    path('recommendations/episodes/', views.recommended_episodes, name='recommended_episodes'),
 
     # 播客节目
     path('shows/', views.ShowListView.as_view(), name='show_list'),
@@ -35,6 +36,7 @@ urlpatterns = [
     path('episodes/generate-from-source/', views.GenerateEpisodeFromSourceView.as_view(), name='episode_generate_from_source'),
     path('episodes/generate-debate/', views.generate_debate, name='generate_debate'),
     path('episodes/<int:episode_id>/', views.get_episode_by_id, name='get_episode_by_id'),
+    path('episodes/<int:episode_id>/share-card/', views.episode_share_card, name='episode_share_card'),
     path('episodes/<int:episode_id>/retry/', views.retry_generation, name='retry_generation'),
     path('episodes/<int:episode_id>/cover-options/', views.generate_cover_options, name='generate_cover_options'),
     path('episodes/<int:episode_id>/cover-apply/', views.apply_cover_option, name='apply_cover_option'),

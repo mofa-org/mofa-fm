@@ -57,9 +57,9 @@
               ></textarea>
             </div>
             <div class="form-group">
-              <label>关联节目</label>
+              <label>关联节目（可选）</label>
               <select v-model="rssShowId" class="form-select">
-                <option :value="null">请选择节目</option>
+                <option :value="null">默认节目（自动）</option>
                 <option v-for="show in myShows" :key="show.id" :value="show.id">{{ show.title }}</option>
               </select>
             </div>
@@ -467,15 +467,15 @@
               />
             </div>
             <div class="form-group">
-              <label>关联节目</label>
+              <label>关联节目（可选）</label>
               <select v-model="generateShowId" class="form-select">
-                <option :value="null">请选择节目</option>
+                <option :value="null">默认节目（自动）</option>
                 <option v-for="show in availableShows" :key="show.id" :value="show.id">
                   {{ show.title }}
                 </option>
               </select>
             </div>
-            <p v-if="availableShows.length === 0" class="hint">暂无可用节目，请先到节目管理中创建节目。</p>
+            <p v-if="availableShows.length === 0" class="hint">暂无已建节目，系统会自动使用默认节目。</p>
             <p v-if="generateError" class="error-message">{{ generateError }}</p>
           </div>
           <div class="modal-footer">
@@ -483,7 +483,7 @@
             <button
               @click="confirmGeneratePodcast"
               class="mofa-btn mofa-btn-success"
-              :disabled="generating || !generateTitle.trim() || !generateShowId"
+              :disabled="generating || !generateTitle.trim()"
             >
               {{ generating ? '提交中...' : '生成' }}
             </button>
@@ -774,9 +774,6 @@ async function loadMyShows() {
   try {
     const data = await podcastsAPI.getMyShows()
     myShows.value = Array.isArray(data) ? data : (data.results || [])
-    if (!rssShowId.value && myShows.value.length > 0) {
-      rssShowId.value = myShows.value[0].id
-    }
   } catch (error) {
     console.error('加载节目失败:', error)
   }
@@ -784,22 +781,25 @@ async function loadMyShows() {
 
 async function previewRSSScript() {
   const urls = parseRssUrls()
-  if (!urls.length || !rssShowId.value) {
-    rssError.value = '请填写 RSS 地址并选择节目'
+  if (!urls.length) {
+    rssError.value = '请填写 RSS 地址'
     return
   }
   rssSubmitting.value = true
   rssError.value = ''
   try {
-    const data = await podcastsAPI.generateEpisodeFromRSS({
-      show_id: Number(rssShowId.value),
+    const payload = {
       rss_urls: urls,
       template: rssTemplate.value,
       max_items: Number(rssMaxItems.value) || 2,
       deduplicate: rssDeduplicate.value,
       sort_by: rssSortBy.value,
       dry_run: true
-    })
+    }
+    if (rssShowId.value) {
+      payload.show_id = Number(rssShowId.value)
+    }
+    const data = await podcastsAPI.generateEpisodeFromRSS(payload)
     rssScriptPreview.value = data.script || ''
     ElMessage.success(`已解析 ${data.item_count || 0} 条并生成脚本`)
   } catch (error) {
@@ -811,15 +811,14 @@ async function previewRSSScript() {
 
 async function generateFromRSS() {
   const urls = parseRssUrls()
-  if (!urls.length || !rssShowId.value) {
-    rssError.value = '请填写 RSS 地址并选择节目'
+  if (!urls.length) {
+    rssError.value = '请填写 RSS 地址'
     return
   }
   rssSubmitting.value = true
   rssError.value = ''
   try {
-    await podcastsAPI.generateEpisodeFromRSS({
-      show_id: Number(rssShowId.value),
+    const payload = {
       rss_urls: urls,
       title: rssTitle.value.trim() || undefined,
       template: rssTemplate.value,
@@ -828,7 +827,11 @@ async function generateFromRSS() {
       sort_by: rssSortBy.value,
       scheduled_at: normalizeScheduledAt(rssScheduledAtLocal.value),
       dry_run: false
-    })
+    }
+    if (rssShowId.value) {
+      payload.show_id = Number(rssShowId.value)
+    }
+    await podcastsAPI.generateEpisodeFromRSS(payload)
     ElMessage.success(rssScheduledAtLocal.value ? 'RSS 定时任务已提交' : 'RSS 生成任务已提交')
     await loadGenerationQueue()
   } catch (error) {
@@ -1265,7 +1268,7 @@ function openGenerateDialog() {
   generateError.value = ''
   generateTitle.value = currentSession.value.title || ''
   const currentShowId = currentSession.value.show?.id ?? null
-  generateShowId.value = currentShowId ?? (availableShows.value[0]?.id ?? null)
+  generateShowId.value = currentShowId
 }
 
 function closeGenerateDialog() {
@@ -1282,22 +1285,20 @@ async function confirmGeneratePodcast() {
     return
   }
 
-  const showId = Number(generateShowId.value ?? currentSession.value.show?.id ?? 0)
-  if (!Number.isInteger(showId) || showId <= 0) {
-    generateError.value = '请选择要生成的节目'
-    return
-  }
-
   generating.value = true
   generateError.value = ''
 
   try {
-    await podcastsAPI.generateEpisode({
-      show_id: showId,
+    const payload = {
       title: generateTitle.value.trim(),
       description: '由 AI 脚本创作工具生成',
       script: currentSession.value.current_script
-    })
+    }
+    const selectedShowId = Number(generateShowId.value ?? currentSession.value.show?.id ?? 0)
+    if (Number.isInteger(selectedShowId) && selectedShowId > 0) {
+      payload.show_id = selectedShowId
+    }
+    await podcastsAPI.generateEpisode(payload)
 
     showGenerateDialog.value = false
     ElMessage.success({
