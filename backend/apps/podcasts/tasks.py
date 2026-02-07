@@ -237,6 +237,79 @@ def generate_source_podcast_task(episode_id, source_url, max_items=8, template='
 
 
 @shared_task
+def generate_rss_podcast_task(
+    episode_id,
+    rss_urls,
+    max_items=8,
+    deduplicate=True,
+    sort_by='latest',
+    template='news_flash',
+):
+    """
+    Background task to generate podcast from multi RSS sources.
+    """
+    from .models import Episode
+    from .services.rss_ingest import collect_rss_material, generate_script_from_rss_material
+
+    episode = None
+    try:
+        episode = Episode.objects.get(id=episode_id)
+        _set_episode_generation_state(
+            episode,
+            status_value='processing',
+            stage_value='source_fetching',
+            error_value='',
+        )
+
+        material = collect_rss_material(
+            rss_urls=list(rss_urls or []),
+            max_items=max_items,
+            deduplicate=bool(deduplicate),
+            sort_by=sort_by,
+        )
+
+        _set_episode_generation_state(
+            episode,
+            status_value='processing',
+            stage_value='script_generating',
+        )
+        script = generate_script_from_rss_material(material, template=template)
+
+        meta = dict(episode.generation_meta or {})
+        meta.update({
+            "type": "rss",
+            "source_url": (rss_urls or [''])[0],
+            "rss_urls": list(rss_urls or []),
+            "max_items": max_items,
+            "template": template,
+            "deduplicate": bool(deduplicate),
+            "sort_by": sort_by,
+            "source_title": material.get("source_title") or "",
+            "item_count": len(material.get("items") or []),
+        })
+
+        if meta.get("auto_title"):
+            source_title = material.get("source_title") or "RSS 来源"
+            episode.title = f"{source_title} 快报"
+
+        episode.script = script
+        episode.generation_meta = meta
+        episode.save(update_fields=['title', 'script', 'generation_meta', 'updated_at'])
+
+        _publish_generated_episode(episode=episode, script_content=script)
+    except Exception as e:
+        print(f"Failed to generate rss podcast for episode {episode_id}: {e}")
+        if episode:
+            _set_episode_generation_state(
+                episode,
+                status_value='failed',
+                stage_value='failed',
+                error_value=str(e)[:1000],
+            )
+        raise
+
+
+@shared_task
 def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
     """
     Background task to generate debate/conference dialogue (text-only, no audio).

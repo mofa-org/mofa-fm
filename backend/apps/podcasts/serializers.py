@@ -1,6 +1,7 @@
 """
 播客序列化器
 """
+from django.utils import timezone
 from rest_framework import serializers
 from apps.users.serializers import UserSerializer
 from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
@@ -365,8 +366,20 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
     show_id = serializers.IntegerField(required=True)
-    rss_url = serializers.URLField(required=True)
+    rss_url = serializers.URLField(required=False, allow_blank=True)
+    rss_urls = serializers.ListField(
+        child=serializers.URLField(),
+        required=False,
+        allow_empty=False
+    )
     template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
+    deduplicate = serializers.BooleanField(required=False, default=True)
+    sort_by = serializers.ChoiceField(
+        required=False,
+        choices=[('latest', 'latest'), ('oldest', 'oldest'), ('title', 'title')],
+        default='latest'
+    )
+    scheduled_at = serializers.DateTimeField(required=False, allow_null=True)
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
 
@@ -377,6 +390,29 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
             return value
         except Show.DoesNotExist:
             raise serializers.ValidationError("节目不存在或您没有权限")
+
+    def validate(self, attrs):
+        rss_urls = list(attrs.get('rss_urls') or [])
+        rss_url = (attrs.get('rss_url') or '').strip()
+        if rss_url:
+            rss_urls.insert(0, rss_url)
+
+        # 归一化并去空
+        normalized_urls = []
+        for url in rss_urls:
+            value = (url or '').strip()
+            if value:
+                normalized_urls.append(value)
+        if not normalized_urls:
+            raise serializers.ValidationError({'rss_url': '请至少提供一个 RSS 地址'})
+
+        attrs['rss_urls'] = normalized_urls
+        attrs['rss_url'] = normalized_urls[0]
+
+        scheduled_at = attrs.get('scheduled_at')
+        if scheduled_at and scheduled_at <= timezone.now():
+            raise serializers.ValidationError({'scheduled_at': '定时任务时间需晚于当前时间'})
+        return attrs
 
 
 class SourcePodcastGenerationSerializer(serializers.Serializer):

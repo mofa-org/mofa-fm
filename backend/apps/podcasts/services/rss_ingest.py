@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import re
 from typing import Dict, List, Tuple
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 import requests
@@ -141,6 +142,78 @@ def _items_to_reference_text(feed_title: str, items: List[Dict[str, str]]) -> st
     return "\n".join(lines).strip()
 
 
+def _parse_published(value: str):
+    if not value:
+        return None
+    try:
+        return parsedate_to_datetime(value)
+    except Exception:
+        return None
+
+
+def _published_sort_value(value: str) -> float:
+    dt = _parse_published(value)
+    if not dt:
+        return 0.0
+    try:
+        return dt.timestamp()
+    except Exception:
+        return 0.0
+
+
+def collect_rss_material(
+    rss_urls: List[str],
+    max_items: int = 8,
+    deduplicate: bool = True,
+    sort_by: str = "latest",
+) -> Dict[str, object]:
+    if not rss_urls:
+        raise ValueError("RSS 源不能为空")
+
+    merged_items: List[Dict[str, str]] = []
+    feed_titles: List[str] = []
+    seen = set()
+
+    for rss_url in rss_urls:
+        feed_title, items = fetch_rss_items(rss_url=rss_url, max_items=max_items)
+        feed_titles.append(feed_title)
+        for item in items:
+            merged = dict(item)
+            merged["source_feed"] = feed_title
+            key = (
+                (merged.get("title") or "").strip().lower(),
+                (merged.get("link") or "").strip().lower(),
+            )
+            if deduplicate and key in seen:
+                continue
+            seen.add(key)
+            merged_items.append(merged)
+
+    if not merged_items:
+        raise ValueError("RSS 无可用条目")
+
+    if sort_by == "oldest":
+        merged_items.sort(key=lambda x: _published_sort_value(x.get("published", "")))
+    elif sort_by == "title":
+        merged_items.sort(key=lambda x: (x.get("title") or "").lower())
+    else:
+        merged_items.sort(
+            key=lambda x: _published_sort_value(x.get("published", "")),
+            reverse=True
+        )
+
+    merged_items = merged_items[:max_items]
+    source_title = " / ".join(feed_titles[:3])
+    if len(feed_titles) > 3:
+        source_title += f" 等{len(feed_titles)}源"
+    reference_text = _items_to_reference_text(feed_title=source_title, items=merged_items)
+    return {
+        "source_title": source_title,
+        "items": merged_items,
+        "reference_text": reference_text,
+    }
+
+
 def _normalize_roles(script: str) -> str:
     """
     Normalize role tags into generator-compatible aliases.
@@ -194,22 +267,48 @@ def _generate_script_with_llm(feed_title: str, reference_text: str, template: st
     return content
 
 
-def generate_script_from_rss(rss_url: str, max_items: int = 8, template: str = "news_flash") -> Dict[str, object]:
+def generate_script_from_rss_material(material: Dict[str, object], template: str = "news_flash") -> str:
+    script = _generate_script_with_llm(
+        feed_title=str(material.get("source_title") or ""),
+        reference_text=str(material.get("reference_text") or ""),
+        template=template,
+    )
+    return _normalize_roles(script)
+
+
+def generate_script_from_rss_sources(
+    rss_urls: List[str],
+    max_items: int = 8,
+    deduplicate: bool = True,
+    sort_by: str = "latest",
+    template: str = "news_flash",
+) -> Dict[str, object]:
+    material = collect_rss_material(
+        rss_urls=rss_urls,
+        max_items=max_items,
+        deduplicate=deduplicate,
+        sort_by=sort_by,
+    )
+    script = generate_script_from_rss_material(material, template=template)
+    return {
+        "feed_title": material["source_title"],
+        "items": material["items"],
+        "script": script,
+    }
+
+
+def generate_script_from_rss(
+    rss_url: str,
+    max_items: int = 8,
+    template: str = "news_flash",
+) -> Dict[str, object]:
     """
     Generate a podcast script from an RSS URL.
     """
-    feed_title, items = fetch_rss_items(rss_url=rss_url, max_items=max_items)
-    reference_text = _items_to_reference_text(feed_title=feed_title, items=items)
-
-    script = _generate_script_with_llm(
-        feed_title=feed_title,
-        reference_text=reference_text,
+    return generate_script_from_rss_sources(
+        rss_urls=[rss_url],
+        max_items=max_items,
+        deduplicate=True,
+        sort_by="latest",
         template=template,
     )
-    script = _normalize_roles(script)
-
-    return {
-        "feed_title": feed_title,
-        "items": items,
-        "script": script,
-    }

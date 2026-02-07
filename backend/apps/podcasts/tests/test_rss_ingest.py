@@ -1,7 +1,11 @@
 from unittest import TestCase
 from unittest.mock import patch
 
-from apps.podcasts.services.rss_ingest import fetch_rss_items, generate_script_from_rss
+from apps.podcasts.services.rss_ingest import (
+    collect_rss_material,
+    fetch_rss_items,
+    generate_script_from_rss,
+)
 
 
 SAMPLE_RSS = b"""<?xml version="1.0"?>
@@ -59,3 +63,54 @@ class RSSIngestServiceTests(TestCase):
         self.assertIn("【大牛】", result["script"])
         self.assertIn("【一帆】", result["script"])
         mock_generate_llm.assert_called_once()
+
+    @patch("apps.podcasts.services.rss_ingest.fetch_rss_items")
+    def test_collect_rss_material_deduplicate_and_sort(self, mock_fetch):
+        mock_fetch.side_effect = [
+            (
+                "FeedA",
+                [
+                    {
+                        "title": "Same Item",
+                        "link": "https://example.com/same",
+                        "description": "dup",
+                        "published": "Sat, 07 Feb 2026 09:00:00 GMT",
+                    },
+                    {
+                        "title": "Old Item",
+                        "link": "https://example.com/old",
+                        "description": "old",
+                        "published": "Sat, 07 Feb 2026 07:00:00 GMT",
+                    },
+                ],
+            ),
+            (
+                "FeedB",
+                [
+                    {
+                        "title": "Same Item",
+                        "link": "https://example.com/same",
+                        "description": "dup",
+                        "published": "Sat, 07 Feb 2026 09:00:00 GMT",
+                    },
+                    {
+                        "title": "New Item",
+                        "link": "https://example.com/new",
+                        "description": "new",
+                        "published": "Sat, 07 Feb 2026 10:00:00 GMT",
+                    },
+                ],
+            ),
+        ]
+
+        material = collect_rss_material(
+            rss_urls=["https://a.example/rss", "https://b.example/rss"],
+            max_items=5,
+            deduplicate=True,
+            sort_by="latest",
+        )
+
+        self.assertEqual(material["source_title"], "FeedA / FeedB")
+        self.assertEqual(len(material["items"]), 3)
+        self.assertEqual(material["items"][0]["title"], "New Item")
+        self.assertEqual(material["items"][1]["title"], "Same Item")

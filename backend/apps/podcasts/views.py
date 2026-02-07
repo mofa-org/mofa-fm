@@ -265,7 +265,7 @@ def generation_queue(request):
 @permission_classes([IsAuthenticated])
 def retry_generation(request, episode_id):
     """重试失败的 AI 生成任务"""
-    from .tasks import generate_podcast_task, generate_source_podcast_task
+    from .tasks import generate_podcast_task, generate_source_podcast_task, generate_rss_podcast_task
 
     episode = get_object_or_404(Episode, id=episode_id, show__creator=request.user)
     if episode.status != 'failed':
@@ -276,8 +276,11 @@ def retry_generation(request, episode_id):
 
     generation_meta = dict(episode.generation_meta or {})
     source_url = generation_meta.get('source_url')
+    rss_urls = generation_meta.get('rss_urls') or []
     max_items = generation_meta.get('max_items', 8)
     template = generation_meta.get('template', 'news_flash')
+    deduplicate = generation_meta.get('deduplicate', True)
+    sort_by = generation_meta.get('sort_by', 'latest')
     generation_type = generation_meta.get('type')
 
     episode.status = 'processing'
@@ -285,7 +288,16 @@ def retry_generation(request, episode_id):
     episode.generation_error = ''
     episode.save(update_fields=['status', 'generation_stage', 'generation_error', 'updated_at'])
 
-    if source_url and generation_type in {'source', 'rss', 'webpage'}:
+    if generation_type == 'rss' and rss_urls:
+        generate_rss_podcast_task.delay(
+            episode.id,
+            rss_urls,
+            max_items,
+            deduplicate,
+            sort_by,
+            template,
+        )
+    elif source_url and generation_type in {'source', 'webpage'}:
         generate_source_podcast_task.delay(episode.id, source_url, max_items, template)
     elif episode.script:
         generate_podcast_task.delay(episode.id, episode.script)
@@ -403,18 +415,24 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
 
     def post(self, request, *args, **kwargs):
-        from .tasks import generate_source_podcast_task
-        from .services.rss_ingest import generate_script_from_rss
+        from .tasks import generate_rss_podcast_task
+        from .services.rss_ingest import generate_script_from_rss_sources
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        rss_urls = data.get('rss_urls', [data['rss_url']])
+        deduplicate = data.get('deduplicate', True)
+        sort_by = data.get('sort_by', 'latest')
+        template = data.get('template', 'news_flash')
 
         if data.get('dry_run', False):
-            rss_result = generate_script_from_rss(
-                rss_url=data['rss_url'],
+            rss_result = generate_script_from_rss_sources(
+                rss_urls=rss_urls,
                 max_items=data.get('max_items', 8),
-                template=data.get('template', 'news_flash'),
+                deduplicate=deduplicate,
+                sort_by=sort_by,
+                template=template,
             )
             script = rss_result['script']
             feed_title = rss_result['feed_title']
@@ -439,30 +457,40 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
         episode = Episode.objects.create(
             show=show,
             title=title,
-            description=f"AI Generated Podcast from RSS: {data['rss_url']}",
+            description=f"AI Generated Podcast from RSS: {', '.join(rss_urls)}",
             status='processing',
             generation_stage='queued',
             generation_error='',
             generation_meta={
                 'type': 'rss',
-                'source_url': data['rss_url'],
+                'source_url': rss_urls[0],
+                'rss_urls': rss_urls,
                 'max_items': data.get('max_items', 8),
-                'template': data.get('template', 'news_flash'),
+                'template': template,
+                'deduplicate': deduplicate,
+                'sort_by': sort_by,
                 'auto_title': auto_title,
             },
             audio_file=placeholder_file
         )
 
-        generate_source_podcast_task.delay(
+        scheduled_at = data.get('scheduled_at')
+        task_args = (
             episode.id,
-            data['rss_url'],
+            rss_urls,
             data.get('max_items', 8),
-            data.get('template', 'news_flash'),
+            deduplicate,
+            sort_by,
+            template,
         )
+        if scheduled_at:
+            generate_rss_podcast_task.apply_async(args=task_args, eta=scheduled_at)
+        else:
+            generate_rss_podcast_task.delay(*task_args)
 
         return Response(
             {
-                "message": "RSS podcast generation started",
+                "message": "RSS podcast generation scheduled" if scheduled_at else "RSS podcast generation started",
                 "episode_id": episode.id,
             },
             status=status.HTTP_202_ACCEPTED

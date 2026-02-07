@@ -48,8 +48,13 @@
           </div>
           <div class="rss-form">
             <div class="form-group">
-              <label>RSS 地址</label>
-              <input v-model="rssUrl" type="text" class="form-input" placeholder="https://news.ycombinator.com/rss" />
+              <label>RSS 地址（多行可多源）</label>
+              <textarea
+                v-model="rssUrlsText"
+                class="form-input"
+                rows="3"
+                placeholder="https://news.ycombinator.com/rss&#10;https://example.com/feed.xml"
+              ></textarea>
             </div>
             <div class="form-group">
               <label>关联节目</label>
@@ -74,6 +79,22 @@
               <label>条目数</label>
               <input v-model.number="rssMaxItems" type="number" min="1" max="20" class="form-input" />
             </div>
+            <div class="form-group">
+              <label>排序</label>
+              <select v-model="rssSortBy" class="form-select">
+                <option value="latest">最新优先</option>
+                <option value="oldest">最早优先</option>
+                <option value="title">按标题</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>定时生成（可选）</label>
+              <input v-model="rssScheduledAtLocal" type="datetime-local" class="form-input" />
+            </div>
+            <label class="rss-checkbox">
+              <input v-model="rssDeduplicate" type="checkbox" />
+              去重（按标题+链接）
+            </label>
           </div>
           <p v-if="rssError" class="error-message">{{ rssError }}</p>
           <div class="rss-actions">
@@ -698,11 +719,14 @@ const coverApplying = ref(false)
 const coverError = ref('')
 
 // RSS 快速生成
-const rssUrl = ref('https://news.ycombinator.com/rss')
+const rssUrlsText = ref('https://news.ycombinator.com/rss')
 const rssShowId = ref(null)
 const rssTitle = ref('')
 const rssTemplate = ref('news_flash')
 const rssMaxItems = ref(2)
+const rssDeduplicate = ref(true)
+const rssSortBy = ref('latest')
+const rssScheduledAtLocal = ref('')
 const rssSubmitting = ref(false)
 const rssError = ref('')
 const rssScriptPreview = ref('')
@@ -759,7 +783,8 @@ async function loadMyShows() {
 }
 
 async function previewRSSScript() {
-  if (!rssUrl.value.trim() || !rssShowId.value) {
+  const urls = parseRssUrls()
+  if (!urls.length || !rssShowId.value) {
     rssError.value = '请填写 RSS 地址并选择节目'
     return
   }
@@ -768,9 +793,11 @@ async function previewRSSScript() {
   try {
     const data = await podcastsAPI.generateEpisodeFromRSS({
       show_id: Number(rssShowId.value),
-      rss_url: rssUrl.value.trim(),
+      rss_urls: urls,
       template: rssTemplate.value,
       max_items: Number(rssMaxItems.value) || 2,
+      deduplicate: rssDeduplicate.value,
+      sort_by: rssSortBy.value,
       dry_run: true
     })
     rssScriptPreview.value = data.script || ''
@@ -783,7 +810,8 @@ async function previewRSSScript() {
 }
 
 async function generateFromRSS() {
-  if (!rssUrl.value.trim() || !rssShowId.value) {
+  const urls = parseRssUrls()
+  if (!urls.length || !rssShowId.value) {
     rssError.value = '请填写 RSS 地址并选择节目'
     return
   }
@@ -792,19 +820,36 @@ async function generateFromRSS() {
   try {
     await podcastsAPI.generateEpisodeFromRSS({
       show_id: Number(rssShowId.value),
-      rss_url: rssUrl.value.trim(),
+      rss_urls: urls,
       title: rssTitle.value.trim() || undefined,
       template: rssTemplate.value,
       max_items: Number(rssMaxItems.value) || 2,
+      deduplicate: rssDeduplicate.value,
+      sort_by: rssSortBy.value,
+      scheduled_at: normalizeScheduledAt(rssScheduledAtLocal.value),
       dry_run: false
     })
-    ElMessage.success('RSS 生成任务已提交')
+    ElMessage.success(rssScheduledAtLocal.value ? 'RSS 定时任务已提交' : 'RSS 生成任务已提交')
     await loadGenerationQueue()
   } catch (error) {
     rssError.value = error.response?.data?.error || error.message || '提交失败'
   } finally {
     rssSubmitting.value = false
   }
+}
+
+function parseRssUrls() {
+  return (rssUrlsText.value || '')
+    .split(/\r?\n/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+function normalizeScheduledAt(value) {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toISOString()
 }
 
 // 创建新会话
@@ -2469,6 +2514,14 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-md);
+}
+
+.rss-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
 }
 
 .rss-actions {
