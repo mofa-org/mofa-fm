@@ -184,7 +184,8 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             'episode_number', 'season_number',
             'artist', 'genre', 'album_name', 'release_date',
             'visibility',
-            'status', 'play_count', 'like_count', 'comment_count',
+            'status', 'generation_stage', 'generation_error', 'generation_meta',
+            'play_count', 'like_count', 'comment_count',
             'published_at', 'created_at'
         ]
 
@@ -219,7 +220,8 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             'episode_number', 'season_number',
             'artist', 'genre', 'album_name', 'release_date',
             'visibility', 'shared_with_users',
-            'status', 'play_count', 'like_count', 'comment_count',
+            'status', 'generation_stage', 'generation_error', 'generation_meta',
+            'play_count', 'like_count', 'comment_count',
             'is_liked', 'play_position',
             'script',  # 添加脚本字段
             'mode', 'dialogue', 'participants_config',  # Debate/Conference字段

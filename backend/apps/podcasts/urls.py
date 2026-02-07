@@ -35,6 +35,7 @@ urlpatterns = [
     path('episodes/generate-from-source/', views.GenerateEpisodeFromSourceView.as_view(), name='episode_generate_from_source'),
     path('episodes/generate-debate/', views.generate_debate, name='generate_debate'),
     path('episodes/<int:episode_id>/', views.get_episode_by_id, name='get_episode_by_id'),
+    path('episodes/<int:episode_id>/retry/', views.retry_generation, name='retry_generation'),
     path('episodes/<int:episode_id>/stream/', sse_views.debate_stream, name='debate_stream'),  # SSE流
     path('episodes/<int:episode_id>/generate-audio/', views.generate_debate_audio, name='generate_debate_audio'),
     path('episodes/<int:pk>/update/', views.EpisodeUpdateView.as_view(), name='episode_update'),

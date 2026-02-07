@@ -258,6 +258,49 @@ def generation_queue(request):
     return Response(serializer.data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def retry_generation(request, episode_id):
+    """重试失败的 AI 生成任务"""
+    from .tasks import generate_podcast_task, generate_source_podcast_task
+
+    episode = get_object_or_404(Episode, id=episode_id, show__creator=request.user)
+    if episode.status != 'failed':
+        return Response(
+            {'error': '仅失败任务可重试'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    generation_meta = dict(episode.generation_meta or {})
+    source_url = generation_meta.get('source_url')
+    max_items = generation_meta.get('max_items', 8)
+    generation_type = generation_meta.get('type')
+
+    episode.status = 'processing'
+    episode.generation_stage = 'queued'
+    episode.generation_error = ''
+    episode.save(update_fields=['status', 'generation_stage', 'generation_error', 'updated_at'])
+
+    if source_url and generation_type in {'source', 'rss', 'webpage'}:
+        generate_source_podcast_task.delay(episode.id, source_url, max_items)
+    elif episode.script:
+        generate_podcast_task.delay(episode.id, episode.script)
+    else:
+        episode.status = 'failed'
+        episode.generation_stage = 'failed'
+        episode.generation_error = '缺少可重试的脚本或来源链接'
+        episode.save(update_fields=['status', 'generation_stage', 'generation_error', 'updated_at'])
+        return Response(
+            {'error': '缺少可重试的上下文'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    return Response(
+        {'message': '重试任务已提交', 'episode_id': episode.id},
+        status=status.HTTP_202_ACCEPTED
+    )
+
+
 class GenerateEpisodeView(generics.GenericAPIView):
     """生成播客单集"""
     serializer_class = PodcastGenerationSerializer
@@ -278,6 +321,9 @@ class GenerateEpisodeView(generics.GenericAPIView):
             title=data['title'],
             description="AI Generated Podcast",
             status='processing',
+            generation_stage='queued',
+            generation_error='',
+            generation_meta={'type': 'script'},
             audio_file=placeholder_file
         )
 
@@ -298,23 +344,21 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
 
     def post(self, request, *args, **kwargs):
-        from .tasks import generate_podcast_task
+        from .tasks import generate_source_podcast_task
         from .services.rss_ingest import generate_script_from_rss
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
-        rss_result = generate_script_from_rss(
-            rss_url=data['rss_url'],
-            max_items=data.get('max_items', 8),
-        )
-        script = rss_result['script']
-        feed_title = rss_result['feed_title']
-        items = rss_result['items']
-
         if data.get('dry_run', False):
+            rss_result = generate_script_from_rss(
+                rss_url=data['rss_url'],
+                max_items=data.get('max_items', 8),
+            )
+            script = rss_result['script']
+            feed_title = rss_result['feed_title']
+            items = rss_result['items']
             return Response(
                 {
                     "message": "RSS parsed and script generated",
@@ -326,7 +370,10 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
                 status=status.HTTP_200_OK
             )
 
-        title = data.get('title') or f"{feed_title} 快报"
+        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        raw_title = (data.get('title') or '').strip()
+        auto_title = not raw_title
+        title = raw_title or f"RSS 任务 {uuid4().hex[:6]}"
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
 
         episode = Episode.objects.create(
@@ -334,17 +381,23 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
             title=title,
             description=f"AI Generated Podcast from RSS: {data['rss_url']}",
             status='processing',
+            generation_stage='queued',
+            generation_error='',
+            generation_meta={
+                'type': 'rss',
+                'source_url': data['rss_url'],
+                'max_items': data.get('max_items', 8),
+                'auto_title': auto_title,
+            },
             audio_file=placeholder_file
         )
 
-        generate_podcast_task.delay(episode.id, script)
+        generate_source_podcast_task.delay(episode.id, data['rss_url'], data.get('max_items', 8))
 
         return Response(
             {
                 "message": "RSS podcast generation started",
                 "episode_id": episode.id,
-                "feed_title": feed_title,
-                "item_count": len(items),
             },
             status=status.HTTP_202_ACCEPTED
         )
@@ -356,24 +409,22 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
 
     def post(self, request, *args, **kwargs):
-        from .tasks import generate_podcast_task
+        from .tasks import generate_source_podcast_task
         from .services.source_ingest import generate_script_from_source
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
-        source_result = generate_script_from_source(
-            source_url=data['source_url'],
-            max_items=data.get('max_items', 8),
-        )
-        script = source_result['script']
-        source_title = source_result['source_title']
-        source_type = source_result['source_type']
-        items = source_result.get('items', [])
-
         if data.get('dry_run', False):
+            source_result = generate_script_from_source(
+                source_url=data['source_url'],
+                max_items=data.get('max_items', 8),
+            )
+            script = source_result['script']
+            source_title = source_result['source_title']
+            source_type = source_result['source_type']
+            items = source_result.get('items', [])
             return Response(
                 {
                     "message": "Source parsed and script generated",
@@ -386,7 +437,10 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
                 status=status.HTTP_200_OK
             )
 
-        title = data.get('title') or f"{source_title} 快报"
+        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        raw_title = (data.get('title') or '').strip()
+        auto_title = not raw_title
+        title = raw_title or f"链接任务 {uuid4().hex[:6]}"
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
 
         episode = Episode.objects.create(
@@ -394,17 +448,23 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
             title=title,
             description=f"AI Generated Podcast from source: {data['source_url']}",
             status='processing',
+            generation_stage='queued',
+            generation_error='',
+            generation_meta={
+                'type': 'source',
+                'source_url': data['source_url'],
+                'max_items': data.get('max_items', 8),
+                'auto_title': auto_title,
+            },
             audio_file=placeholder_file
         )
 
-        generate_podcast_task.delay(episode.id, script)
+        generate_source_podcast_task.delay(episode.id, data['source_url'], data.get('max_items', 8))
 
         return Response(
             {
                 "message": "Source podcast generation started",
                 "episode_id": episode.id,
-                "source_type": source_type,
-                "item_count": len(items),
             },
             status=status.HTTP_202_ACCEPTED
         )

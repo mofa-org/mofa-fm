@@ -85,6 +85,11 @@ export default {
     return client.delete(`/podcasts/episodes/${episodeId}/delete/`)
   },
 
+  // 重试失败生成任务
+  retryEpisodeGeneration(episodeId) {
+    return client.post(`/podcasts/episodes/${episodeId}/retry/`)
+  },
+
   // 我的播客节目
   getMyShows() {
     return client.get('/podcasts/creator/shows/')

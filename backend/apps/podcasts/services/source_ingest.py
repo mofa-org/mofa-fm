@@ -14,6 +14,7 @@ import requests
 from .rss_ingest import (
     _generate_script_with_llm,
     _normalize_roles,
+    _items_to_reference_text,
     fetch_rss_items,
 )
 
@@ -118,34 +119,23 @@ def _webpage_to_reference(page: Dict[str, str]) -> str:
     ).strip()
 
 
-def generate_script_from_source(source_url: str, max_items: int = 8) -> Dict[str, object]:
+def collect_source_material(source_url: str, max_items: int = 8) -> Dict[str, object]:
     """
-    Generate script from RSS first; fallback to webpage extraction.
+    Collect source material first: RSS preferred, webpage fallback.
     """
+    _validate_source_url(source_url)
+
     try:
         feed_title, items = fetch_rss_items(rss_url=source_url, max_items=max_items)
-        lines = [f"来源：{feed_title}", ""]
-        for idx, item in enumerate(items, start=1):
-            lines.append(f"{idx}. 标题：{item['title']}")
-            if item.get("description"):
-                lines.append(f"摘要：{item['description']}")
-            if item.get("published"):
-                lines.append(f"发布时间：{item['published']}")
-            if item.get("link"):
-                lines.append(f"链接：{item['link']}")
-            lines.append("")
-        reference_text = "\n".join(lines).strip()
-        script = _generate_script_with_llm(feed_title=feed_title, reference_text=reference_text)
+        reference_text = _items_to_reference_text(feed_title=feed_title, items=items)
         return {
             "source_type": "rss",
             "source_title": feed_title,
             "items": items,
-            "script": _normalize_roles(script),
+            "reference_text": reference_text,
         }
     except Exception:
         page = _extract_webpage_text(source_url)
-        reference_text = _webpage_to_reference(page)
-        script = _generate_script_with_llm(feed_title=page["title"], reference_text=reference_text)
         return {
             "source_type": "webpage",
             "source_title": page["title"],
@@ -157,5 +147,36 @@ def generate_script_from_source(source_url: str, max_items: int = 8) -> Dict[str
                     "published": "",
                 }
             ],
-            "script": _normalize_roles(script),
+            "reference_text": _webpage_to_reference(page),
         }
+
+
+def generate_script_from_material(material: Dict[str, object]) -> str:
+    """
+    Generate script from collected source material.
+    """
+    source_title = str(material.get("source_title") or "")
+    reference_text = str(material.get("reference_text") or "")
+    if not source_title or not reference_text:
+        raise ValueError("source material incomplete")
+
+    script = _generate_script_with_llm(
+        feed_title=source_title,
+        reference_text=reference_text,
+    )
+    return _normalize_roles(script)
+
+
+def generate_script_from_source(source_url: str, max_items: int = 8) -> Dict[str, object]:
+    """
+    Collect source material and generate script in one call.
+    """
+    material = collect_source_material(source_url=source_url, max_items=max_items)
+    script = generate_script_from_material(material)
+
+    return {
+        "source_type": material["source_type"],
+        "source_title": material["source_title"],
+        "items": material["items"],
+        "script": script,
+    }

@@ -206,6 +206,16 @@ class Episode(models.Model):
         ('conference', '会议'),
     ]
 
+    GENERATION_STAGE_CHOICES = [
+        ('queued', '排队中'),
+        ('source_fetching', '抓取中'),
+        ('script_generating', '写稿中'),
+        ('audio_generating', '音频生成中'),
+        ('cover_generating', '封面生成中'),
+        ('completed', '完成'),
+        ('failed', '失败'),
+    ]
+
     show = models.ForeignKey(
         Show,
         on_delete=models.CASCADE,
@@ -254,6 +264,15 @@ class Episode(models.Model):
 
     # 状态
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='draft')
+    generation_stage = models.CharField(
+        '生成阶段',
+        max_length=32,
+        choices=GENERATION_STAGE_CHOICES,
+        default='queued',
+        db_index=True
+    )
+    generation_error = models.TextField('生成错误信息', blank=True, default='')
+    generation_meta = models.JSONField('生成元数据', default=dict, blank=True)
 
     # 生成模式（新增字段）
     mode = models.CharField(

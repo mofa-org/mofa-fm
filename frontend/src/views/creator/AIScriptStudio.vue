@@ -105,6 +105,16 @@
                   <span>{{ episode.show?.title || '未关联节目' }}</span>
                   <span>提交于 {{ formatTime(episode.created_at) }}</span>
                 </div>
+                <div class="generation-stage-row">
+                  <span class="generation-stage-text">{{ formatStage(episode) }}</span>
+                  <span class="generation-stage-percent">{{ generationProgress(episode) }}%</span>
+                </div>
+                <div class="generation-stage-progress">
+                  <div class="generation-stage-progress-bar" :style="{ width: `${generationProgress(episode)}%` }"></div>
+                </div>
+                <div v-if="episode.generation_error" class="generation-error">
+                  {{ episode.generation_error }}
+                </div>
               </div>
               <div class="generation-actions">
                 <span :class="statusClass(episode.status)">{{ formatStatus(episode.status) }}</span>
@@ -116,7 +126,14 @@
                   取消
                 </button>
                 <button
-                  v-else-if="canDeleteEpisode(episode)"
+                  v-if="canRetryEpisode(episode)"
+                  class="queue-action queue-action-retry"
+                  @click.stop="retryGeneration(episode)"
+                >
+                  重试
+                </button>
+                <button
+                  v-if="canDeleteEpisode(episode)"
                   class="queue-action"
                   @click.stop="deleteGeneration(episode)"
                 >
@@ -749,6 +766,10 @@ function canDeleteEpisode(episode) {
   return episode?.status === 'failed'
 }
 
+function canRetryEpisode(episode) {
+  return episode?.status === 'failed'
+}
+
 function openGenerationItem(episode) {
   if (!episode?.show?.slug) {
     ElMessage.warning('暂时无法跳转，缺少节目信息')
@@ -796,6 +817,18 @@ async function deleteGeneration(episode) {
   } catch (error) {
     console.error('删除记录失败:', error)
     ElMessage.error('删除失败，请稍后再试')
+  }
+}
+
+async function retryGeneration(episode) {
+  if (!episode?.id) return
+  try {
+    await podcastsAPI.retryEpisodeGeneration(episode.id)
+    ElMessage.success('重试任务已提交')
+    await loadGenerationQueue()
+  } catch (error) {
+    console.error('重试任务失败:', error)
+    ElMessage.error('重试失败，请稍后再试')
   }
 }
 
@@ -1153,6 +1186,40 @@ function statusClass(status) {
   }[status] || 'status-badge'
 }
 
+function formatStage(episode) {
+  if (!episode) return ''
+  if (episode.status === 'failed' && !episode.generation_stage) {
+    return '失败'
+  }
+  const stage = episode.generation_stage
+  const map = {
+    queued: '排队中',
+    source_fetching: '抓取中',
+    script_generating: '写稿中',
+    audio_generating: 'TTS 生成中',
+    cover_generating: '封面生成中',
+    completed: '完成',
+    failed: '失败'
+  }
+  return map[stage] || map[episode.status] || '处理中'
+}
+
+function generationProgress(episode) {
+  const stage = episode?.generation_stage
+  const progressMap = {
+    queued: 5,
+    source_fetching: 20,
+    script_generating: 45,
+    audio_generating: 75,
+    cover_generating: 90,
+    completed: 100,
+    failed: 100
+  }
+  if (episode?.status === 'published') return 100
+  if (episode?.status === 'failed' && !stage) return 100
+  return progressMap[stage] ?? (episode?.status === 'processing' ? 50 : 0)
+}
+
 function formatMessage(content) {
   if (!content) return ''
 
@@ -1349,6 +1416,41 @@ onMounted(() => {
   font-size: var(--font-xs);
 }
 
+.generation-stage-row {
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+}
+
+.generation-stage-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.generation-stage-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6dcad0, #ff513b);
+  transition: width 0.3s ease;
+}
+
+.generation-error {
+  margin-top: 6px;
+  font-size: var(--font-xs);
+  color: var(--color-primary);
+  max-width: 560px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .generation-actions {
   display: flex;
   align-items: center;
@@ -1405,6 +1507,15 @@ onMounted(() => {
 
 .queue-action-cancel:hover {
   background: rgba(255, 197, 62, 0.12);
+}
+
+.queue-action-retry {
+  border-color: var(--color-success-dark);
+  color: var(--color-success-dark);
+}
+
+.queue-action-retry:hover {
+  background: rgba(109, 202, 208, 0.12);
 }
 
 /* 工作区 */
