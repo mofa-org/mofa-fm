@@ -215,6 +215,12 @@ def stats(request):
 @permission_classes([IsAuthenticated])
 def my_shows(request):
     """我的播客节目"""
+    from .services.default_show import get_or_create_default_show, DEFAULT_SHOW_SLUG_PREFIX
+
+    default_slug = f'{DEFAULT_SHOW_SLUG_PREFIX}-{request.user.id}'
+    if Show.objects.filter(creator=request.user, slug=default_slug).exists():
+        get_or_create_default_show(request.user)
+
     shows = Show.objects.filter(creator=request.user).select_related('category')
     serializer = ShowListSerializer(shows, many=True, context={'request': request})
     return Response(serializer.data)
@@ -427,6 +433,61 @@ def retry_generation(request, episode_id):
     return Response(
         {'message': '重试任务已提交', 'episode_id': episode.id},
         status=status.HTTP_202_ACCEPTED
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_show_cover_options(request, slug):
+    """为节目生成多张封面候选图"""
+    from .services.cover_ai import generate_show_cover_candidates
+
+    show = get_object_or_404(Show, slug=slug, creator=request.user)
+    try:
+        count = int(request.data.get('count', 4))
+    except (TypeError, ValueError):
+        count = 4
+    count = max(1, min(count, 8))
+
+    try:
+        candidates = generate_show_cover_candidates(show, count=count)
+    except Exception as e:
+        return Response({'error': f'封面生成失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(
+        {
+            'show_id': show.id,
+            'count': len(candidates),
+            'candidates': candidates,
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_show_cover_option(request, slug):
+    """应用候选封面图到节目"""
+    from .services.cover_ai import apply_show_cover_candidate
+
+    show = get_object_or_404(Show, slug=slug, creator=request.user)
+    candidate_path = (request.data.get('candidate_path') or '').strip()
+    if not candidate_path:
+        return Response({'error': 'candidate_path 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        cover_url = apply_show_cover_candidate(show, candidate_path)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': f'应用封面失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(
+        {
+            'message': '封面已更新',
+            'cover_url': cover_url,
+        },
+        status=status.HTTP_200_OK
     )
 
 
@@ -1144,7 +1205,7 @@ def generate_debate(request):
     title = request.data.get('title')
     topic = request.data.get('topic')
     mode = request.data.get('mode', 'debate')
-    rounds = request.data.get('rounds', 3)
+    rounds = request.data.get('rounds', 1)
 
     logger.info(f"Extracted - title: {title}, topic: {topic}, mode: {mode}, rounds: {rounds}")
 
@@ -1161,12 +1222,25 @@ def generate_debate(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    try:
+        rounds = int(rounds)
+    except (TypeError, ValueError):
+        return Response(
+            {'error': 'rounds 必须是整数'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    rounds = max(1, min(rounds, 5))
+
     # 创建Episode（不关联show）
     episode = Episode.objects.create(
         title=title,
         description=f"AI Generated {mode.capitalize()}",
         status='processing',
-        mode=mode
+        mode=mode,
+        generation_meta={
+            "creator_id": request.user.id,
+            "topic": topic
+        }
     )
 
     # 触发异步任务
@@ -1177,6 +1251,67 @@ def generate_debate(request):
             "message": f"{mode.capitalize()} generation started",
             "episode_id": episode.id,
             "mode": mode
+        },
+        status=status.HTTP_202_ACCEPTED
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def debate_message(request, episode_id):
+    """
+    用户插话：追加一条用户消息，并继续生成一轮AI群聊回复。
+    """
+    from .tasks import generate_debate_followup_task
+
+    message = (request.data.get('message') or '').strip()
+    if not message:
+        return Response(
+            {'error': 'message 不能为空'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        episode = Episode.objects.get(id=episode_id)
+    except Episode.DoesNotExist:
+        return Response(
+            {'error': 'Episode不存在'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if episode.mode not in ['debate', 'conference']:
+        return Response(
+            {'error': '该Episode不是辩论/会议模式'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    creator_id = (episode.generation_meta or {}).get('creator_id')
+    if creator_id and int(creator_id) != request.user.id:
+        return Response(
+            {'error': '您没有权限向该辩论发送消息'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    topic = (episode.generation_meta or {}).get('topic') or episode.title
+
+    dialogue = list(episode.dialogue or [])
+    dialogue.append({
+        'participant': 'user',
+        'content': message,
+        'timestamp': timezone.now().isoformat()
+    })
+
+    episode.dialogue = dialogue
+    episode.status = 'processing'
+    episode.generation_error = ''
+    episode.save(update_fields=['dialogue', 'status', 'generation_error', 'updated_at'])
+
+    generate_debate_followup_task.delay(episode.id, topic, episode.mode)
+
+    return Response(
+        {
+            "message": "Debate followup started",
+            "episode_id": episode.id
         },
         status=status.HTTP_202_ACCEPTED
     )
@@ -1264,6 +1399,14 @@ def get_episode_by_id(request, episode_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
+    if episode.mode in ['debate', 'conference'] and not episode.show_id:
+        creator_id = (episode.generation_meta or {}).get('creator_id')
+        if creator_id and int(creator_id) != request.user.id:
+            return Response(
+                {'error': '您没有权限查看该辩论'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
     serializer = EpisodeDetailSerializer(episode, context={'request': request})
     return Response(serializer.data)
 
@@ -1276,7 +1419,8 @@ def my_debates(request):
     """
     episodes = Episode.objects.filter(
         show__isnull=True,  # 没有关联Show的Episode
-        mode__in=['debate', 'conference']  # 只获取辩论和会议模式
+        mode__in=['debate', 'conference'],  # 只获取辩论和会议模式
+        generation_meta__creator_id=request.user.id
     ).order_by('-created_at')
 
     serializer = EpisodeDetailSerializer(episodes, many=True, context={'request': request})

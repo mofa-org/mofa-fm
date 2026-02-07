@@ -124,6 +124,51 @@ class ConversationManager:
             entry_mod = self._log_message(moderator_id, comment)
             yield entry_mod
 
+    def set_dialogue_log(self, dialogue: List[Dict]) -> None:
+        """加载已有对话到上下文，用于继续辩论。"""
+        self.dialogue_log = [dict(item) for item in (dialogue or [])]
+
+    def get_next_round_number(self) -> int:
+        """基于已有记录估算下一轮轮次。"""
+        speaker_ids = list(self.participants.keys())
+        primary_ids = set(speaker_ids[:2])
+        primary_count = sum(1 for entry in self.dialogue_log if entry.get("participant") in primary_ids)
+        return max(1, primary_count // 2 + 1)
+
+    def generate_followup_round(
+        self,
+        topic: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> Iterator[Dict]:
+        """
+        继续生成一轮：参与者1 -> 参与者2 -> 主持人点评。
+        """
+        participant_order = list(self.participants.keys())
+        round_num = self.get_next_round_number()
+
+        response_1 = self._generate_response(
+            participant_order[0],
+            topic,
+            round_num,
+            on_chunk=on_chunk
+        )
+        yield self._log_message(participant_order[0], response_1)
+
+        response_2 = self._generate_response(
+            participant_order[1],
+            topic,
+            round_num,
+            on_chunk=on_chunk
+        )
+        yield self._log_message(participant_order[1], response_2)
+
+        comment = self._generate_comment(
+            participant_order[2],
+            round_num,
+            on_chunk=on_chunk
+        )
+        yield self._log_message(participant_order[2], comment)
+
     def _stream_or_generate(
         self,
         participant_id: str,
@@ -320,12 +365,6 @@ class ConversationManager:
         """构建其他参与者的发言上下文"""
         context_parts = []
 
-        # 获取其他参与者
-        other_participants = [
-            pid for pid in self.participants.keys()
-            if pid != exclude_participant
-        ]
-
         if recent_only:
             # 只取最近一轮的发言
             relevant_entries = self.dialogue_log[-2:]
@@ -334,9 +373,18 @@ class ConversationManager:
             relevant_entries = self.dialogue_log
 
         for entry in relevant_entries:
-            if entry['participant'] in other_participants:
-                participant_role = self.participants[entry['participant']].role
-                context_parts.append(f"{participant_role}: {entry['content']}")
+            participant_id = entry.get('participant')
+            if participant_id == exclude_participant:
+                continue
+
+            if participant_id in self.participants:
+                participant_role = self.participants[participant_id].role
+            elif participant_id == 'user':
+                participant_role = '用户'
+            else:
+                participant_role = participant_id or '未知角色'
+
+            context_parts.append(f"{participant_role}: {entry.get('content', '')}")
 
         return "\n\n".join(context_parts)
 

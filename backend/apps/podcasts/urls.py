@@ -27,6 +27,8 @@ urlpatterns = [
     path('shows/<slug:slug>/', views.ShowDetailView.as_view(), name='show_detail'),
     path('shows/<slug:slug>/update/', views.ShowUpdateView.as_view(), name='show_update'),
     path('shows/<slug:slug>/delete/', views.ShowDeleteView.as_view(), name='show_delete'),
+    path('shows/<slug:slug>/cover-options/', views.generate_show_cover_options, name='generate_show_cover_options'),
+    path('shows/<slug:slug>/cover-apply/', views.apply_show_cover_option, name='apply_show_cover_option'),
 
     # 单集
     path('episodes/', views.EpisodeListView.as_view(), name='episode_list'),
@@ -36,6 +38,7 @@ urlpatterns = [
     path('episodes/generate-from-source/', views.GenerateEpisodeFromSourceView.as_view(), name='episode_generate_from_source'),
     path('episodes/generate-debate/', views.generate_debate, name='generate_debate'),
     path('episodes/<int:episode_id>/', views.get_episode_by_id, name='get_episode_by_id'),
+    path('episodes/<int:episode_id>/debate-message/', views.debate_message, name='debate_message'),
     path('episodes/<int:episode_id>/share-card/', views.episode_share_card, name='episode_share_card'),
     path('episodes/<int:episode_id>/retry/', views.retry_generation, name='retry_generation'),
     path('episodes/<int:episode_id>/cover-options/', views.generate_cover_options, name='generate_cover_options'),

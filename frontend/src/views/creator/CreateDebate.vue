@@ -70,10 +70,10 @@
 
           <!-- 轮数 -->
           <div class="form-group">
-            <label class="form-label" for="rounds">对话轮数</label>
+            <label class="form-label" for="rounds">初始自动轮数</label>
             <div class="rounds-selector">
               <button
-                v-for="r in [2, 3, 4, 5]"
+                v-for="r in [1, 2, 3]"
                 :key="r"
                 type="button"
                 :class="['round-option', { active: form.rounds === r }]"
@@ -83,7 +83,7 @@
               </button>
             </div>
             <div class="form-hint">
-              每轮包含：参与者1发言 → 参与者2发言 → 主持人/导师点评
+              进入辩论页后，可继续输入观点，触发后续群聊
             </div>
           </div>
 
@@ -102,7 +102,7 @@
               class="mofa-btn mofa-btn-primary"
               :disabled="loading"
             >
-              {{ loading ? '生成中...' : '开始生成' }}
+              {{ loading ? '进入中...' : '进入辩论' }}
             </button>
           </div>
 
@@ -141,7 +141,7 @@ const form = ref({
   mode: 'debate',
   title: '',
   topic: '',
-  rounds: 3
+  rounds: 1
 })
 
 const topicPlaceholder = computed(() => {

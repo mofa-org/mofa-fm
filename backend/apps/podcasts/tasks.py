@@ -309,8 +309,32 @@ def generate_rss_podcast_task(
         raise
 
 
+def _merge_or_append_dialogue_entry(dialogue_entries, entry):
+    if dialogue_entries and dialogue_entries[-1].get('participant') == entry.get('participant'):
+        existing_content = dialogue_entries[-1].get('content', '')
+        incoming_content = entry.get('content', '')
+        if incoming_content.startswith(existing_content) or existing_content.startswith(incoming_content):
+            dialogue_entries[-1] = entry
+            return
+    dialogue_entries.append(entry)
+
+
+def _build_script_from_dialogue(dialogue_entries, participants):
+    participant_role_map = {p.id: p.role for p in participants}
+    script_lines = []
+    for entry in dialogue_entries:
+        participant_id = entry.get('participant')
+        role_name = participant_role_map.get(participant_id)
+        if not role_name and participant_id == 'user':
+            role_name = '用户'
+        if not role_name:
+            role_name = participant_id or '未知角色'
+        script_lines.append(f"【{role_name}】{entry.get('content', '')}\n")
+    return "\n".join(script_lines)
+
+
 @shared_task
-def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
+def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
     """
     Background task to generate debate/conference dialogue (text-only, no audio).
 
@@ -380,32 +404,14 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
             flush_dialogue()
 
         for entry in manager.generate_dialogue(topic, on_chunk=on_chunk):
-            if dialogue_entries and dialogue_entries[-1].get('participant') == entry.get('participant'):
-                existing_content = dialogue_entries[-1].get('content', '')
-                incoming_content = entry.get('content', '')
-                if incoming_content.startswith(existing_content) or existing_content.startswith(incoming_content):
-                    dialogue_entries[-1] = entry
-                else:
-                    dialogue_entries.append(entry)
-            else:
-                dialogue_entries.append(entry)
+            _merge_or_append_dialogue_entry(dialogue_entries, entry)
             flush_dialogue(force=True)
 
         # 最终保存（确保完整）
         episode.dialogue = [dict(item) for item in dialogue_entries]
 
         # 将对话转换为脚本格式（用于兼容现有前端）
-        script_lines = []
-        for entry in dialogue_entries:
-            participant_config = next(
-                (p for p in participants if p.id == entry['participant']),
-                None
-            )
-            if participant_config:
-                role_name = participant_config.role
-                script_lines.append(f"【{role_name}】{entry['content']}\n")
-
-        episode.script = "\n".join(script_lines)
+        episode.script = _build_script_from_dialogue(dialogue_entries, participants)
 
         # 更新状态为已发布（因为是纯文本，无需音频处理）
         episode.status = 'published'
@@ -422,6 +428,87 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
 
     except Exception as e:
         print(f"Failed to generate debate for episode {episode_id}: {e}")
+        if episode:
+            episode.status = 'failed'
+            episode.generation_error = str(e)[:1000]
+            episode.save(update_fields=['status', 'generation_error', 'updated_at'])
+        raise
+
+
+@shared_task
+def generate_debate_followup_task(episode_id, topic, mode='debate'):
+    """
+    在现有辩论上继续生成一轮（用于用户插话后的群聊推进）。
+    """
+    from .models import Episode
+    from .services.conversation import ConversationManager
+    from .services.participants import get_participants_by_mode
+
+    episode = None
+    try:
+        episode = Episode.objects.get(id=episode_id)
+        episode.status = 'processing'
+        episode.generation_error = ''
+        episode.save(update_fields=['status', 'generation_error', 'updated_at'])
+
+        participants = get_participants_by_mode(mode)
+        if not episode.participants_config:
+            episode.participants_config = [
+                {
+                    "id": p.id,
+                    "role": p.role,
+                    "system_prompt": p.system_prompt,
+                    "voice_id": p.voice_id
+                }
+                for p in participants
+            ]
+            episode.save(update_fields=['participants_config', 'updated_at'])
+
+        dialogue_entries = [dict(item) for item in (episode.dialogue or [])]
+        last_flush_at = 0.0
+
+        manager = ConversationManager(
+            participants=participants,
+            policy='sequential',
+            rounds=1
+        )
+        manager.set_dialogue_log(dialogue_entries)
+
+        def flush_dialogue(force=False):
+            nonlocal last_flush_at
+            now = time.monotonic()
+            if not force and now - last_flush_at < 0.25:
+                return
+            episode.dialogue = [dict(item) for item in dialogue_entries]
+            episode.save(update_fields=['dialogue', 'updated_at'])
+            last_flush_at = now
+
+        def on_chunk(participant_id, content_chunk):
+            if not content_chunk:
+                return
+            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
+                dialogue_entries.append({
+                    'participant': participant_id,
+                    'content': content_chunk,
+                    'timestamp': timezone.now().isoformat()
+                })
+            else:
+                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
+            flush_dialogue()
+
+        for entry in manager.generate_followup_round(topic, on_chunk=on_chunk):
+            _merge_or_append_dialogue_entry(dialogue_entries, entry)
+            flush_dialogue(force=True)
+
+        episode.dialogue = [dict(item) for item in dialogue_entries]
+        episode.script = _build_script_from_dialogue(dialogue_entries, participants)
+        episode.status = 'published'
+        episode.published_at = timezone.now()
+        episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
+
+        return f"Debate/Conference {episode_id} followup generated"
+    except Exception as e:
+        print(f"Failed to generate debate followup for episode {episode_id}: {e}")
         if episode:
             episode.status = 'failed'
             episode.generation_error = str(e)[:1000]

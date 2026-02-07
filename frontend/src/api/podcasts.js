@@ -36,6 +36,16 @@ export default {
     return client.put(`/podcasts/shows/${slug}/update/`, data)
   },
 
+  // 生成节目封面候选图
+  generateShowCoverOptions(slug, data) {
+    return client.post(`/podcasts/shows/${slug}/cover-options/`, data || {})
+  },
+
+  // 应用节目封面候选图
+  applyShowCoverOption(slug, data) {
+    return client.post(`/podcasts/shows/${slug}/cover-apply/`, data)
+  },
+
   // 删除播客节目
   deleteShow(slug) {
     return client.delete(`/podcasts/shows/${slug}/delete/`)
@@ -193,6 +203,11 @@ export default {
     return client.get(`/podcasts/episodes/${episodeId}/`)
   },
 
+  // 向辩论发送用户消息（触发AI续辩）
+  sendDebateMessage(episodeId, message) {
+    return client.post(`/podcasts/episodes/${episodeId}/debate-message/`, { message })
+  },
+
   // 获取分享卡片数据
   getEpisodeShareCard(episodeId) {
     return client.get(`/podcasts/episodes/${episodeId}/share-card/`)
@@ -200,7 +215,11 @@ export default {
 
   // 为Debate/Conference生成音频
   generateDebateAudio(episodeId, showId) {
-    return client.post(`/podcasts/episodes/${episodeId}/generate-audio/`, { show_id: showId })
+    const payload = {}
+    if (showId) {
+      payload.show_id = showId
+    }
+    return client.post(`/podcasts/episodes/${episodeId}/generate-audio/`, payload)
   },
 
   // 获取我的辩论历史
