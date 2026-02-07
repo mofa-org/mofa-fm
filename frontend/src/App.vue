@@ -28,7 +28,7 @@
           <!-- 搜索框 -->
           <el-input
             v-model="searchQuery"
-            placeholder="搜索播客..."
+            placeholder="搜索音频..."
             :prefix-icon="Search"
             class="search-input"
             @keyup.enter="handleSearch"
@@ -38,6 +38,9 @@
           <template v-if="isAuthenticated">
             <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-primary">
               创作
+            </router-link>
+            <router-link to="/creator/shows/create" class="mofa-btn">
+              新建节目
             </router-link>
 
             <el-dropdown @command="handleCommand">
@@ -98,6 +101,9 @@
           <template v-if="isAuthenticated">
             <router-link to="/creator/ai-studio" class="mobile-nav-item" @click="showMobileMenu = false">
               创作
+            </router-link>
+            <router-link to="/creator/shows/create" class="mobile-nav-item" @click="showMobileMenu = false">
+              新建节目
             </router-link>
             <router-link to="/profile" class="mobile-nav-item" @click="showMobileMenu = false">
               个人资料

@@ -39,7 +39,12 @@
               <img v-if="coverPreview" :src="coverPreview" class="cover-preview" />
               <el-icon v-else class="cover-uploader-icon"><Plus /></el-icon>
             </el-upload>
-            <p class="form-hint">推荐尺寸：1400x1400 像素，留空则不更新封面</p>
+            <div class="cover-actions">
+              <el-button type="primary" plain @click="openShowCoverDialog" :disabled="submitting">
+                AI 生成封面
+              </el-button>
+            </div>
+            <p class="form-hint">推荐尺寸：1400x1400 像素；可上传，或用 AI 生成</p>
           </el-form-item>
 
           <el-form-item label="分类" prop="category_id" v-if="categories.length > 0" v-show="false">
@@ -84,6 +89,40 @@
         <p>加载中...</p>
       </div>
     </div>
+
+    <el-dialog
+      v-model="showCoverDialog"
+      title="AI 封面候选图"
+      width="760px"
+      :close-on-click-modal="!showCoverApplying"
+    >
+      <p class="form-hint">目标节目：{{ form.title || '未命名节目' }}</p>
+
+      <div class="cover-ai-toolbar">
+        <el-button @click="loadShowCoverCandidates" :loading="showCoverLoading" :disabled="showCoverApplying">
+          {{ showCoverLoading ? '生成中...' : '重抽 4 张' }}
+        </el-button>
+      </div>
+
+      <p v-if="showCoverError" class="ai-error">{{ showCoverError }}</p>
+
+      <div v-if="showCoverLoading" class="cover-ai-loading">封面生成中...</div>
+      <div v-else-if="showCoverCandidates.length === 0" class="cover-ai-loading">暂无候选图</div>
+      <div v-else class="cover-ai-grid">
+        <div v-for="candidate in showCoverCandidates" :key="candidate.path" class="cover-ai-item">
+          <img :src="candidate.url" alt="show cover candidate" class="cover-ai-image" />
+          <el-button
+            type="primary"
+            size="small"
+            :loading="showCoverApplying"
+            :disabled="showCoverApplying"
+            @click="applyShowCoverCandidate(candidate)"
+          >
+            使用此图
+          </el-button>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -105,6 +144,13 @@ const dataLoaded = ref(false)
 const submitting = ref(false)
 const coverPreview = ref('')
 const coverFile = ref(null)
+const showSlug = ref('')
+
+const showCoverDialog = ref(false)
+const showCoverCandidates = ref([])
+const showCoverLoading = ref(false)
+const showCoverApplying = ref(false)
+const showCoverError = ref('')
 
 const form = ref({
   content_type: 'podcast',
@@ -127,6 +173,7 @@ const rules = {
 onMounted(async () => {
   try {
     const slug = route.params.slug
+    showSlug.value = slug
 
     // 并行加载所有数据
     const [categoriesData, tagsData, show] = await Promise.all([
@@ -167,6 +214,48 @@ onMounted(async () => {
 function handleCoverChange(file) {
   coverFile.value = file.raw
   coverPreview.value = URL.createObjectURL(file.raw)
+}
+
+function openShowCoverDialog() {
+  showCoverDialog.value = true
+  showCoverCandidates.value = []
+  showCoverError.value = ''
+  loadShowCoverCandidates()
+}
+
+async function loadShowCoverCandidates() {
+  if (!showSlug.value) return
+  showCoverLoading.value = true
+  showCoverError.value = ''
+  try {
+    const data = await api.podcasts.generateShowCoverOptions(showSlug.value, { count: 4 })
+    showCoverCandidates.value = data.candidates || []
+  } catch (error) {
+    console.error('生成节目封面失败：', error)
+    showCoverError.value = error.response?.data?.error || '生成节目封面失败'
+  } finally {
+    showCoverLoading.value = false
+  }
+}
+
+async function applyShowCoverCandidate(candidate) {
+  if (!showSlug.value || !candidate?.path) return
+  showCoverApplying.value = true
+  showCoverError.value = ''
+  try {
+    const data = await api.podcasts.applyShowCoverOption(showSlug.value, {
+      candidate_path: candidate.path
+    })
+    coverPreview.value = data.cover_url || candidate.url
+    coverFile.value = null
+    showCoverDialog.value = false
+    ElMessage.success('已应用 AI 封面')
+  } catch (error) {
+    console.error('应用节目封面失败：', error)
+    showCoverError.value = error.response?.data?.error || '应用节目封面失败'
+  } finally {
+    showCoverApplying.value = false
+  }
 }
 
 async function handleSubmit() {
@@ -275,6 +364,43 @@ async function handleSubmit() {
   margin-top: var(--spacing-xs);
 }
 
+.cover-actions {
+  margin-top: var(--spacing-sm);
+}
+
+.cover-ai-toolbar {
+  margin: var(--spacing-sm) 0 var(--spacing-md);
+}
+
+.cover-ai-loading {
+  color: var(--color-text-secondary);
+  padding: var(--spacing-md) 0;
+}
+
+.cover-ai-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.cover-ai-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.cover-ai-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-default);
+}
+
+.ai-error {
+  color: var(--color-danger);
+  margin-bottom: var(--spacing-sm);
+}
+
 @media (max-width: 768px) {
   .edit-show-page {
     padding: var(--spacing-lg) 0;
@@ -293,6 +419,10 @@ async function handleSubmit() {
   .cover-uploader-icon {
     width: 160px;
     height: 160px;
+  }
+
+  .cover-ai-grid {
+    grid-template-columns: 1fr;
   }
 }
 

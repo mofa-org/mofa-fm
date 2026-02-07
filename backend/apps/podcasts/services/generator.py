@@ -230,11 +230,25 @@ class PodcastGenerator:
             )
             self.voice_configs[alias] = config
 
-    def generate(self, script_content: str, output_path: str) -> str:
+    def generate(
+        self,
+        script_content: str,
+        output_path: str,
+        *,
+        character_aliases: Optional[Dict[str, str]] = None,
+        voice_overrides: Optional[Dict[str, Dict[str, object]]] = None,
+    ) -> str:
         logger.info("MiniMax 播客生成开始")
 
-        segments = self._parse_markdown(script_content)
-        segments = self._expand_segments(segments)
+        effective_aliases = self._build_character_aliases(character_aliases)
+        effective_voice_configs = self._build_voice_configs(voice_overrides)
+
+        segments = self._parse_markdown(
+            script_content,
+            character_aliases=effective_aliases,
+            voice_configs=effective_voice_configs,
+        )
+        segments = self._expand_segments(segments, voice_configs=effective_voice_configs)
 
         if not segments:
             raise ValueError("脚本中未找到有效的角色对话内容")
@@ -242,7 +256,9 @@ class PodcastGenerator:
         logger.info("共解析 %s 个语音片段", len(segments))
 
         try:
-            audio_segments = asyncio.run(self._generate_all_segments(segments))
+            audio_segments = asyncio.run(
+                self._generate_all_segments(segments, voice_configs=effective_voice_configs)
+            )
         except Exception as exc:
             logger.exception("调用 MiniMax 生成音频失败: %s", exc)
             raise
@@ -396,7 +412,80 @@ class PodcastGenerator:
 
         return results
 
-    def _parse_markdown(self, script_content: str) -> List[Tuple[str, str]]:
+    def _build_character_aliases(
+        self,
+        custom_aliases: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, str]:
+        aliases = dict(self.character_aliases)
+        if not isinstance(custom_aliases, dict):
+            return aliases
+
+        for name, alias in custom_aliases.items():
+            role_name = str(name or "").strip()
+            role_alias = str(alias or "").strip().lower()
+            if role_name and role_alias:
+                aliases[role_name] = role_alias
+        return aliases
+
+    def _build_voice_configs(
+        self,
+        voice_overrides: Optional[Dict[str, Dict[str, object]]] = None,
+    ) -> Dict[str, MiniMaxVoiceConfig]:
+        voice_configs: Dict[str, MiniMaxVoiceConfig] = {}
+        for alias, config in self.voice_configs.items():
+            voice_configs[alias] = MiniMaxVoiceConfig(
+                api_key=config.api_key,
+                model=config.model,
+                voice_id=config.voice_id,
+                speed=config.speed,
+                volume=config.volume,
+                pitch=config.pitch,
+                sample_rate=config.sample_rate,
+                audio_bitrate=config.audio_bitrate,
+                audio_channel=config.audio_channel,
+                enable_english_normalization=config.enable_english_normalization,
+                batch_duration_ms=config.batch_duration_ms,
+            )
+
+        if not isinstance(voice_overrides, dict):
+            return voice_configs
+
+        for alias, override in voice_overrides.items():
+            role_alias = str(alias or "").strip().lower()
+            if not role_alias or not isinstance(override, dict):
+                continue
+
+            voice_id = str(override.get("voice_id") or "").strip()
+            if not voice_id:
+                continue
+
+            if role_alias in voice_configs:
+                voice_configs[role_alias].voice_id = voice_id
+                continue
+
+            voice_configs[role_alias] = MiniMaxVoiceConfig(
+                api_key=self.api_key,
+                model=self.model,
+                voice_id=voice_id,
+                speed=1.0,
+                volume=1.0,
+                pitch=0,
+                sample_rate=self.sample_rate,
+                audio_bitrate=self.audio_bitrate,
+                audio_channel=self.audio_channel,
+                enable_english_normalization=self.enable_english_normalization,
+                batch_duration_ms=self.batch_duration_ms,
+            )
+
+        return voice_configs
+
+    def _parse_markdown(
+        self,
+        script_content: str,
+        *,
+        character_aliases: Dict[str, str],
+        voice_configs: Dict[str, MiniMaxVoiceConfig],
+    ) -> List[Tuple[str, str]]:
         segments: List[Tuple[str, str]] = []
         current_character: Optional[str] = None
         current_text: List[str] = []
@@ -419,10 +508,10 @@ class PodcastGenerator:
                 finalize_segment()
                 tag_content = match.group(1).strip()
 
-                character = self.character_aliases.get(tag_content)
+                character = character_aliases.get(tag_content)
                 if not character:
                     lowered = tag_content.lower()
-                    character = self.voice_configs.get(lowered) and lowered
+                    character = voice_configs.get(lowered) and lowered
 
                 if not character:
                     logger.debug("跳过未知角色: %s", tag_content)
@@ -445,10 +534,15 @@ class PodcastGenerator:
         finalize_segment()
         return segments
 
-    def _expand_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    def _expand_segments(
+        self,
+        segments: List[Tuple[str, str]],
+        *,
+        voice_configs: Dict[str, MiniMaxVoiceConfig],
+    ) -> List[Tuple[str, str]]:
         expanded: List[Tuple[str, str]] = []
         for speaker, text in segments:
-            voice_config = self.voice_configs.get(speaker)
+            voice_config = voice_configs.get(speaker)
             if not voice_config:
                 logger.warning("未配置 %s 的语音，跳过该段落", speaker)
                 continue
@@ -458,7 +552,12 @@ class PodcastGenerator:
 
         return expanded
 
-    async def _generate_all_segments(self, segments: List[Tuple[str, str]]) -> List[Tuple[str, AudioSegment]]:
+    async def _generate_all_segments(
+        self,
+        segments: List[Tuple[str, str]],
+        *,
+        voice_configs: Dict[str, MiniMaxVoiceConfig],
+    ) -> List[Tuple[str, AudioSegment]]:
         """
         Generate audio for all text segments.
 
@@ -467,7 +566,7 @@ class PodcastGenerator:
         results: List[Tuple[str, AudioSegment]] = []
 
         for index, (speaker, text) in enumerate(segments, start=1):
-            config = self.voice_configs.get(speaker)
+            config = voice_configs.get(speaker)
             if not config:
                 logger.warning("跳过未配置语音的角色 %s", speaker)
                 continue

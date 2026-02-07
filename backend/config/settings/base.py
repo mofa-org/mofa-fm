@@ -185,9 +185,11 @@ MINIMAX_TTS = {
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.moonshot.cn/v1')
 OPENAI_MODEL = config('OPENAI_MODEL', default='moonshot-v1-8k')
+OPENAI_REQUEST_TIMEOUT = config('OPENAI_REQUEST_TIMEOUT', default=90, cast=int)
+OPENAI_JUDGE_TIMEOUT = config('OPENAI_JUDGE_TIMEOUT', default=20, cast=int)
 
 # Trending API
-TRENDING_API_URL = config('TRENDING_API_URL', default='http://154.21.90.242:1145')
+TRENDING_API_URL = config('TRENDING_API_URL', default='https://hot.mofa.fm')
 
 # Tavily Search API for AI tool calling
 TAVILY_API_KEY = config('TAVILY_API_KEY', default='')

@@ -25,6 +25,7 @@ from .serializers import (
     UploadedReferenceSerializer
 )
 from .permissions import IsShowOwner
+from .services.speaker_config import normalize_speaker_config, apply_speaker_names
 
 User = get_user_model()
 
@@ -268,6 +269,25 @@ def generation_queue(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tts_voices(request):
+    """获取可用 TTS 音色列表"""
+    from .services.voice_catalog import get_available_tts_voices
+
+    language = (request.query_params.get('language') or 'zh').strip().lower()
+    refresh = (request.query_params.get('refresh') or '').strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+
+    try:
+        result = get_available_tts_voices(language=language, force_refresh=refresh)
+    except Exception as e:
+        return Response(
+            {'error': f'获取音色列表失败: {e}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    return Response(result, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def recommended_episodes(request):
     """站内推荐位：返回可直接展示的单集列表"""
@@ -401,25 +421,68 @@ def retry_generation(request, episode_id):
     deduplicate = generation_meta.get('deduplicate', True)
     sort_by = generation_meta.get('sort_by', 'latest')
     generation_type = generation_meta.get('type')
+    script_mode = generation_meta.get('script_mode')
+    speaker_config = normalize_speaker_config(generation_meta.get('speaker_config'))
 
     episode.status = 'processing'
     episode.generation_stage = 'queued'
     episode.generation_error = ''
     episode.save(update_fields=['status', 'generation_stage', 'generation_error', 'updated_at'])
 
-    if generation_type == 'rss' and rss_urls:
-        generate_rss_podcast_task.delay(
-            episode.id,
-            rss_urls,
-            max_items,
-            deduplicate,
-            sort_by,
-            template,
-        )
+    if generation_type == 'rss' and script_mode == 'manual' and episode.script:
+        if speaker_config:
+            generate_podcast_task.delay(
+                episode.id,
+                episode.script,
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_podcast_task.delay(episode.id, episode.script)
+    elif generation_type == 'rss' and rss_urls:
+        if speaker_config:
+            generate_rss_podcast_task.delay(
+                episode.id,
+                rss_urls,
+                max_items,
+                deduplicate,
+                sort_by,
+                template,
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_rss_podcast_task.delay(
+                episode.id,
+                rss_urls,
+                max_items,
+                deduplicate,
+                sort_by,
+                template,
+            )
     elif source_url and generation_type in {'source', 'webpage'}:
-        generate_source_podcast_task.delay(episode.id, source_url, max_items, template)
+        if speaker_config:
+            generate_source_podcast_task.delay(
+                episode.id,
+                source_url,
+                max_items,
+                template,
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_source_podcast_task.delay(
+                episode.id,
+                source_url,
+                max_items,
+                template,
+            )
     elif episode.script:
-        generate_podcast_task.delay(episode.id, episode.script)
+        if speaker_config:
+            generate_podcast_task.delay(
+                episode.id,
+                episode.script,
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_podcast_task.delay(episode.id, episode.script)
     else:
         episode.status = 'failed'
         episode.generation_stage = 'failed'
@@ -559,11 +622,20 @@ class GenerateEpisodeView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
+        speaker_config = normalize_speaker_config({
+            'host_name': data.get('host_name'),
+            'guest_name': data.get('guest_name'),
+            'host_voice_id': data.get('host_voice_id'),
+            'guest_voice_id': data.get('guest_voice_id'),
+        })
         if data.get('show_id'):
             show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
         else:
             show, _ = get_or_create_default_show(request.user)
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+        generation_meta = {'type': 'script'}
+        if speaker_config:
+            generation_meta['speaker_config'] = speaker_config
 
         episode = Episode.objects.create(
             show=show,
@@ -572,11 +644,18 @@ class GenerateEpisodeView(generics.GenericAPIView):
             status='processing',
             generation_stage='queued',
             generation_error='',
-            generation_meta={'type': 'script'},
+            generation_meta=generation_meta,
             audio_file=placeholder_file
         )
 
-        generate_podcast_task.delay(episode.id, data['script'])
+        if speaker_config:
+            generate_podcast_task.delay(
+                episode.id,
+                data['script'],
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_podcast_task.delay(episode.id, data['script'])
 
         return Response(
             {
@@ -593,7 +672,7 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        from .tasks import generate_rss_podcast_task
+        from .tasks import generate_podcast_task, generate_rss_podcast_task
         from .services.default_show import get_or_create_default_show
         from .services.rss_ingest import generate_script_from_rss_sources
 
@@ -604,6 +683,13 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
         deduplicate = data.get('deduplicate', True)
         sort_by = data.get('sort_by', 'latest')
         template = data.get('template', 'news_flash')
+        manual_script = (data.get('script') or '').strip()
+        speaker_config = normalize_speaker_config({
+            'host_name': data.get('host_name'),
+            'guest_name': data.get('guest_name'),
+            'host_voice_id': data.get('host_voice_id'),
+            'guest_voice_id': data.get('guest_voice_id'),
+        })
 
         if data.get('dry_run', False):
             rss_result = generate_script_from_rss_sources(
@@ -613,7 +699,7 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
                 sort_by=sort_by,
                 template=template,
             )
-            script = rss_result['script']
+            script = apply_speaker_names(rss_result['script'], speaker_config)
             feed_title = rss_result['feed_title']
             items = rss_result['items']
             return Response(
@@ -635,6 +721,20 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
         auto_title = not raw_title
         title = raw_title or f"RSS 任务 {uuid4().hex[:6]}"
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+        generation_meta = {
+            'type': 'rss',
+            'source_url': rss_urls[0],
+            'rss_urls': rss_urls,
+            'max_items': data.get('max_items', 8),
+            'template': template,
+            'deduplicate': deduplicate,
+            'sort_by': sort_by,
+            'auto_title': auto_title,
+        }
+        if speaker_config:
+            generation_meta['speaker_config'] = speaker_config
+        if manual_script:
+            generation_meta['script_mode'] = 'manual'
 
         episode = Episode.objects.create(
             show=show,
@@ -643,20 +743,43 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
             status='processing',
             generation_stage='queued',
             generation_error='',
-            generation_meta={
-                'type': 'rss',
-                'source_url': rss_urls[0],
-                'rss_urls': rss_urls,
-                'max_items': data.get('max_items', 8),
-                'template': template,
-                'deduplicate': deduplicate,
-                'sort_by': sort_by,
-                'auto_title': auto_title,
-            },
+            generation_meta=generation_meta,
             audio_file=placeholder_file
         )
 
         scheduled_at = data.get('scheduled_at')
+        if manual_script:
+            normalized_script = apply_speaker_names(manual_script, speaker_config)
+            episode.script = normalized_script
+            episode.save(update_fields=['script', 'updated_at'])
+
+            if scheduled_at:
+                if speaker_config:
+                    generate_podcast_task.apply_async(
+                        args=(episode.id, normalized_script),
+                        kwargs={'speaker_config': speaker_config},
+                        eta=scheduled_at,
+                    )
+                else:
+                    generate_podcast_task.apply_async(args=(episode.id, normalized_script), eta=scheduled_at)
+            else:
+                if speaker_config:
+                    generate_podcast_task.delay(
+                        episode.id,
+                        normalized_script,
+                        speaker_config=speaker_config,
+                    )
+                else:
+                    generate_podcast_task.delay(episode.id, normalized_script)
+
+            return Response(
+                {
+                    "message": "RSS 脚本已提交并开始生成音频" if not scheduled_at else "RSS 脚本定时任务已提交",
+                    "episode_id": episode.id,
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+
         task_args = (
             episode.id,
             rss_urls,
@@ -666,9 +789,19 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
             template,
         )
         if scheduled_at:
-            generate_rss_podcast_task.apply_async(args=task_args, eta=scheduled_at)
+            if speaker_config:
+                generate_rss_podcast_task.apply_async(
+                    args=task_args,
+                    kwargs={'speaker_config': speaker_config},
+                    eta=scheduled_at,
+                )
+            else:
+                generate_rss_podcast_task.apply_async(args=task_args, eta=scheduled_at)
         else:
-            generate_rss_podcast_task.delay(*task_args)
+            if speaker_config:
+                generate_rss_podcast_task.delay(*task_args, speaker_config=speaker_config)
+            else:
+                generate_rss_podcast_task.delay(*task_args)
 
         return Response(
             {
@@ -692,6 +825,12 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        speaker_config = normalize_speaker_config({
+            'host_name': data.get('host_name'),
+            'guest_name': data.get('guest_name'),
+            'host_voice_id': data.get('host_voice_id'),
+            'guest_voice_id': data.get('guest_voice_id'),
+        })
 
         if data.get('dry_run', False):
             source_result = generate_script_from_source(
@@ -699,7 +838,7 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
                 max_items=data.get('max_items', 8),
                 template=data.get('template', 'news_flash'),
             )
-            script = source_result['script']
+            script = apply_speaker_names(source_result['script'], speaker_config)
             source_title = source_result['source_title']
             source_type = source_result['source_type']
             items = source_result.get('items', [])
@@ -723,6 +862,15 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
         auto_title = not raw_title
         title = raw_title or f"链接任务 {uuid4().hex[:6]}"
         placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+        generation_meta = {
+            'type': 'source',
+            'source_url': data['source_url'],
+            'max_items': data.get('max_items', 8),
+            'template': data.get('template', 'news_flash'),
+            'auto_title': auto_title,
+        }
+        if speaker_config:
+            generation_meta['speaker_config'] = speaker_config
 
         episode = Episode.objects.create(
             show=show,
@@ -731,22 +879,25 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
             status='processing',
             generation_stage='queued',
             generation_error='',
-            generation_meta={
-                'type': 'source',
-                'source_url': data['source_url'],
-                'max_items': data.get('max_items', 8),
-                'template': data.get('template', 'news_flash'),
-                'auto_title': auto_title,
-            },
+            generation_meta=generation_meta,
             audio_file=placeholder_file
         )
 
-        generate_source_podcast_task.delay(
-            episode.id,
-            data['source_url'],
-            data.get('max_items', 8),
-            data.get('template', 'news_flash'),
-        )
+        if speaker_config:
+            generate_source_podcast_task.delay(
+                episode.id,
+                data['source_url'],
+                data.get('max_items', 8),
+                data.get('template', 'news_flash'),
+                speaker_config=speaker_config,
+            )
+        else:
+            generate_source_podcast_task.delay(
+                episode.id,
+                data['source_url'],
+                data.get('max_items', 8),
+                data.get('template', 'news_flash'),
+            )
 
         return Response(
             {
@@ -822,7 +973,8 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
         judge_client = OpenAI(
             api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_API_BASE
+            base_url=settings.OPENAI_API_BASE,
+            timeout=float(getattr(settings, 'OPENAI_JUDGE_TIMEOUT', 20)),
         )
 
         judge_prompt = f"""今天是 {current_date}。
@@ -954,13 +1106,22 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
         )
 
         if not result['success']:
-            # 回滚最后一条用户消息，避免污染历史
-            if session.chat_history:
-                session.chat_history.pop()
-                session.save(update_fields=['chat_history'])
+            error_text = str(result.get('error') or 'AI调用失败')
+            fallback_message = 'AI 服务暂忙，请稍后再试。'
+            lower_error = error_text.lower()
+            if 'timeout' in lower_error or 'timed out' in lower_error or '超时' in error_text:
+                fallback_message = 'AI 请求超时，请稍后重试。'
+
+            # 保留用户消息，并追加一条系统回退回复，避免前端出现 AxiosError
+            session.add_message('assistant', fallback_message)
             return Response(
-                {'error': result.get('error', 'AI调用失败')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {
+                    'message': fallback_message,
+                    'script': session.current_script,
+                    'has_script_update': False,
+                    'error': error_text,
+                },
+                status=status.HTTP_200_OK
             )
 
         # 添加AI回复到历史
@@ -1140,19 +1301,65 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
 # 热搜榜相关视图
 
+
+def _trending_base_url():
+    from django.conf import settings
+
+    raw = (getattr(settings, 'TRENDING_API_URL', '') or '').strip().rstrip('/')
+    if not raw:
+        raw = 'https://hot.mofa.fm'
+    if raw.endswith('/all'):
+        raw = raw[:-4].rstrip('/')
+    return raw
+
+
+def _trending_request_json(path: str):
+    import time
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    path = path if path.startswith('/') else f'/{path}'
+    url = f'{_trending_base_url()}{path}'
+
+    session = requests.Session()
+    session.trust_env = False
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        status=2,
+        backoff_factor=0.3,
+        allowed_methods=frozenset(['GET']),
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+
+    errors = []
+    for i in range(3):
+        try:
+            response = session.get(url, timeout=(5, 15))
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.SSLError as exc:
+            errors.append(str(exc))
+            time.sleep(0.25 * (i + 1))
+            continue
+        except requests.RequestException:
+            raise
+
+    raise requests.exceptions.SSLError('; '.join(errors) or 'TLS handshake failed')
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def trending_sources(request):
     """获取所有可用的热搜榜源"""
     import requests
-    from django.conf import settings
-
-    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://154.21.90.242:1145')
 
     try:
-        response = requests.get(f'{trending_api_url}/all', timeout=10)
-        response.raise_for_status()
-        return Response(response.json())
+        return Response(_trending_request_json('/all'))
     except requests.RequestException as e:
         return Response(
             {'error': f'获取热搜榜源失败: {str(e)}'},
@@ -1165,14 +1372,9 @@ def trending_sources(request):
 def trending_data(request, source):
     """获取指定热搜榜的数据"""
     import requests
-    from django.conf import settings
-
-    trending_api_url = getattr(settings, 'TRENDING_API_URL', 'http://154.21.90.242:1145')
 
     try:
-        response = requests.get(f'{trending_api_url}/{source}', timeout=10)
-        response.raise_for_status()
-        return Response(response.json())
+        return Response(_trending_request_json(f'/{source}'))
     except requests.RequestException as e:
         return Response(
             {'error': f'获取热搜数据失败: {str(e)}'},

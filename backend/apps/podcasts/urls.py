@@ -55,6 +55,7 @@ urlpatterns = [
     path('creator/shows/', views.my_shows, name='my_shows'),
     path('creator/shows/<int:show_id>/episodes/', views.show_episodes, name='show_episodes'),
     path('creator/generation-queue/', views.generation_queue, name='generation_queue'),
+    path('creator/tts-voices/', views.tts_voices, name='tts_voices'),
 
     # 辩论历史
     path('debates/', views.my_debates, name='my_debates'),

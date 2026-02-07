@@ -19,7 +19,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="节目描述" prop="description">
+          <el-form-item label="节目描述">
             <el-input
               v-model="form.description"
               type="textarea"
@@ -28,7 +28,7 @@
             />
           </el-form-item>
 
-          <el-form-item label="封面图片" prop="cover">
+          <el-form-item label="封面图片">
             <el-upload
               class="cover-uploader"
               :show-file-list="false"
@@ -39,7 +39,7 @@
               <img v-if="coverPreview" :src="coverPreview" class="cover-preview" />
               <el-icon v-else class="cover-uploader-icon"><Plus /></el-icon>
             </el-upload>
-            <p class="form-hint">推荐尺寸：1400x1400 像素</p>
+            <p class="form-hint">可选；推荐尺寸：1400x1400 像素</p>
           </el-form-item>
 
           <el-form-item label="分类" prop="category_id" v-show="false">
@@ -66,9 +66,23 @@
 
           <el-divider />
 
-          <el-form-item label="">
-            <VisibilitySelector v-model="form.visibility" label="谁可以看到这个节目？" />
-          </el-form-item>
+          <div class="visibility-panel">
+            <button
+              type="button"
+              class="visibility-toggle"
+              @click="visibilityCollapsed = !visibilityCollapsed"
+            >
+              <span>谁可以看到这个节目？</span>
+              <el-icon class="toggle-icon" :class="{ expanded: !visibilityCollapsed }">
+                <ArrowDown />
+              </el-icon>
+            </button>
+            <el-collapse-transition>
+              <div v-show="!visibilityCollapsed" class="visibility-content">
+                <VisibilitySelector v-model="form.visibility" label="" />
+              </div>
+            </el-collapse-transition>
+          </div>
 
           <el-form-item>
             <el-button type="primary" @click="handleSubmit" :loading="loading">
@@ -88,7 +102,7 @@ import { useRouter } from 'vue-router'
 import { usePodcastsStore } from '@/stores/podcasts'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import VisibilitySelector from '@/components/common/VisibilitySelector.vue'
 
 const router = useRouter()
@@ -98,6 +112,7 @@ const formRef = ref()
 const loading = ref(false)
 const coverPreview = ref('')
 const coverFile = ref(null)
+const visibilityCollapsed = ref(true)
 
 const form = ref({
   content_type: 'podcast',
@@ -114,9 +129,7 @@ const tags = ref([])
 
 const rules = {
   content_type: [{ required: true, message: '请选择内容类型', trigger: 'change' }],
-  title: [{ required: true, message: '请输入节目名称', trigger: 'blur' }],
-  description: [{ required: true, message: '请输入节目描述', trigger: 'blur' }],
-  cover: [{ required: true, message: '请上传封面图片', trigger: 'change' }]
+  title: [{ required: true, message: '请输入节目名称', trigger: 'blur' }]
 }
 
 onMounted(async () => {
@@ -156,7 +169,9 @@ async function handleSubmit() {
     formData.append('content_type', form.value.content_type)
     formData.append('title', form.value.title)
     formData.append('description', form.value.description)
-    formData.append('cover', coverFile.value)
+    if (coverFile.value) {
+      formData.append('cover', coverFile.value)
+    }
     formData.append('visibility', form.value.visibility)
     // 如果没有选择分类，默认为科技类（ID=1）
     if (form.value.category_id) {
@@ -229,6 +244,36 @@ async function handleSubmit() {
   font-size: var(--font-sm);
   color: var(--color-text-tertiary);
   margin-top: var(--spacing-xs);
+}
+
+.visibility-panel {
+  margin-bottom: var(--spacing-lg);
+}
+
+.visibility-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-default);
+  background: var(--color-white);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+}
+
+.toggle-icon {
+  transition: transform 0.2s ease;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.visibility-content {
+  margin-top: var(--spacing-sm);
 }
 
 @media (max-width: 768px) {

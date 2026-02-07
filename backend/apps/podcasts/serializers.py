@@ -7,6 +7,14 @@ from apps.users.serializers import UserSerializer
 from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
 from .services.rss_ingest import SCRIPT_TEMPLATE_CHOICES
 
+DEFAULT_SHOW_COVER_URL = '/static/default_show_logo.png'
+
+
+def _absolute_static_url(request, relative_url: str) -> str:
+    if request:
+        return request.build_absolute_uri(relative_url)
+    return relative_url
+
 
 class CategorySerializer(serializers.ModelSerializer):
     """分类序列化器"""
@@ -44,7 +52,8 @@ class ShowListSerializer(serializers.ModelSerializer):
     def get_cover_url(self, obj):
         if obj.cover:
             return obj.cover.url
-        return None
+        request = self.context.get('request')
+        return _absolute_static_url(request, DEFAULT_SHOW_COVER_URL)
 
 
 class ShowDetailSerializer(serializers.ModelSerializer):
@@ -70,7 +79,8 @@ class ShowDetailSerializer(serializers.ModelSerializer):
     def get_cover_url(self, obj):
         if obj.cover:
             return obj.cover.url
-        return None
+        request = self.context.get('request')
+        return _absolute_static_url(request, DEFAULT_SHOW_COVER_URL)
 
     def get_is_following(self, obj):
         request = self.context.get('request')
@@ -102,7 +112,8 @@ class ShowCreateSerializer(serializers.ModelSerializer):
             'visibility', 'category_id', 'tag_ids', 'shared_with_ids'
         ]
         extra_kwargs = {
-            'cover': {'required': False}  # 更新时封面可选
+            'cover': {'required': False},
+            'description': {'required': False, 'allow_blank': True},
         }
 
     def create(self, validated_data):
@@ -112,6 +123,8 @@ class ShowCreateSerializer(serializers.ModelSerializer):
 
         # 设置创作者
         validated_data['creator'] = self.context['request'].user
+        if 'description' not in validated_data:
+            validated_data['description'] = ''
 
         # 设置分类
         if category_id:
@@ -201,7 +214,8 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             return obj.cover.url
         elif obj.show and obj.show.cover:
             return obj.show.cover.url
-        return None
+        request = self.context.get('request')
+        return _absolute_static_url(request, DEFAULT_SHOW_COVER_URL)
 
 
 class EpisodeDetailSerializer(serializers.ModelSerializer):
@@ -240,7 +254,8 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             return obj.cover.url
         elif obj.show and obj.show.cover:
             return obj.show.cover.url
-        return None
+        request = self.context.get('request')
+        return _absolute_static_url(request, DEFAULT_SHOW_COVER_URL)
 
     def get_is_liked(self, obj):
         request = self.context.get('request')
@@ -355,6 +370,10 @@ class PodcastGenerationSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255, required=True)
     show_id = serializers.IntegerField(required=False, allow_null=True)
     script = serializers.CharField(required=True, style={'base_template': 'textarea.html'})
+    host_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    guest_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    host_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    guest_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
 
     def validate_show_id(self, value):
         if not value:
@@ -388,6 +407,11 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
     scheduled_at = serializers.DateTimeField(required=False, allow_null=True)
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
+    script = serializers.CharField(required=False, allow_blank=True, style={'base_template': 'textarea.html'})
+    host_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    guest_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    host_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    guest_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
 
     def validate_show_id(self, value):
         if not value:
@@ -432,6 +456,10 @@ class SourcePodcastGenerationSerializer(serializers.Serializer):
     template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
+    host_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    guest_name = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    host_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    guest_voice_id = serializers.CharField(required=False, allow_blank=True, max_length=128)
 
     def validate_show_id(self, value):
         if not value:

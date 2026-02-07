@@ -11,75 +11,8 @@
             立即开始
           </router-link>
           <router-link to="/discover" class="mofa-btn">
-            探索播客
+            探索音频
           </router-link>
-        </div>
-      </section>
-
-      <section v-if="isAuthenticated" class="section">
-        <div class="quick-create mofa-card">
-          <div class="quick-header">
-            <h2 class="section-title">一键生成音频</h2>
-            <router-link to="/creator/ai-studio" class="quick-link">高级模式</router-link>
-          </div>
-          <p class="quick-tip">贴入 RSS 或网页链接，系统将自动抓取并生成音频任务。</p>
-          <div class="quick-grid">
-            <el-input
-              v-model="quickSourceUrl"
-              placeholder="https://news.ycombinator.com/rss 或任意网页链接"
-              clearable
-            />
-            <el-select v-model="quickShowId" placeholder="选择节目">
-              <el-option label="默认节目（自动）" :value="null" />
-              <el-option
-                v-for="show in myShows"
-                :key="show.id"
-                :label="show.title"
-                :value="show.id"
-              />
-            </el-select>
-            <el-select v-model="quickTemplate" placeholder="选择模板">
-              <el-option
-                v-for="option in templateOptions"
-                :key="option.value"
-                :label="option.label"
-                :value="option.value"
-              />
-            </el-select>
-            <el-input
-              v-model="quickTitle"
-              placeholder="标题（可选，不填自动生成）"
-              clearable
-            />
-            <button
-              class="mofa-btn mofa-btn-success"
-              :disabled="quickSubmitting"
-              @click="handleQuickGenerate"
-            >
-              {{ quickSubmitting ? '生成中...' : '一键生成' }}
-            </button>
-          </div>
-          <p v-if="quickError" class="quick-error">{{ quickError }}</p>
-        </div>
-      </section>
-
-      <!-- 统计数据 -->
-      <section class="stats" v-if="stats">
-        <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.total_shows }}</div>
-          <div class="stat-label">播客节目</div>
-        </div>
-        <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.total_episodes }}</div>
-          <div class="stat-label">播客单集</div>
-        </div>
-        <div class="stat-card mofa-card">
-          <div class="stat-value">{{ stats.total_creators }}</div>
-          <div class="stat-label">创作用户</div>
-        </div>
-        <div class="stat-card mofa-card">
-          <div class="stat-value">{{ formatNumber(stats.total_plays) }}</div>
-          <div class="stat-label">总播放量</div>
         </div>
       </section>
 
@@ -100,7 +33,7 @@
               <el-icon :size="32"><ChatDotRound /></el-icon>
             </div>
             <h3 class="feature-title">内容管理</h3>
-            <p class="feature-desc">统一管理我的音频、节目与发布记录</p>
+            <p class="feature-desc">统一管理我的音频、频道与发布记录</p>
             <div class="feature-action">进入管理 →</div>
           </router-link>
         </div>
@@ -140,6 +73,26 @@
         </div>
         <el-empty v-else description="暂无单集" />
       </section>
+
+      <!-- 统计数据（置于页面底部） -->
+      <section class="stats" v-if="stats">
+        <div class="stat-card mofa-card">
+          <div class="stat-value">{{ stats.total_shows }}</div>
+          <div class="stat-label">音频频道</div>
+        </div>
+        <div class="stat-card mofa-card">
+          <div class="stat-value">{{ stats.total_episodes }}</div>
+          <div class="stat-label">音频单集</div>
+        </div>
+        <div class="stat-card mofa-card">
+          <div class="stat-value">{{ stats.total_creators }}</div>
+          <div class="stat-label">创作用户</div>
+        </div>
+        <div class="stat-card mofa-card">
+          <div class="stat-value">{{ formatNumber(stats.total_plays) }}</div>
+          <div class="stat-label">总播放量</div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -148,7 +101,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { ChatDotRound, Edit } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 
@@ -159,19 +111,6 @@ const isAuthenticated = computed(() => authStore.isAuthenticated)
 const stats = ref(null)
 const recommendedItems = ref([])
 const latestEpisodes = ref([])
-const myShows = ref([])
-const quickSourceUrl = ref('https://news.ycombinator.com/rss')
-const quickShowId = ref(null)
-const quickTitle = ref('')
-const quickSubmitting = ref(false)
-const quickError = ref('')
-const quickTemplate = ref('news_flash')
-
-const templateOptions = [
-  { value: 'web_summary', label: '网页摘要' },
-  { value: 'news_flash', label: '新闻快报' },
-  { value: 'deep_dive', label: '深度长谈' }
-]
 const recommendedEpisodes = computed(() =>
   recommendedItems.value.map(item => item.episode).filter(Boolean)
 )
@@ -199,15 +138,6 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载推荐位失败', error)
   }
-
-  if (isAuthenticated.value) {
-    try {
-      const data = await api.podcasts.getMyShows()
-      myShows.value = Array.isArray(data) ? data : (data.results || [])
-    } catch (error) {
-      console.error('加载节目失败', error)
-    }
-  }
 })
 
 function formatNumber(num) {
@@ -215,35 +145,6 @@ function formatNumber(num) {
     return (num / 10000).toFixed(1) + 'w'
   }
   return num
-}
-
-async function handleQuickGenerate() {
-  if (!quickSourceUrl.value.trim()) {
-    quickError.value = '请填写链接'
-    return
-  }
-
-  quickSubmitting.value = true
-  quickError.value = ''
-  try {
-    const payload = {
-      source_url: quickSourceUrl.value.trim(),
-      title: quickTitle.value.trim() || undefined,
-      template: quickTemplate.value,
-      max_items: 6,
-      dry_run: false,
-    }
-    if (quickShowId.value) {
-      payload.show_id = Number(quickShowId.value)
-    }
-    const response = await api.podcasts.generateEpisodeFromSource(payload)
-    ElMessage.success(`任务已提交（${response.source_type || 'source'}）`)
-    quickTitle.value = ''
-  } catch (error) {
-    quickError.value = error.response?.data?.error || error.message || '提交失败'
-  } finally {
-    quickSubmitting.value = false
-  }
 }
 </script>
 
@@ -290,7 +191,7 @@ async function handleQuickGenerate() {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-3xl);
+  margin-top: var(--spacing-xl);
 }
 
 .stat-card {
@@ -324,38 +225,6 @@ async function handleQuickGenerate() {
 .section-more {
   color: var(--color-primary);
   font-weight: var(--font-semibold);
-}
-
-.quick-create {
-  padding: var(--spacing-lg);
-}
-
-.quick-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.quick-link {
-  color: var(--color-primary);
-  font-weight: var(--font-semibold);
-}
-
-.quick-tip {
-  color: var(--color-text-secondary);
-  margin-bottom: var(--spacing-md);
-}
-
-.quick-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: var(--spacing-sm);
-}
-
-.quick-error {
-  color: var(--color-danger);
-  margin-top: var(--spacing-sm);
 }
 
 .section-title {
@@ -536,10 +405,6 @@ async function handleQuickGenerate() {
 
   .section-header {
     align-items: flex-end;
-  }
-
-  .quick-grid {
-    grid-template-columns: 1fr;
   }
 
   .shows-grid {

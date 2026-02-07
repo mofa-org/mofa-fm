@@ -343,7 +343,9 @@ class Episode(models.Model):
         """获取封面URL（如果没有则使用节目封面）"""
         if self.cover:
             return self.cover.url
-        return self.show.cover.url if self.show.cover else None
+        if self.show and self.show.cover:
+            return self.show.cover.url
+        return '/static/default_show_logo.png'
 
     def get_effective_visibility(self):
         """获取实际生效的可见性（考虑继承）"""

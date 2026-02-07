@@ -86,8 +86,9 @@ def _set_episode_generation_state(
         episode.save(update_fields=update_fields)
 
 
-def _publish_generated_episode(episode, script_content):
+def _publish_generated_episode(episode, script_content, speaker_config=None):
     from .services.generator import PodcastGenerator
+    from .services.speaker_config import apply_speaker_names, build_generator_runtime_options
     from pydub import AudioSegment
     from django.conf import settings
     from .services.cover_ai import generate_episode_cover
@@ -100,6 +101,8 @@ def _publish_generated_episode(episode, script_content):
     )
 
     generator = PodcastGenerator()
+    normalized_script = apply_speaker_names(script_content, speaker_config)
+    character_aliases, voice_overrides = build_generator_runtime_options(speaker_config)
 
     filename = f"generated_{episode.slug}_{episode.id}.mp3"
     relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
@@ -112,10 +115,15 @@ def _publish_generated_episode(episode, script_content):
         if storage.exists(placeholder_name):
             storage.delete(placeholder_name)
 
-    generator.generate(script_content, full_path)
+    generator.generate(
+        normalized_script,
+        full_path,
+        character_aliases=character_aliases,
+        voice_overrides=voice_overrides,
+    )
 
     episode.audio_file.name = relative_path
-    episode.script = script_content
+    episode.script = normalized_script
     episode.status = 'published'
     episode.generation_stage = 'cover_generating'
     episode.generation_error = ''
@@ -156,7 +164,7 @@ def _publish_generated_episode(episode, script_content):
 
 
 @shared_task
-def generate_podcast_task(episode_id, script_content):
+def generate_podcast_task(episode_id, script_content, speaker_config=None):
     """
     Background task to generate podcast audio from script.
     """
@@ -165,7 +173,11 @@ def generate_podcast_task(episode_id, script_content):
     episode = None
     try:
         episode = Episode.objects.get(id=episode_id)
-        _publish_generated_episode(episode=episode, script_content=script_content)
+        _publish_generated_episode(
+            episode=episode,
+            script_content=script_content,
+            speaker_config=speaker_config,
+        )
     except Exception as e:
         print(f"Failed to generate podcast for episode {episode_id}: {e}")
         if episode:
@@ -179,7 +191,13 @@ def generate_podcast_task(episode_id, script_content):
 
 
 @shared_task
-def generate_source_podcast_task(episode_id, source_url, max_items=8, template='news_flash'):
+def generate_source_podcast_task(
+    episode_id,
+    source_url,
+    max_items=8,
+    template='news_flash',
+    speaker_config=None,
+):
     """
     Background task to generate podcast from source URL (RSS/webpage).
     """
@@ -214,6 +232,8 @@ def generate_source_podcast_task(episode_id, source_url, max_items=8, template='
             "source_title": material.get("source_title") or "",
             "item_count": len(material.get("items") or []),
         })
+        if speaker_config:
+            meta["speaker_config"] = speaker_config
 
         if meta.get("auto_title"):
             source_title = material.get("source_title") or "来源内容"
@@ -223,7 +243,11 @@ def generate_source_podcast_task(episode_id, source_url, max_items=8, template='
         episode.generation_meta = meta
         episode.save(update_fields=['title', 'script', 'generation_meta', 'updated_at'])
 
-        _publish_generated_episode(episode=episode, script_content=script)
+        _publish_generated_episode(
+            episode=episode,
+            script_content=script,
+            speaker_config=speaker_config,
+        )
     except Exception as e:
         print(f"Failed to generate source podcast for episode {episode_id}: {e}")
         if episode:
@@ -244,6 +268,7 @@ def generate_rss_podcast_task(
     deduplicate=True,
     sort_by='latest',
     template='news_flash',
+    speaker_config=None,
 ):
     """
     Background task to generate podcast from multi RSS sources.
@@ -287,6 +312,8 @@ def generate_rss_podcast_task(
             "source_title": material.get("source_title") or "",
             "item_count": len(material.get("items") or []),
         })
+        if speaker_config:
+            meta["speaker_config"] = speaker_config
 
         if meta.get("auto_title"):
             source_title = material.get("source_title") or "RSS 来源"
@@ -296,7 +323,11 @@ def generate_rss_podcast_task(
         episode.generation_meta = meta
         episode.save(update_fields=['title', 'script', 'generation_meta', 'updated_at'])
 
-        _publish_generated_episode(episode=episode, script_content=script)
+        _publish_generated_episode(
+            episode=episode,
+            script_content=script,
+            speaker_config=speaker_config,
+        )
     except Exception as e:
         print(f"Failed to generate rss podcast for episode {episode_id}: {e}")
         if episode:

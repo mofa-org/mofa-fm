@@ -17,9 +17,12 @@ class ScriptAIService:
         if not api_key:
             raise ValueError('OPENAI_API_KEY 未配置，请在环境变量或 .env 中设置')
 
+        self.timeout = float(getattr(settings, 'OPENAI_REQUEST_TIMEOUT', 90))
+
         self.client = OpenAI(
             api_key=api_key,
-            base_url=getattr(settings, 'OPENAI_API_BASE', 'https://api.moonshot.cn/v1')
+            base_url=getattr(settings, 'OPENAI_API_BASE', 'https://api.moonshot.cn/v1'),
+            timeout=self.timeout,
         )
         self.model = getattr(settings, 'OPENAI_MODEL', 'moonshot-v1-8k')
 

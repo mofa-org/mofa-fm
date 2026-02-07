@@ -23,6 +23,15 @@ def _build_prompt(title: str, script: str) -> str:
     )
 
 
+def _build_show_prompt(title: str, description: str) -> str:
+    snippet = (description or "").strip().replace("\n", " ")
+    snippet = snippet[:120]
+    return (
+        "podcast show cover illustration, abstract, modern, high contrast, no text, "
+        f"topic {title}, concept {snippet}"
+    )
+
+
 def _generate_with_openai(prompt: str) -> bytes:
     from openai import OpenAI
 
@@ -156,6 +165,45 @@ def apply_episode_cover_candidate(episode, candidate_path: str) -> str:
     episode.cover.save(filename, ContentFile(image_bytes), save=False)
     episode.save(update_fields=["cover", "updated_at"])
     return episode.cover.url
+
+
+def generate_show_cover_candidates(show, count: int = 4):
+    count = max(1, min(int(count or 4), 8))
+    prompt = _build_show_prompt(title=show.title, description=show.description or "")
+    storage = show.cover.storage
+    date_prefix = timezone.now().strftime('%Y/%m')
+
+    candidates = []
+    for index in range(count):
+        variant_prompt = f"{prompt}, variation {index + 1}"
+        image_bytes = _generate_cover_bytes(variant_prompt)
+        if not image_bytes:
+            continue
+        path = f"show_cover_candidates/{date_prefix}/cand-{show.id}-{uuid4().hex}.png"
+        storage.save(path, ContentFile(image_bytes))
+        candidates.append({
+            "path": path,
+            "url": storage.url(path),
+        })
+
+    return candidates
+
+
+def apply_show_cover_candidate(show, candidate_path: str) -> str:
+    if not candidate_path or not candidate_path.startswith("show_cover_candidates/"):
+        raise ValueError("candidate_path invalid")
+
+    storage = show.cover.storage
+    if not storage.exists(candidate_path):
+        raise ValueError("candidate file not found")
+
+    with storage.open(candidate_path, "rb") as f:
+        image_bytes = f.read()
+
+    filename = f"ai-show-cover-{show.slug or show.id}-{show.id}.png"
+    show.cover.save(filename, ContentFile(image_bytes), save=False)
+    show.save(update_fields=["cover", "updated_at"])
+    return show.cover.url
 
 
 def generate_episode_cover(episode) -> bool:

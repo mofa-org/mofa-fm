@@ -135,6 +135,11 @@ export default {
     return client.get('/podcasts/creator/generation-queue/', { params })
   },
 
+  // 获取可用 TTS 音色
+  getTTSVoices(params) {
+    return client.get('/podcasts/creator/tts-voices/', { params })
+  },
+
   getScriptSessions(params) {
     return client.get('/podcasts/script-sessions/', { params })
   },
