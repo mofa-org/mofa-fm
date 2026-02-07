@@ -37,6 +37,14 @@
                 :value="show.id"
               />
             </el-select>
+            <el-select v-model="quickTemplate" placeholder="选择模板">
+              <el-option
+                v-for="option in templateOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
             <el-input
               v-model="quickTitle"
               placeholder="标题（可选，不填自动生成）"
@@ -143,6 +151,13 @@ const quickShowId = ref(null)
 const quickTitle = ref('')
 const quickSubmitting = ref(false)
 const quickError = ref('')
+const quickTemplate = ref('news_flash')
+
+const templateOptions = [
+  { value: 'web_summary', label: '网页摘要' },
+  { value: 'news_flash', label: '新闻快报' },
+  { value: 'deep_dive', label: '深度长谈' }
+]
 
 onMounted(async () => {
   // 加载统计数据
@@ -193,6 +208,7 @@ async function handleQuickGenerate() {
       show_id: Number(quickShowId.value),
       source_url: quickSourceUrl.value.trim(),
       title: quickTitle.value.trim() || undefined,
+      template: quickTemplate.value,
       max_items: 6,
       dry_run: false,
     })

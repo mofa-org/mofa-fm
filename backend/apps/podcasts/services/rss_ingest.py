@@ -16,6 +16,18 @@ WHITESPACE_RE = re.compile(r"\s+")
 ROLE_A_PATTERN = re.compile(r"【\s*(主播A|A|Host A|host a|主持人A)\s*】")
 ROLE_B_PATTERN = re.compile(r"【\s*(主播B|B|Host B|host b|主持人B)\s*】")
 
+SCRIPT_TEMPLATE_CHOICES = [
+    ("web_summary", "网页摘要"),
+    ("news_flash", "新闻快报"),
+    ("deep_dive", "深度长谈"),
+]
+
+_TEMPLATE_HINTS = {
+    "web_summary": "风格：先概览后细节。篇幅短，信息密度高，适合网页摘要。",
+    "news_flash": "风格：快节奏快报。每条新闻先一句结论，再给 1-2 句背景与影响。",
+    "deep_dive": "风格：分析型长谈。强调背景、争议点、影响与观点交锋。",
+}
+
 
 def _strip_html(text: str) -> str:
     if not text:
@@ -138,7 +150,7 @@ def _normalize_roles(script: str) -> str:
     return normalized.strip()
 
 
-def _generate_script_with_llm(feed_title: str, reference_text: str) -> str:
+def _generate_script_with_llm(feed_title: str, reference_text: str, template: str = "news_flash") -> str:
     """
     Use OpenAI-compatible API directly to avoid higher-level tool-call parsing noise.
     """
@@ -154,11 +166,13 @@ def _generate_script_with_llm(feed_title: str, reference_text: str) -> str:
     )
     model = getattr(settings, "OPENAI_MODEL", "moonshot-v1-8k")
 
+    template_hint = _TEMPLATE_HINTS.get(template, _TEMPLATE_HINTS["news_flash"])
     system_prompt = (
         "你是中文科技播客编剧。"
         "任务：先提炼每条新闻一句要点，再生成可直接 TTS 的双人对话脚本。"
         "硬性格式：只使用【大牛】与【一帆】角色标签。"
         "不要编造事实，不要输出代码块。"
+        f"{template_hint}"
     )
     user_prompt = (
         f"来源：{feed_title}\n\n"
@@ -180,14 +194,18 @@ def _generate_script_with_llm(feed_title: str, reference_text: str) -> str:
     return content
 
 
-def generate_script_from_rss(rss_url: str, max_items: int = 8) -> Dict[str, object]:
+def generate_script_from_rss(rss_url: str, max_items: int = 8, template: str = "news_flash") -> Dict[str, object]:
     """
     Generate a podcast script from an RSS URL.
     """
     feed_title, items = fetch_rss_items(rss_url=rss_url, max_items=max_items)
     reference_text = _items_to_reference_text(feed_title=feed_title, items=items)
 
-    script = _generate_script_with_llm(feed_title=feed_title, reference_text=reference_text)
+    script = _generate_script_with_llm(
+        feed_title=feed_title,
+        reference_text=reference_text,
+        template=template,
+    )
     script = _normalize_roles(script)
 
     return {

@@ -151,7 +151,7 @@ def collect_source_material(source_url: str, max_items: int = 8) -> Dict[str, ob
         }
 
 
-def generate_script_from_material(material: Dict[str, object]) -> str:
+def generate_script_from_material(material: Dict[str, object], template: str = "news_flash") -> str:
     """
     Generate script from collected source material.
     """
@@ -163,16 +163,21 @@ def generate_script_from_material(material: Dict[str, object]) -> str:
     script = _generate_script_with_llm(
         feed_title=source_title,
         reference_text=reference_text,
+        template=template,
     )
     return _normalize_roles(script)
 
 
-def generate_script_from_source(source_url: str, max_items: int = 8) -> Dict[str, object]:
+def generate_script_from_source(
+    source_url: str,
+    max_items: int = 8,
+    template: str = "news_flash",
+) -> Dict[str, object]:
     """
     Collect source material and generate script in one call.
     """
     material = collect_source_material(source_url=source_url, max_items=max_items)
-    script = generate_script_from_material(material)
+    script = generate_script_from_material(material, template=template)
 
     return {
         "source_type": material["source_type"],

@@ -63,6 +63,14 @@
               <input v-model="rssTitle" type="text" class="form-input" placeholder="不填则自动命名" />
             </div>
             <div class="form-group">
+              <label>模板</label>
+              <select v-model="rssTemplate" class="form-select">
+                <option value="web_summary">网页摘要</option>
+                <option value="news_flash">新闻快报</option>
+                <option value="deep_dive">深度长谈</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label>条目数</label>
               <input v-model.number="rssMaxItems" type="number" min="1" max="20" class="form-input" />
             </div>
@@ -574,6 +582,7 @@ const viewingVersion = ref(null)
 const rssUrl = ref('https://news.ycombinator.com/rss')
 const rssShowId = ref(null)
 const rssTitle = ref('')
+const rssTemplate = ref('news_flash')
 const rssMaxItems = ref(2)
 const rssSubmitting = ref(false)
 const rssError = ref('')
@@ -641,6 +650,7 @@ async function previewRSSScript() {
     const data = await podcastsAPI.generateEpisodeFromRSS({
       show_id: Number(rssShowId.value),
       rss_url: rssUrl.value.trim(),
+      template: rssTemplate.value,
       max_items: Number(rssMaxItems.value) || 2,
       dry_run: true
     })
@@ -665,6 +675,7 @@ async function generateFromRSS() {
       show_id: Number(rssShowId.value),
       rss_url: rssUrl.value.trim(),
       title: rssTitle.value.trim() || undefined,
+      template: rssTemplate.value,
       max_items: Number(rssMaxItems.value) || 2,
       dry_run: false
     })

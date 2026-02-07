@@ -4,6 +4,7 @@
 from rest_framework import serializers
 from apps.users.serializers import UserSerializer
 from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
+from .services.rss_ingest import SCRIPT_TEMPLATE_CHOICES
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -365,6 +366,7 @@ class RSSPodcastGenerationSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
     show_id = serializers.IntegerField(required=True)
     rss_url = serializers.URLField(required=True)
+    template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
 
@@ -383,6 +385,7 @@ class SourcePodcastGenerationSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
     show_id = serializers.IntegerField(required=True)
     source_url = serializers.URLField(required=True)
+    template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
     max_items = serializers.IntegerField(required=False, min_value=1, max_value=20, default=8)
     dry_run = serializers.BooleanField(required=False, default=False)
 

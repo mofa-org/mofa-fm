@@ -179,7 +179,7 @@ def generate_podcast_task(episode_id, script_content):
 
 
 @shared_task
-def generate_source_podcast_task(episode_id, source_url, max_items=8):
+def generate_source_podcast_task(episode_id, source_url, max_items=8, template='news_flash'):
     """
     Background task to generate podcast from source URL (RSS/webpage).
     """
@@ -203,13 +203,14 @@ def generate_source_podcast_task(episode_id, source_url, max_items=8):
             status_value='processing',
             stage_value='script_generating',
         )
-        script = generate_script_from_material(material)
+        script = generate_script_from_material(material, template=template)
 
         meta = dict(episode.generation_meta or {})
         meta.update({
             "type": material.get("source_type") or "source",
             "source_url": source_url,
             "max_items": max_items,
+            "template": template,
             "source_title": material.get("source_title") or "",
             "item_count": len(material.get("items") or []),
         })

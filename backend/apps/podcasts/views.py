@@ -274,6 +274,7 @@ def retry_generation(request, episode_id):
     generation_meta = dict(episode.generation_meta or {})
     source_url = generation_meta.get('source_url')
     max_items = generation_meta.get('max_items', 8)
+    template = generation_meta.get('template', 'news_flash')
     generation_type = generation_meta.get('type')
 
     episode.status = 'processing'
@@ -282,7 +283,7 @@ def retry_generation(request, episode_id):
     episode.save(update_fields=['status', 'generation_stage', 'generation_error', 'updated_at'])
 
     if source_url and generation_type in {'source', 'rss', 'webpage'}:
-        generate_source_podcast_task.delay(episode.id, source_url, max_items)
+        generate_source_podcast_task.delay(episode.id, source_url, max_items, template)
     elif episode.script:
         generate_podcast_task.delay(episode.id, episode.script)
     else:
@@ -355,6 +356,7 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
             rss_result = generate_script_from_rss(
                 rss_url=data['rss_url'],
                 max_items=data.get('max_items', 8),
+                template=data.get('template', 'news_flash'),
             )
             script = rss_result['script']
             feed_title = rss_result['feed_title']
@@ -387,12 +389,18 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
                 'type': 'rss',
                 'source_url': data['rss_url'],
                 'max_items': data.get('max_items', 8),
+                'template': data.get('template', 'news_flash'),
                 'auto_title': auto_title,
             },
             audio_file=placeholder_file
         )
 
-        generate_source_podcast_task.delay(episode.id, data['rss_url'], data.get('max_items', 8))
+        generate_source_podcast_task.delay(
+            episode.id,
+            data['rss_url'],
+            data.get('max_items', 8),
+            data.get('template', 'news_flash'),
+        )
 
         return Response(
             {
@@ -420,6 +428,7 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
             source_result = generate_script_from_source(
                 source_url=data['source_url'],
                 max_items=data.get('max_items', 8),
+                template=data.get('template', 'news_flash'),
             )
             script = source_result['script']
             source_title = source_result['source_title']
@@ -454,12 +463,18 @@ class GenerateEpisodeFromSourceView(generics.GenericAPIView):
                 'type': 'source',
                 'source_url': data['source_url'],
                 'max_items': data.get('max_items', 8),
+                'template': data.get('template', 'news_flash'),
                 'auto_title': auto_title,
             },
             audio_file=placeholder_file
         )
 
-        generate_source_podcast_task.delay(episode.id, data['source_url'], data.get('max_items', 8))
+        generate_source_podcast_task.delay(
+            episode.id,
+            data['source_url'],
+            data.get('max_items', 8),
+            data.get('template', 'news_flash'),
+        )
 
         return Response(
             {
