@@ -3,8 +3,8 @@
 """
 from celery import shared_task
 from django.utils import timezone
-from django.db import transaction
 import os
+import time
 from utils.audio_processor import process_audio
 
 
@@ -328,7 +328,8 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
     try:
         episode = Episode.objects.get(id=episode_id)
         episode.status = 'processing'
-        episode.save()
+        episode.dialogue = []
+        episode.save(update_fields=['status', 'dialogue', 'updated_at'])
 
         # 获取参与者配置
         participants = get_participants_by_mode(mode)
@@ -343,7 +344,7 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
             }
             for p in participants
         ]
-        episode.save()
+        episode.save(update_fields=['participants_config', 'updated_at'])
 
         # 创建对话管理器
         manager = ConversationManager(
@@ -352,20 +353,46 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
             rounds=rounds
         )
 
-        # 生成对话（流式，每生成一条就保存）
+        # 生成对话（流式，增量写入）
         dialogue_entries = []
-        for entry in manager.generate_dialogue(topic):
-            dialogue_entries.append(entry)
+        last_flush_at = 0.0
 
-            # 实时保存，让前端可以看到进度
-            episode.dialogue = dialogue_entries.copy()
-            episode.save(update_fields=['dialogue'])
+        def flush_dialogue(force=False):
+            nonlocal last_flush_at
+            now = time.monotonic()
+            if not force and now - last_flush_at < 0.25:
+                return
+            episode.dialogue = [dict(item) for item in dialogue_entries]
+            episode.save(update_fields=['dialogue', 'updated_at'])
+            last_flush_at = now
 
-            # 显式提交事务，让SSE能立即看到更新
-            transaction.commit()
+        def on_chunk(participant_id, content_chunk):
+            if not content_chunk:
+                return
+            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
+                dialogue_entries.append({
+                    "participant": participant_id,
+                    "content": content_chunk,
+                    "timestamp": timezone.now().isoformat()
+                })
+            else:
+                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
+            flush_dialogue()
+
+        for entry in manager.generate_dialogue(topic, on_chunk=on_chunk):
+            if dialogue_entries and dialogue_entries[-1].get('participant') == entry.get('participant'):
+                existing_content = dialogue_entries[-1].get('content', '')
+                incoming_content = entry.get('content', '')
+                if incoming_content.startswith(existing_content) or existing_content.startswith(incoming_content):
+                    dialogue_entries[-1] = entry
+                else:
+                    dialogue_entries.append(entry)
+            else:
+                dialogue_entries.append(entry)
+            flush_dialogue(force=True)
 
         # 最终保存（确保完整）
-        episode.dialogue = dialogue_entries
+        episode.dialogue = [dict(item) for item in dialogue_entries]
 
         # 将对话转换为脚本格式（用于兼容现有前端）
         script_lines = []
@@ -383,7 +410,7 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
         # 更新状态为已发布（因为是纯文本，无需音频处理）
         episode.status = 'published'
         episode.published_at = timezone.now()
-        episode.save()
+        episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
 
         # 更新节目统计（如果关联了show）
         if episode.show_id:  # 使用show_id避免触发RelatedObjectDoesNotExist
@@ -397,7 +424,8 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
         print(f"Failed to generate debate for episode {episode_id}: {e}")
         if episode:
             episode.status = 'failed'
-            episode.save()
+            episode.generation_error = str(e)[:1000]
+            episode.save(update_fields=['status', 'generation_error', 'updated_at'])
         raise
 
 

@@ -9,8 +9,7 @@
 
       <!-- 生成中 -->
       <div v-else-if="episode && episode.status === 'processing'" class="processing-state">
-        <!-- 如果已经有对话内容，显示对话 + 生成中提示 -->
-        <div v-if="dialogue.length > 0" class="debate-content">
+        <div class="debate-content">
           <!-- 头部信息 -->
           <div class="debate-header">
             <div class="header-left">
@@ -34,6 +33,11 @@
 
           <!-- 对话区域 -->
           <div class="dialogue-container">
+            <div v-if="dialogue.length === 0" class="loading-placeholder inline-placeholder">
+              <h2>辩论已开始</h2>
+              <p>正在生成开场陈词...</p>
+            </div>
+
             <div
               v-for="(entry, index) in dialogue"
               :key="index"
@@ -56,16 +60,9 @@
             <!-- 生成中提示 -->
             <div class="generating-indicator">
               <div class="spinner-small"></div>
-              <p>AI正在继续生成...</p>
+              <p>{{ dialogue.length > 0 ? 'AI正在继续生成...' : 'AI正在组织第一轮观点...' }}</p>
             </div>
           </div>
-        </div>
-
-        <!-- 如果还没有对话，显示加载状态 -->
-        <div v-else class="loading-placeholder">
-          <div class="spinner"></div>
-          <h2>正在生成对话...</h2>
-          <p>AI正在激烈辩论中，请稍候</p>
         </div>
       </div>
 
@@ -101,7 +98,7 @@
             <button
               v-if="canGenerateAudio"
               class="mofa-btn mofa-btn-success"
-              @click="showModal = true"
+              @click="handleGenerateAudio"
               :disabled="audioGenerating"
             >
               <el-icon><Microphone /></el-icon>
@@ -143,81 +140,18 @@
         <p>{{ error || '无法加载对话内容' }}</p>
       </div>
 
-      <!-- 选择Show模态框 -->
-      <div v-if="showModal" class="modal-overlay" @click="showModal = false">
-        <div class="modal-content" @click.stop>
-          <div class="modal-header">
-            <h3>选择播客节目</h3>
-            <button class="close-btn" @click="showModal = false">
-              <el-icon><Close /></el-icon>
-            </button>
-          </div>
-
-          <div class="modal-body">
-            <!-- 加载Show列表 -->
-            <div v-if="loadingShows" class="loading-shows">
-              <div class="spinner-small"></div>
-              <p>加载节目列表...</p>
-            </div>
-
-            <!-- Show列表 -->
-            <div v-else-if="shows.length > 0" class="shows-list">
-              <div
-                v-for="show in shows"
-                :key="show.id"
-                :class="['show-item', { selected: selectedShowId === show.id }]"
-                @click="selectedShowId = show.id"
-              >
-                <div class="show-cover" :style="{ backgroundImage: show.cover_image ? `url(${show.cover_image})` : 'none' }">
-                </div>
-                <div class="show-info">
-                  <div class="show-title">{{ show.title }}</div>
-                  <div class="show-meta">{{ show.episodes_count || 0 }} 集</div>
-                </div>
-                <div v-if="selectedShowId === show.id" class="check-icon">
-                  <el-icon><Check /></el-icon>
-                </div>
-              </div>
-            </div>
-
-            <!-- 无Show提示 -->
-            <div v-else class="no-shows">
-              <p>您还没有创建播客节目</p>
-              <p class="hint">生成音频前需要先创建节目</p>
-            </div>
-
-            <div v-if="modalError" class="modal-error">
-              {{ modalError }}
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="mofa-btn" @click="showModal = false">取消</button>
-            <button
-              class="mofa-btn mofa-btn-primary"
-              @click="handleGenerateAudio"
-              :disabled="!selectedShowId || generatingAudio"
-            >
-              {{ generatingAudio ? '生成中...' : '确认生成' }}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ChatDotRound,
   ChatLineSquare,
   Loading,
   Microphone,
-  Close,
-  Stamp,
-  User,
   Check
 } from '@element-plus/icons-vue'
 import api from '@/api'
@@ -230,13 +164,7 @@ const error = ref('')
 let eventSource = null
 
 // Audio generation
-const showModal = ref(false)
-const shows = ref([])
-const loadingShows = ref(false)
-const selectedShowId = ref(null)
 const audioGenerating = ref(false)
-const generatingAudio = ref(false)
-const modalError = ref('')
 
 const dialogue = ref([])  // Changed from computed to ref for real-time updates
 
@@ -252,13 +180,6 @@ const canGenerateAudio = computed(() => {
   return episode.value?.status === 'published' &&
          dialogue.value.length > 0 &&
          !episode.value?.audio_file
-})
-
-// Watch showModal to load shows when opened
-watch(showModal, async (newVal) => {
-  if (newVal && shows.value.length === 0) {
-    await loadShows()
-  }
 })
 
 onMounted(async () => {
@@ -287,42 +208,21 @@ async function loadEpisode() {
   }
 }
 
-async function loadShows() {
-  try {
-    loadingShows.value = true
-    modalError.value = ''
-    shows.value = await api.podcasts.getMyShows()
-  } catch (err) {
-    console.error('Failed to load shows:', err)
-    modalError.value = '加载节目列表失败'
-  } finally {
-    loadingShows.value = false
-  }
-}
-
 async function handleGenerateAudio() {
-  if (!selectedShowId.value) return
+  if (!episode.value?.id || audioGenerating.value) return
 
   try {
-    generatingAudio.value = true
-    modalError.value = ''
-
-    await api.podcasts.generateDebateAudio(episode.value.id, selectedShowId.value)
-
-    // 关闭模态框
-    showModal.value = false
-
-    // 更新状态
     audioGenerating.value = true
+
+    await api.podcasts.generateDebateAudio(episode.value.id)
     episode.value.status = 'processing'
 
-    // 开始SSE流式传输
     startStreaming()
   } catch (err) {
     console.error('Failed to generate audio:', err)
-    modalError.value = err.response?.data?.error || '音频生成失败'
+    error.value = err.response?.data?.error || '音频生成失败'
   } finally {
-    generatingAudio.value = false
+    audioGenerating.value = false
   }
 }
 
@@ -332,6 +232,10 @@ function startStreaming() {
 
   const episodeId = route.params.episodeId
   const token = localStorage.getItem('access_token')
+  if (!token) {
+    error.value = '登录已过期，请重新登录'
+    return
+  }
 
   // 构建SSE URL（需要在URL中传递token，因为EventSource不支持自定义headers）
   // 使用相对路径，让nginx代理处理
@@ -343,10 +247,21 @@ function startStreaming() {
   eventSource.addEventListener('dialogue', (e) => {
     try {
       const entry = JSON.parse(e.data)
-      dialogue.value.push(entry)
+      mergeOrAppendDialogue(entry)
       scrollToBottom()
     } catch (err) {
       console.error('Failed to parse dialogue event:', err)
+    }
+  })
+
+  // 监听增量更新（同一条发言逐字增长）
+  eventSource.addEventListener('delta', (e) => {
+    try {
+      const delta = JSON.parse(e.data)
+      applyDelta(delta)
+      scrollToBottom()
+    } catch (err) {
+      console.error('Failed to parse delta event:', err)
     }
   })
 
@@ -363,21 +278,18 @@ function startStreaming() {
     }
   })
 
-  // 监听错误事件
-  eventSource.addEventListener('error', (e) => {
+  // 监听业务错误事件（非连接错误）
+  eventSource.addEventListener('stream_error', (e) => {
     console.error('SSE error:', e)
-
-    // 如果是自定义错误事件
-    if (e.data) {
-      try {
-        const errorData = JSON.parse(e.data)
-        error.value = errorData.error || '生成失败'
+    try {
+      const errorData = JSON.parse(e.data)
+      error.value = errorData.error || '生成失败'
+      if (episode.value) {
         episode.value.status = 'failed'
-      } catch (err) {
-        console.error('Failed to parse error event:', err)
       }
+    } catch (err) {
+      console.error('Failed to parse stream_error event:', err)
     }
-
     audioGenerating.value = false
     stopStreaming()
   })
@@ -385,8 +297,54 @@ function startStreaming() {
   // 监听连接错误
   eventSource.onerror = (e) => {
     console.error('EventSource connection error:', e)
-    // 连接错误时，不立即关闭，让浏览器自动重连
-    // 如果需要关闭，可以调用 stopStreaming()
+    // 浏览器会自动重连，这里不主动关闭。
+    // 若已被服务器关闭，则清理实例。
+    if (eventSource?.readyState === EventSource.CLOSED) {
+      stopStreaming()
+    }
+  }
+}
+
+function mergeOrAppendDialogue(entry) {
+  if (!entry) return
+  const lastIndex = dialogue.value.length - 1
+  const last = dialogue.value[lastIndex]
+  if (last && last.participant === entry.participant) {
+    const lastContent = last.content || ''
+    const nextContent = entry.content || ''
+    if (
+      nextContent === lastContent ||
+      nextContent.startsWith(lastContent) ||
+      lastContent.startsWith(nextContent)
+    ) {
+      dialogue.value[lastIndex] = { ...last, ...entry }
+      return
+    }
+  }
+  dialogue.value.push(entry)
+}
+
+function applyDelta(delta) {
+  if (!delta) return
+
+  const index = Number.isInteger(delta.index) ? delta.index : dialogue.value.length - 1
+  if (index >= 0 && index < dialogue.value.length) {
+    const current = dialogue.value[index]
+    dialogue.value[index] = {
+      ...current,
+      participant: delta.participant || current.participant,
+      content: delta.content || current.content,
+      timestamp: delta.timestamp || current.timestamp
+    }
+    return
+  }
+
+  if (delta.participant || delta.content) {
+    dialogue.value.push({
+      participant: delta.participant || 'judge',
+      content: delta.content || '',
+      timestamp: delta.timestamp || new Date().toISOString()
+    })
   }
 }
 
@@ -461,6 +419,20 @@ function formatTime(timestamp) {
 .error-state {
   text-align: center;
   padding: 4rem 2rem;
+}
+
+.loading-placeholder.inline-placeholder {
+  padding: 1rem 0 0.5rem;
+}
+
+.loading-placeholder.inline-placeholder h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.loading-placeholder.inline-placeholder p {
+  margin: 0;
+  color: var(--color-text-secondary);
 }
 
 .spinner {

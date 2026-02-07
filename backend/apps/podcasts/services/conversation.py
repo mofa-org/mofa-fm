@@ -87,12 +87,10 @@ class ConversationManager:
 
         # 第一轮：judge/tutor开场
         moderator_id = participant_order[2]  # 假设第3个是主持人/导师
-        opening = self._generate_opening(moderator_id, topic)
+        opening = self._generate_opening(moderator_id, topic, on_chunk=on_chunk)
 
         # 记录并yield开场白
         entry = self._log_message(moderator_id, opening)
-        if on_chunk:
-            on_chunk(moderator_id, opening)
         yield entry
 
         # 多轮对话
@@ -101,36 +99,79 @@ class ConversationManager:
             response_1 = self._generate_response(
                 participant_order[0],
                 topic,
-                round_num
+                round_num,
+                on_chunk=on_chunk
             )
             entry_1 = self._log_message(participant_order[0], response_1)
-            if on_chunk:
-                on_chunk(participant_order[0], response_1)
             yield entry_1
 
             # 参与者2发言
             response_2 = self._generate_response(
                 participant_order[1],
                 topic,
-                round_num
+                round_num,
+                on_chunk=on_chunk
             )
             entry_2 = self._log_message(participant_order[1], response_2)
-            if on_chunk:
-                on_chunk(participant_order[1], response_2)
             yield entry_2
 
             # 主持人/导师点评
             if round_num < self.rounds:  # 不是最后一轮
-                comment = self._generate_comment(moderator_id, round_num)
+                comment = self._generate_comment(moderator_id, round_num, on_chunk=on_chunk)
             else:  # 最后一轮，总结
-                comment = self._generate_summary(moderator_id)
+                comment = self._generate_summary(moderator_id, on_chunk=on_chunk)
 
             entry_mod = self._log_message(moderator_id, comment)
-            if on_chunk:
-                on_chunk(moderator_id, comment)
             yield entry_mod
 
-    def _generate_opening(self, participant_id: str, topic: str) -> str:
+    def _stream_or_generate(
+        self,
+        participant_id: str,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> str:
+        """
+        生成一段文本；若提供 on_chunk，则启用模型流式输出。
+        """
+        if on_chunk:
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True
+            )
+            chunks: List[str] = []
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta.content
+                if not delta:
+                    continue
+                chunks.append(delta)
+                on_chunk(participant_id, delta)
+
+            streamed_content = "".join(chunks).strip()
+            if streamed_content:
+                return streamed_content
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        content = response.choices[0].message.content or ""
+        return content.strip()
+
+    def _generate_opening(
+        self,
+        participant_id: str,
+        topic: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> str:
         """生成开场白"""
         participant = self.participants[participant_id]
 
@@ -141,14 +182,13 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        response = self.client.chat.completions.create(
-            model=self.model,
+        content = self._stream_or_generate(
+            participant_id=participant_id,
             messages=messages,
             temperature=0.8,
-            max_tokens=200
+            max_tokens=200,
+            on_chunk=on_chunk
         )
-
-        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
@@ -159,7 +199,8 @@ class ConversationManager:
         self,
         participant_id: str,
         topic: str,
-        round_num: int
+        round_num: int,
+        on_chunk: Optional[Callable[[str, str], None]] = None
     ) -> str:
         """生成参与者回复"""
         participant = self.participants[participant_id]
@@ -183,14 +224,13 @@ class ConversationManager:
         for msg in self.histories[participant_id]:
             messages.insert(-1, msg)  # 插在最后一条user消息前
 
-        response = self.client.chat.completions.create(
-            model=self.model,
+        content = self._stream_or_generate(
+            participant_id=participant_id,
             messages=messages,
             temperature=0.9,
-            max_tokens=500
+            max_tokens=500,
+            on_chunk=on_chunk
         )
-
-        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "user", "content": prompt})
@@ -198,7 +238,12 @@ class ConversationManager:
 
         return content
 
-    def _generate_comment(self, participant_id: str, round_num: int) -> str:
+    def _generate_comment(
+        self,
+        participant_id: str,
+        round_num: int,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> str:
         """生成主持人点评"""
         participant = self.participants[participant_id]
 
@@ -216,21 +261,24 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        response = self.client.chat.completions.create(
-            model=self.model,
+        content = self._stream_or_generate(
+            participant_id=participant_id,
             messages=messages,
             temperature=0.7,
-            max_tokens=400
+            max_tokens=400,
+            on_chunk=on_chunk
         )
-
-        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
 
         return content
 
-    def _generate_summary(self, participant_id: str) -> str:
+    def _generate_summary(
+        self,
+        participant_id: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> str:
         """生成总结"""
         participant = self.participants[participant_id]
 
@@ -251,14 +299,13 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        response = self.client.chat.completions.create(
-            model=self.model,
+        content = self._stream_or_generate(
+            participant_id=participant_id,
             messages=messages,
             temperature=0.6,
-            max_tokens=600
+            max_tokens=600,
+            on_chunk=on_chunk
         )
-
-        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
