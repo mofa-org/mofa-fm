@@ -127,6 +127,13 @@
               <div class="generation-actions">
                 <span :class="statusClass(episode.status)">{{ formatStatus(episode.status) }}</span>
                 <button
+                  v-if="canManageCover(episode)"
+                  class="queue-action"
+                  @click.stop="openCoverDialog(episode)"
+                >
+                  封面
+                </button>
+                <button
                   v-if="canCancelEpisode(episode)"
                   class="queue-action queue-action-cancel"
                   @click.stop="cancelGeneration(episode)"
@@ -499,6 +506,41 @@
         </div>
       </div>
 
+      <!-- 封面候选图对话框 -->
+      <div v-if="showCoverDialog" class="modal-overlay" @click.self="closeCoverDialog">
+        <div class="modal-content mofa-card cover-modal">
+          <div class="modal-header">
+            <h3>封面候选图</h3>
+            <button @click="closeCoverDialog" class="btn-close">×</button>
+          </div>
+          <div class="modal-body">
+            <p v-if="coverTargetEpisode" class="hint">目标单集：{{ coverTargetEpisode.title }}</p>
+            <div class="cover-toolbar">
+              <button class="mofa-btn mofa-btn-sm" :disabled="coverLoading" @click="loadCoverCandidates">
+                {{ coverLoading ? '生成中...' : '重抽 4 张' }}
+              </button>
+            </div>
+            <p v-if="coverError" class="error-message">{{ coverError }}</p>
+            <div v-if="coverLoading" class="loading-state small">封面生成中...</div>
+            <div v-else-if="coverCandidates.length === 0" class="empty-state small">
+              <p>暂无候选图，请点击“重抽 4 张”</p>
+            </div>
+            <div v-else class="cover-grid">
+              <div v-for="candidate in coverCandidates" :key="candidate.path" class="cover-item">
+                <img :src="candidate.url" alt="cover candidate" class="cover-image" />
+                <button
+                  class="mofa-btn mofa-btn-sm mofa-btn-success"
+                  :disabled="coverApplying"
+                  @click="applyCoverCandidate(candidate)"
+                >
+                  {{ coverApplying ? '应用中...' : '使用此图' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 历史版本查看对话框 -->
       <div v-if="showVersionDialog && viewingVersion" class="modal-overlay" @click.self="showVersionDialog = false">
         <div class="modal-content mofa-card version-modal">
@@ -646,6 +688,14 @@ const newSessionShowId = ref(null)
 // 历史版本查看
 const showVersionDialog = ref(false)
 const viewingVersion = ref(null)
+
+// 封面候选图
+const showCoverDialog = ref(false)
+const coverTargetEpisode = ref(null)
+const coverCandidates = ref([])
+const coverLoading = ref(false)
+const coverApplying = ref(false)
+const coverError = ref('')
 
 // RSS 快速生成
 const rssUrl = ref('https://news.ycombinator.com/rss')
@@ -855,6 +905,10 @@ function canRetryEpisode(episode) {
   return episode?.status === 'failed'
 }
 
+function canManageCover(episode) {
+  return episode?.status === 'published'
+}
+
 function openGenerationItem(episode) {
   if (!episode?.show?.slug) {
     ElMessage.warning('暂时无法跳转，缺少节目信息')
@@ -914,6 +968,56 @@ async function retryGeneration(episode) {
   } catch (error) {
     console.error('重试任务失败:', error)
     ElMessage.error('重试失败，请稍后再试')
+  }
+}
+
+function openCoverDialog(episode) {
+  coverTargetEpisode.value = episode
+  coverCandidates.value = []
+  coverError.value = ''
+  showCoverDialog.value = true
+  loadCoverCandidates()
+}
+
+function closeCoverDialog() {
+  if (coverApplying.value) return
+  showCoverDialog.value = false
+  coverTargetEpisode.value = null
+  coverCandidates.value = []
+  coverError.value = ''
+}
+
+async function loadCoverCandidates() {
+  if (!coverTargetEpisode.value?.id) return
+  coverLoading.value = true
+  coverError.value = ''
+  try {
+    const data = await podcastsAPI.generateCoverOptions(coverTargetEpisode.value.id, { count: 4 })
+    coverCandidates.value = data.candidates || []
+  } catch (error) {
+    console.error('生成封面候选图失败:', error)
+    coverError.value = error.response?.data?.error || '生成封面候选图失败'
+  } finally {
+    coverLoading.value = false
+  }
+}
+
+async function applyCoverCandidate(candidate) {
+  if (!coverTargetEpisode.value?.id || !candidate?.path) return
+  coverApplying.value = true
+  coverError.value = ''
+  try {
+    await podcastsAPI.applyCoverOption(coverTargetEpisode.value.id, {
+      candidate_path: candidate.path
+    })
+    ElMessage.success('封面已应用')
+    await loadGenerationQueue()
+    closeCoverDialog()
+  } catch (error) {
+    console.error('应用封面失败:', error)
+    coverError.value = error.response?.data?.error || '应用封面失败'
+  } finally {
+    coverApplying.value = false
   }
 }
 
@@ -2254,6 +2358,39 @@ onMounted(() => {
   border-top: var(--border-width) solid var(--border-color);
 }
 
+.cover-modal {
+  max-width: 860px;
+}
+
+.cover-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-sm);
+}
+
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-md);
+}
+
+.cover-item {
+  border: var(--border-width) solid var(--border-color-light);
+  border-radius: var(--radius-default);
+  padding: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.cover-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-default);
+  background: var(--color-bg);
+}
+
 .form-group {
   margin-bottom: var(--spacing-md);
 }
@@ -2394,6 +2531,10 @@ onMounted(() => {
   }
 
   .segment-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .cover-grid {
     grid-template-columns: 1fr;
   }
 }

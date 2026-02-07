@@ -305,6 +305,61 @@ def retry_generation(request, episode_id):
     )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_cover_options(request, episode_id):
+    """为单集生成多张封面候选图"""
+    from .services.cover_ai import generate_episode_cover_candidates
+
+    episode = get_object_or_404(Episode, id=episode_id, show__creator=request.user)
+    try:
+        count = int(request.data.get('count', 4))
+    except (TypeError, ValueError):
+        count = 4
+    count = max(1, min(count, 8))
+
+    try:
+        candidates = generate_episode_cover_candidates(episode, count=count)
+    except Exception as e:
+        return Response({'error': f'封面生成失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(
+        {
+            'episode_id': episode.id,
+            'count': len(candidates),
+            'candidates': candidates,
+        },
+        status=status.HTTP_200_OK
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_cover_option(request, episode_id):
+    """应用候选封面图到单集"""
+    from .services.cover_ai import apply_episode_cover_candidate
+
+    episode = get_object_or_404(Episode, id=episode_id, show__creator=request.user)
+    candidate_path = (request.data.get('candidate_path') or '').strip()
+    if not candidate_path:
+        return Response({'error': 'candidate_path 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        cover_url = apply_episode_cover_candidate(episode, candidate_path)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': f'应用封面失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response(
+        {
+            'message': '封面已更新',
+            'cover_url': cover_url,
+        },
+        status=status.HTTP_200_OK
+    )
+
+
 class GenerateEpisodeView(generics.GenericAPIView):
     """生成播客单集"""
     serializer_class = PodcastGenerationSerializer

@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import base64
 import re
+from uuid import uuid4
 from urllib.parse import quote_plus
 
 import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.utils import timezone
 
 
 def _build_prompt(title: str, script: str) -> str:
@@ -98,9 +100,7 @@ def _generate_with_pollinations(prompt: str) -> bytes:
     raise last_error or RuntimeError("pollinations failed")
 
 
-def generate_episode_cover(episode) -> bool:
-    prompt = _build_prompt(title=episode.title, script=episode.script or "")
-
+def _generate_cover_bytes(prompt: str) -> bytes | None:
     image_bytes = None
     try:
         image_bytes = _generate_with_openrouter_chat(prompt)
@@ -114,8 +114,53 @@ def generate_episode_cover(episode) -> bool:
         try:
             image_bytes = _generate_with_pollinations(prompt)
         except Exception:
-            return False
+            return None
 
+    return image_bytes
+
+
+def generate_episode_cover_candidates(episode, count: int = 4):
+    count = max(1, min(int(count or 4), 8))
+    prompt = _build_prompt(title=episode.title, script=episode.script or "")
+    storage = episode.cover.storage
+    date_prefix = timezone.now().strftime('%Y/%m')
+
+    candidates = []
+    for index in range(count):
+        variant_prompt = f"{prompt}, variation {index + 1}"
+        image_bytes = _generate_cover_bytes(variant_prompt)
+        if not image_bytes:
+            continue
+        path = f"episode_cover_candidates/{date_prefix}/cand-{episode.id}-{uuid4().hex}.png"
+        storage.save(path, ContentFile(image_bytes))
+        candidates.append({
+            "path": path,
+            "url": storage.url(path),
+        })
+
+    return candidates
+
+
+def apply_episode_cover_candidate(episode, candidate_path: str) -> str:
+    if not candidate_path or not candidate_path.startswith("episode_cover_candidates/"):
+        raise ValueError("candidate_path invalid")
+
+    storage = episode.cover.storage
+    if not storage.exists(candidate_path):
+        raise ValueError("candidate file not found")
+
+    with storage.open(candidate_path, "rb") as f:
+        image_bytes = f.read()
+
+    filename = f"ai-cover-{episode.slug or episode.id}-{episode.id}.png"
+    episode.cover.save(filename, ContentFile(image_bytes), save=False)
+    episode.save(update_fields=["cover", "updated_at"])
+    return episode.cover.url
+
+
+def generate_episode_cover(episode) -> bool:
+    prompt = _build_prompt(title=episode.title, script=episode.script or "")
+    image_bytes = _generate_cover_bytes(prompt)
     if not image_bytes:
         return False
 

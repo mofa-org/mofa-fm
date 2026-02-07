@@ -90,6 +90,16 @@ export default {
     return client.post(`/podcasts/episodes/${episodeId}/retry/`)
   },
 
+  // 生成封面候选图
+  generateCoverOptions(episodeId, data) {
+    return client.post(`/podcasts/episodes/${episodeId}/cover-options/`, data || {})
+  },
+
+  // 应用封面候选图
+  applyCoverOption(episodeId, data) {
+    return client.post(`/podcasts/episodes/${episodeId}/cover-apply/`, data)
+  },
+
   // 我的播客节目
   getMyShows() {
     return client.get('/podcasts/creator/shows/')
