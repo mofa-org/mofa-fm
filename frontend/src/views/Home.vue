@@ -16,6 +16,44 @@
         </div>
       </section>
 
+      <section v-if="isAuthenticated && isCreator" class="section">
+        <div class="quick-create mofa-card">
+          <div class="quick-header">
+            <h2 class="section-title">一键生成音频</h2>
+            <router-link to="/creator/ai-studio" class="quick-link">高级模式</router-link>
+          </div>
+          <p class="quick-tip">贴入 RSS 或网页链接，系统将自动抓取并生成音频任务。</p>
+          <div class="quick-grid">
+            <el-input
+              v-model="quickSourceUrl"
+              placeholder="https://news.ycombinator.com/rss 或任意网页链接"
+              clearable
+            />
+            <el-select v-model="quickShowId" placeholder="选择节目">
+              <el-option
+                v-for="show in myShows"
+                :key="show.id"
+                :label="show.title"
+                :value="show.id"
+              />
+            </el-select>
+            <el-input
+              v-model="quickTitle"
+              placeholder="标题（可选，不填自动生成）"
+              clearable
+            />
+            <button
+              class="mofa-btn mofa-btn-success"
+              :disabled="quickSubmitting"
+              @click="handleQuickGenerate"
+            >
+              {{ quickSubmitting ? '生成中...' : '一键生成' }}
+            </button>
+          </div>
+          <p v-if="quickError" class="quick-error">{{ quickError }}</p>
+        </div>
+      </section>
+
       <!-- 统计数据 -->
       <section class="stats" v-if="stats">
         <div class="stat-card mofa-card">
@@ -88,15 +126,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { ChatDotRound, Edit, FolderOpened } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 
 const authStore = useAuthStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
+const isCreator = computed(() => authStore.isCreator)
 
 const stats = ref(null)
 const latestEpisodes = ref([])
+const myShows = ref([])
+const quickSourceUrl = ref('https://news.ycombinator.com/rss')
+const quickShowId = ref(null)
+const quickTitle = ref('')
+const quickSubmitting = ref(false)
+const quickError = ref('')
 
 onMounted(async () => {
   // 加载统计数据
@@ -113,6 +159,18 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载最新单集失败', error)
   }
+
+  if (isAuthenticated.value && isCreator.value) {
+    try {
+      const data = await api.podcasts.getMyShows()
+      myShows.value = Array.isArray(data) ? data : (data.results || [])
+      if (!quickShowId.value && myShows.value.length > 0) {
+        quickShowId.value = myShows.value[0].id
+      }
+    } catch (error) {
+      console.error('加载节目失败', error)
+    }
+  }
 })
 
 function formatNumber(num) {
@@ -120,6 +178,31 @@ function formatNumber(num) {
     return (num / 10000).toFixed(1) + 'w'
   }
   return num
+}
+
+async function handleQuickGenerate() {
+  if (!quickSourceUrl.value.trim() || !quickShowId.value) {
+    quickError.value = '请填写链接并选择节目'
+    return
+  }
+
+  quickSubmitting.value = true
+  quickError.value = ''
+  try {
+    const response = await api.podcasts.generateEpisodeFromSource({
+      show_id: Number(quickShowId.value),
+      source_url: quickSourceUrl.value.trim(),
+      title: quickTitle.value.trim() || undefined,
+      max_items: 6,
+      dry_run: false,
+    })
+    ElMessage.success(`任务已提交（${response.source_type || 'source'}）`)
+    quickTitle.value = ''
+  } catch (error) {
+    quickError.value = error.response?.data?.error || error.message || '提交失败'
+  } finally {
+    quickSubmitting.value = false
+  }
 }
 </script>
 
@@ -188,6 +271,38 @@ function formatNumber(num) {
 
 .section {
   margin-bottom: var(--spacing-3xl);
+}
+
+.quick-create {
+  padding: var(--spacing-lg);
+}
+
+.quick-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.quick-link {
+  color: var(--color-primary);
+  font-weight: var(--font-semibold);
+}
+
+.quick-tip {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--spacing-sm);
+}
+
+.quick-error {
+  color: var(--color-danger);
+  margin-top: var(--spacing-sm);
 }
 
 .section-title {
@@ -342,6 +457,10 @@ function formatNumber(num) {
 
   .section-title {
     font-size: var(--font-xl);
+  }
+
+  .quick-grid {
+    grid-template-columns: 1fr;
   }
 
   .shows-grid {

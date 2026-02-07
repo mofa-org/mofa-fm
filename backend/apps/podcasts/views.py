@@ -17,7 +17,7 @@ from .serializers import (
     CategorySerializer, TagSerializer,
     ShowListSerializer, ShowDetailSerializer, ShowCreateSerializer,
     EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer,
-    PodcastGenerationSerializer, RSSPodcastGenerationSerializer,
+    PodcastGenerationSerializer, RSSPodcastGenerationSerializer, SourcePodcastGenerationSerializer,
     ScriptSessionSerializer, ScriptSessionCreateSerializer, ScriptChatSerializer,
     UploadedReferenceSerializer
 )
@@ -344,6 +344,66 @@ class GenerateEpisodeFromRSSView(generics.GenericAPIView):
                 "message": "RSS podcast generation started",
                 "episode_id": episode.id,
                 "feed_title": feed_title,
+                "item_count": len(items),
+            },
+            status=status.HTTP_202_ACCEPTED
+        )
+
+
+class GenerateEpisodeFromSourceView(generics.GenericAPIView):
+    """从链接源（RSS/网页）生成播客单集"""
+    serializer_class = SourcePodcastGenerationSerializer
+    permission_classes = [IsAuthenticated, IsCreatorOrReadOnly]
+
+    def post(self, request, *args, **kwargs):
+        from .tasks import generate_podcast_task
+        from .services.source_ingest import generate_script_from_source
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+        source_result = generate_script_from_source(
+            source_url=data['source_url'],
+            max_items=data.get('max_items', 8),
+        )
+        script = source_result['script']
+        source_title = source_result['source_title']
+        source_type = source_result['source_type']
+        items = source_result.get('items', [])
+
+        if data.get('dry_run', False):
+            return Response(
+                {
+                    "message": "Source parsed and script generated",
+                    "source_type": source_type,
+                    "source_title": source_title,
+                    "item_count": len(items),
+                    "items": items,
+                    "script": script,
+                },
+                status=status.HTTP_200_OK
+            )
+
+        title = data.get('title') or f"{source_title} 快报"
+        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+
+        episode = Episode.objects.create(
+            show=show,
+            title=title,
+            description=f"AI Generated Podcast from source: {data['source_url']}",
+            status='processing',
+            audio_file=placeholder_file
+        )
+
+        generate_podcast_task.delay(episode.id, script)
+
+        return Response(
+            {
+                "message": "Source podcast generation started",
+                "episode_id": episode.id,
+                "source_type": source_type,
                 "item_count": len(items),
             },
             status=status.HTTP_202_ACCEPTED

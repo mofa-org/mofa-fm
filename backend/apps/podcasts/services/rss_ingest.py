@@ -162,7 +162,7 @@ def _generate_script_with_llm(feed_title: str, reference_text: str) -> str:
     )
     user_prompt = (
         f"来源：{feed_title}\n\n"
-        f"RSS内容如下：\n{reference_text}\n\n"
+        f"参考材料如下：\n{reference_text}\n\n"
         "请输出完整脚本。"
     )
 

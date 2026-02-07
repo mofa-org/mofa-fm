@@ -68,6 +68,11 @@ export default {
     return client.post('/podcasts/episodes/generate-from-rss/', data)
   },
 
+  // 链接源（RSS/网页）生成单集
+  generateEpisodeFromSource(data) {
+    return client.post('/podcasts/episodes/generate-from-source/', data)
+  },
+
   // 更新单集
   updateEpisode(episodeId, data) {
     return client.put(`/podcasts/episodes/${episodeId}/update/`, data, {
