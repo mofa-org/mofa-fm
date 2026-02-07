@@ -11,6 +11,10 @@ app_name = 'podcasts'
 # 创建路由器用于ViewSet
 router = DefaultRouter()
 router.register(r'script-sessions', views.ScriptSessionViewSet, basename='script-session')
+router.register(r'rss-sources', views.RSSSourceViewSet, basename='rss-source')
+router.register(r'rss-lists', views.RSSListViewSet, basename='rss-list')
+router.register(r'rss-schedules', views.RSSScheduleViewSet, basename='rss-schedule')
+router.register(r'rss-runs', views.RSSRunViewSet, basename='rss-run')
 
 urlpatterns = [
     # 分类和标签

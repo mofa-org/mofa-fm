@@ -189,6 +189,69 @@ export default {
     return client.delete(`/podcasts/script-sessions/${sessionId}/delete_file/${fileId}/`)
   },
 
+  // RSS 自动化：源管理
+  getRSSSources(params) {
+    return client.get('/podcasts/rss-sources/', { params })
+  },
+
+  createRSSSource(data) {
+    return client.post('/podcasts/rss-sources/', data)
+  },
+
+  updateRSSSource(id, data) {
+    return client.patch(`/podcasts/rss-sources/${id}/`, data)
+  },
+
+  deleteRSSSource(id) {
+    return client.delete(`/podcasts/rss-sources/${id}/`)
+  },
+
+  // RSS 自动化：列表管理
+  getRSSLists(params) {
+    return client.get('/podcasts/rss-lists/', { params })
+  },
+
+  createRSSList(data) {
+    return client.post('/podcasts/rss-lists/', data)
+  },
+
+  updateRSSList(id, data) {
+    return client.patch(`/podcasts/rss-lists/${id}/`, data)
+  },
+
+  deleteRSSList(id) {
+    return client.delete(`/podcasts/rss-lists/${id}/`)
+  },
+
+  // RSS 自动化：规则管理
+  getRSSSchedules(params) {
+    return client.get('/podcasts/rss-schedules/', { params })
+  },
+
+  createRSSSchedule(data) {
+    return client.post('/podcasts/rss-schedules/', data)
+  },
+
+  updateRSSSchedule(id, data) {
+    return client.patch(`/podcasts/rss-schedules/${id}/`, data)
+  },
+
+  deleteRSSSchedule(id) {
+    return client.delete(`/podcasts/rss-schedules/${id}/`)
+  },
+
+  triggerRSSSchedule(id) {
+    return client.post(`/podcasts/rss-schedules/${id}/trigger/`, {})
+  },
+
+  getRSSScheduleRuns(id) {
+    return client.get(`/podcasts/rss-schedules/${id}/runs/`)
+  },
+
+  getRSSRuns(params) {
+    return client.get('/podcasts/rss-runs/', { params })
+  },
+
   // 热搜榜
   getTrendingSources() {
     return client.get('/podcasts/trending/sources/')

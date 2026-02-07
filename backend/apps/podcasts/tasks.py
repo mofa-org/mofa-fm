@@ -3,6 +3,7 @@
 """
 from celery import shared_task
 from django.utils import timezone
+from uuid import uuid4
 import os
 import time
 from utils.audio_processor import process_audio
@@ -337,6 +338,175 @@ def generate_rss_podcast_task(
                 stage_value='failed',
                 error_value=str(e)[:1000],
             )
+        raise
+
+
+@shared_task
+def dispatch_rss_schedules_task(limit=50):
+    """
+    扫描并派发到期的 RSS 自动化任务。
+    建议由 celery beat 每分钟触发一次。
+    """
+    from django.db import transaction
+    from .models import RSSSchedule
+    from .services.rss_schedule import compute_next_run_at
+
+    now = timezone.now()
+    queued = 0
+    with transaction.atomic():
+        due_schedules = list(
+            RSSSchedule.objects
+            .select_for_update(skip_locked=True)
+            .filter(is_active=True, next_run_at__isnull=False, next_run_at__lte=now)
+            .order_by('next_run_at')[: int(limit)]
+        )
+        for schedule in due_schedules:
+            schedule.last_status = 'queued'
+            schedule.last_error = ''
+            schedule.next_run_at = compute_next_run_at(schedule, from_dt=now)
+            schedule.save(update_fields=['last_status', 'last_error', 'next_run_at', 'updated_at'])
+            run_rss_schedule_task.delay(schedule.id, trigger_type='auto')
+            queued += 1
+    return f"Queued {queued} schedules"
+
+
+@shared_task
+def run_rss_schedule_task(schedule_id, trigger_type='auto'):
+    """
+    执行单个 RSS 自动化任务。
+    """
+    from django.core.files.base import ContentFile
+    from .models import RSSSchedule, RSSRun, Episode
+    from .services.default_show import get_or_create_default_show
+    from .services.rss_ingest import collect_rss_material, generate_script_from_rss_material
+    from .services.speaker_config import apply_speaker_names
+    from .services.rss_schedule import build_speaker_config_from_schedule
+
+    schedule = None
+    run = None
+    episode = None
+    try:
+        schedule = (
+            RSSSchedule.objects
+            .select_related('creator', 'rss_list', 'show')
+            .prefetch_related('rss_list__sources')
+            .get(id=schedule_id)
+        )
+
+        if not schedule.is_active and trigger_type == 'auto':
+            return f"Schedule {schedule_id} is inactive"
+
+        rss_urls = list(
+            schedule.rss_list.sources.filter(is_active=True).values_list('url', flat=True)
+        )
+        if not rss_urls:
+            raise ValueError('RSS 列表中无可用源')
+
+        run = RSSRun.objects.create(
+            schedule=schedule,
+            status='running',
+            trigger_type=trigger_type,
+            message='开始执行',
+        )
+        schedule.last_status = 'running'
+        schedule.last_error = ''
+        schedule.save(update_fields=['last_status', 'last_error', 'updated_at'])
+
+        material = collect_rss_material(
+            rss_urls=rss_urls,
+            max_items=schedule.max_items,
+            deduplicate=schedule.deduplicate,
+            sort_by=schedule.sort_by,
+        )
+        script = generate_script_from_rss_material(material, template=schedule.template)
+        speaker_config = build_speaker_config_from_schedule(schedule)
+        script = apply_speaker_names(script, speaker_config)
+
+        if schedule.show_id and schedule.show and schedule.show.creator_id == schedule.creator_id:
+            show = schedule.show
+        else:
+            show, _ = get_or_create_default_show(schedule.creator)
+
+        source_title = str(material.get('source_title') or schedule.name).strip()
+        title = f"{source_title} 快报"
+        if len(title) > 255:
+            title = title[:255]
+        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+
+        generation_meta = {
+            'type': 'rss_schedule',
+            'schedule_id': schedule.id,
+            'rss_urls': rss_urls,
+            'max_items': schedule.max_items,
+            'template': schedule.template,
+            'deduplicate': schedule.deduplicate,
+            'sort_by': schedule.sort_by,
+            'source_title': source_title,
+            'item_count': len(material.get('items') or []),
+            'trigger_type': trigger_type,
+        }
+        if speaker_config:
+            generation_meta['speaker_config'] = speaker_config
+
+        episode = Episode.objects.create(
+            show=show,
+            title=title,
+            description=f"AI Generated Podcast from RSS schedule: {schedule.name}",
+            status='processing',
+            generation_stage='queued',
+            generation_error='',
+            generation_meta=generation_meta,
+            script=script,
+            audio_file=placeholder_file,
+        )
+
+        _publish_generated_episode(
+            episode=episode,
+            script_content=script,
+            speaker_config=speaker_config,
+        )
+
+        run.status = 'success'
+        run.episode = episode
+        run.item_count = len(material.get('items') or [])
+        run.message = '执行成功'
+        run.meta = {
+            'source_title': source_title,
+            'rss_urls': rss_urls,
+        }
+        run.finished_at = timezone.now()
+        run.save(
+            update_fields=[
+                'status', 'episode', 'item_count',
+                'message', 'meta', 'finished_at',
+            ]
+        )
+
+        schedule.last_run_at = timezone.now()
+        schedule.last_status = 'success'
+        schedule.last_error = ''
+        schedule.save(update_fields=['last_run_at', 'last_status', 'last_error', 'updated_at'])
+        return f"Schedule {schedule_id} executed successfully"
+    except Exception as e:
+        error_text = str(e)[:1000]
+        if episode:
+            _set_episode_generation_state(
+                episode,
+                status_value='failed',
+                stage_value='failed',
+                error_value=error_text,
+            )
+        if run:
+            run.status = 'failed'
+            run.error = error_text
+            run.message = '执行失败'
+            run.finished_at = timezone.now()
+            run.save(update_fields=['status', 'error', 'message', 'finished_at'])
+        if schedule:
+            schedule.last_run_at = timezone.now()
+            schedule.last_status = 'failed'
+            schedule.last_error = error_text
+            schedule.save(update_fields=['last_run_at', 'last_status', 'last_error', 'updated_at'])
         raise
 
 

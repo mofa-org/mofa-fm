@@ -15,17 +15,22 @@ from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.response import Response
 
-from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
+from .models import (
+    Category, Tag, Show, Episode, ScriptSession, UploadedReference,
+    RSSSource, RSSList, RSSSchedule, RSSRun,
+)
 from .serializers import (
     CategorySerializer, TagSerializer,
     ShowListSerializer, ShowDetailSerializer, ShowCreateSerializer,
     EpisodeListSerializer, EpisodeDetailSerializer, EpisodeCreateSerializer,
     PodcastGenerationSerializer, RSSPodcastGenerationSerializer, SourcePodcastGenerationSerializer,
     ScriptSessionSerializer, ScriptSessionCreateSerializer, ScriptChatSerializer,
-    UploadedReferenceSerializer
+    UploadedReferenceSerializer,
+    RSSSourceSerializer, RSSListSerializer, RSSScheduleSerializer, RSSRunSerializer,
 )
 from .permissions import IsShowOwner
 from .services.speaker_config import normalize_speaker_config, apply_speaker_names
+from .services.rss_schedule import compute_next_run_at
 
 User = get_user_model()
 
@@ -266,6 +271,97 @@ def generation_queue(request):
     )
     serializer = EpisodeListSerializer(episodes, many=True, context={'request': request})
     return Response(serializer.data)
+
+
+class RSSSourceViewSet(viewsets.ModelViewSet):
+    """RSS 源管理"""
+    serializer_class = RSSSourceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return RSSSource.objects.filter(creator=self.request.user).order_by('-updated_at')
+
+    def perform_create(self, serializer):
+        serializer.save(creator=self.request.user)
+
+
+class RSSListViewSet(viewsets.ModelViewSet):
+    """RSS 列表管理"""
+    serializer_class = RSSListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            RSSList.objects.filter(creator=self.request.user)
+            .prefetch_related('sources')
+            .order_by('-updated_at')
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(creator=self.request.user)
+
+
+class RSSScheduleViewSet(viewsets.ModelViewSet):
+    """RSS 自动化规则管理"""
+    serializer_class = RSSScheduleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            RSSSchedule.objects.filter(creator=self.request.user)
+            .select_related('rss_list', 'show')
+            .order_by('-updated_at')
+        )
+
+    def perform_create(self, serializer):
+        instance = serializer.save(creator=self.request.user)
+        instance.next_run_at = compute_next_run_at(instance) if instance.is_active else None
+        instance.save(update_fields=['next_run_at', 'updated_at'])
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        instance.next_run_at = compute_next_run_at(instance) if instance.is_active else None
+        instance.save(update_fields=['next_run_at', 'updated_at'])
+
+    @action(detail=True, methods=['post'])
+    def trigger(self, request, pk=None):
+        """手动执行一次"""
+        from .tasks import run_rss_schedule_task
+
+        schedule = self.get_object()
+        schedule.last_status = 'queued'
+        schedule.last_error = ''
+        schedule.save(update_fields=['last_status', 'last_error', 'updated_at'])
+        run_rss_schedule_task.delay(schedule.id, trigger_type='manual')
+        return Response(
+            {'message': '手动任务已提交', 'schedule_id': schedule.id},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=['get'])
+    def runs(self, request, pk=None):
+        """查看该规则最近执行记录"""
+        schedule = self.get_object()
+        runs = schedule.runs.select_related('episode').order_by('-started_at')[:30]
+        serializer = RSSRunSerializer(runs, many=True, context={'request': request})
+        return Response({'count': len(runs), 'results': serializer.data})
+
+
+class RSSRunViewSet(viewsets.ReadOnlyModelViewSet):
+    """RSS 执行记录"""
+    serializer_class = RSSRunSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = (
+            RSSRun.objects.filter(schedule__creator=self.request.user)
+            .select_related('schedule', 'episode')
+            .order_by('-started_at')
+        )
+        schedule_id = self.request.query_params.get('schedule_id')
+        if schedule_id:
+            queryset = queryset.filter(schedule_id=schedule_id)
+        return queryset
 
 
 @api_view(['GET'])

@@ -4,7 +4,10 @@
 from django.utils import timezone
 from rest_framework import serializers
 from apps.users.serializers import UserSerializer
-from .models import Category, Tag, Show, Episode, ScriptSession, UploadedReference
+from .models import (
+    Category, Tag, Show, Episode, ScriptSession, UploadedReference,
+    RSSSource, RSSList, RSSSchedule, RSSRun,
+)
 from .services.rss_ingest import SCRIPT_TEMPLATE_CHOICES
 
 DEFAULT_SHOW_COVER_URL = '/static/default_show_logo.png'
@@ -470,6 +473,202 @@ class SourcePodcastGenerationSerializer(serializers.Serializer):
             return value
         except Show.DoesNotExist:
             raise serializers.ValidationError("节目不存在或您没有权限")
+
+
+class RSSSourceSerializer(serializers.ModelSerializer):
+    """RSS 源"""
+
+    class Meta:
+        model = RSSSource
+        fields = [
+            'id', 'name', 'url', 'description', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate_url(self, value):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return value
+        qs = RSSSource.objects.filter(creator=user, url=value)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError('该 RSS 地址已存在')
+        return value
+
+
+class RSSListSerializer(serializers.ModelSerializer):
+    """RSS 列表"""
+
+    sources = RSSSourceSerializer(many=True, read_only=True)
+    source_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
+        write_only=True,
+    )
+    source_count = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = RSSList
+        fields = [
+            'id', 'name', 'description', 'is_active',
+            'sources', 'source_ids', 'source_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_source_count(self, obj):
+        return obj.sources.count()
+
+    def validate_source_ids(self, value):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return []
+        ids = list(dict.fromkeys(value or []))
+        if not ids:
+            return []
+        sources = RSSSource.objects.filter(creator=user, id__in=ids)
+        if sources.count() != len(ids):
+            raise serializers.ValidationError('source_ids 含无效或无权限的源')
+        return ids
+
+    def create(self, validated_data):
+        source_ids = validated_data.pop('source_ids', [])
+        validated_data['creator'] = self.context['request'].user
+        instance = RSSList.objects.create(**validated_data)
+        if source_ids:
+            instance.sources.set(
+                RSSSource.objects.filter(creator=instance.creator, id__in=source_ids)
+            )
+        return instance
+
+    def update(self, instance, validated_data):
+        source_ids = validated_data.pop('source_ids', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if source_ids is not None:
+            instance.sources.set(
+                RSSSource.objects.filter(creator=instance.creator, id__in=source_ids)
+            )
+        return instance
+
+
+class RSSScheduleSerializer(serializers.ModelSerializer):
+    """RSS 定时规则"""
+
+    rss_list = RSSListSerializer(read_only=True)
+    rss_list_id = serializers.IntegerField(write_only=True)
+    show = ShowListSerializer(read_only=True)
+    show_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    week_days = serializers.ListField(
+        child=serializers.IntegerField(min_value=0, max_value=6),
+        required=False,
+        allow_empty=True,
+    )
+    template = serializers.ChoiceField(required=False, choices=SCRIPT_TEMPLATE_CHOICES, default='news_flash')
+
+    class Meta:
+        model = RSSSchedule
+        fields = [
+            'id', 'name',
+            'rss_list', 'rss_list_id',
+            'show', 'show_id',
+            'template', 'max_items', 'deduplicate', 'sort_by',
+            'host_name', 'guest_name', 'host_voice_id', 'guest_voice_id',
+            'timezone_name', 'run_time', 'frequency', 'week_days',
+            'is_active',
+            'next_run_at', 'last_run_at', 'last_status', 'last_error',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'next_run_at', 'last_run_at', 'last_status', 'last_error',
+            'created_at', 'updated_at',
+        ]
+
+    def validate_rss_list_id(self, value):
+        user = self.context['request'].user
+        try:
+            RSSList.objects.get(id=value, creator=user)
+        except RSSList.DoesNotExist:
+            raise serializers.ValidationError('RSS 列表不存在或无权限')
+        return value
+
+    def validate_show_id(self, value):
+        if not value:
+            return value
+        user = self.context['request'].user
+        try:
+            Show.objects.get(id=value, creator=user)
+        except Show.DoesNotExist:
+            raise serializers.ValidationError('节目不存在或无权限')
+        return value
+
+    def validate_week_days(self, value):
+        result = sorted(list(dict.fromkeys(value or [])))
+        return result
+
+    def validate(self, attrs):
+        frequency = attrs.get('frequency') or getattr(self.instance, 'frequency', 'daily')
+        week_days = attrs.get('week_days')
+        if week_days is None and self.instance is not None:
+            week_days = self.instance.week_days
+        if frequency == 'weekly' and not week_days:
+            raise serializers.ValidationError({'week_days': '每周模式请至少选择一天'})
+        return attrs
+
+    def create(self, validated_data):
+        rss_list_id = validated_data.pop('rss_list_id')
+        show_id = validated_data.pop('show_id', None)
+        validated_data['creator'] = self.context['request'].user
+        validated_data['rss_list'] = RSSList.objects.get(id=rss_list_id, creator=validated_data['creator'])
+        if show_id:
+            validated_data['show'] = Show.objects.get(id=show_id, creator=validated_data['creator'])
+        return RSSSchedule.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        rss_list_id = validated_data.pop('rss_list_id', None)
+        show_id = validated_data.pop('show_id', None) if 'show_id' in validated_data else None
+
+        if rss_list_id is not None:
+            instance.rss_list = RSSList.objects.get(id=rss_list_id, creator=instance.creator)
+        if 'show_id' in self.initial_data:
+            instance.show = (
+                Show.objects.get(id=show_id, creator=instance.creator)
+                if show_id else None
+            )
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+
+class RSSRunSerializer(serializers.ModelSerializer):
+    """RSS 运行记录"""
+
+    schedule_name = serializers.SerializerMethodField()
+    episode_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RSSRun
+        fields = [
+            'id', 'schedule', 'schedule_name',
+            'episode', 'episode_title',
+            'status', 'trigger_type', 'message', 'error',
+            'item_count', 'meta',
+            'started_at', 'finished_at',
+        ]
+
+    def get_schedule_name(self, obj):
+        return obj.schedule.name if obj.schedule_id else ''
+
+    def get_episode_title(self, obj):
+        return obj.episode.title if obj.episode_id else ''
 
 
 class UploadedReferenceSerializer(serializers.ModelSerializer):

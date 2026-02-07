@@ -1,6 +1,8 @@
 """
 播客模型
 """
+from datetime import time as dt_time
+
 from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
@@ -534,3 +536,202 @@ class UploadedReference(models.Model):
 
     def __str__(self):
         return f"{self.original_filename} ({self.session.creator.username})"
+
+
+class RSSSource(models.Model):
+    """用户维护的 RSS 源"""
+
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='rss_sources',
+        verbose_name='用户',
+    )
+    name = models.CharField('名称', max_length=120)
+    url = models.URLField('RSS 地址', max_length=500)
+    description = models.TextField('描述', blank=True)
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'rss_sources'
+        ordering = ['-updated_at']
+        unique_together = [['creator', 'url']]
+        indexes = [
+            models.Index(fields=['creator', 'is_active']),
+            models.Index(fields=['-updated_at']),
+        ]
+        verbose_name = 'RSS 源'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.name} ({self.creator.username})"
+
+
+class RSSList(models.Model):
+    """用户维护的 RSS 源列表"""
+
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='rss_lists',
+        verbose_name='用户',
+    )
+    name = models.CharField('列表名', max_length=120)
+    description = models.TextField('描述', blank=True)
+    sources = models.ManyToManyField(
+        RSSSource,
+        blank=True,
+        related_name='rss_lists',
+        verbose_name='源',
+    )
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'rss_lists'
+        ordering = ['-updated_at']
+        unique_together = [['creator', 'name']]
+        indexes = [
+            models.Index(fields=['creator', 'is_active']),
+            models.Index(fields=['-updated_at']),
+        ]
+        verbose_name = 'RSS 列表'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.name} ({self.creator.username})"
+
+
+class RSSSchedule(models.Model):
+    """RSS 自动化定时规则"""
+
+    FREQUENCY_CHOICES = [
+        ('daily', '每天'),
+        ('weekly', '每周'),
+    ]
+    STATUS_CHOICES = [
+        ('idle', '空闲'),
+        ('queued', '排队中'),
+        ('running', '执行中'),
+        ('success', '成功'),
+        ('failed', '失败'),
+    ]
+    SORT_CHOICES = [
+        ('latest', 'latest'),
+        ('oldest', 'oldest'),
+        ('title', 'title'),
+    ]
+
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='rss_schedules',
+        verbose_name='用户',
+    )
+    name = models.CharField('规则名', max_length=120)
+    rss_list = models.ForeignKey(
+        RSSList,
+        on_delete=models.CASCADE,
+        related_name='schedules',
+        verbose_name='RSS 列表',
+    )
+    show = models.ForeignKey(
+        Show,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rss_schedules',
+        verbose_name='目标频道',
+    )
+
+    template = models.CharField('模板', max_length=32, default='news_flash')
+    max_items = models.PositiveSmallIntegerField('抓取条数', default=8)
+    deduplicate = models.BooleanField('去重', default=True)
+    sort_by = models.CharField('排序', max_length=12, choices=SORT_CHOICES, default='latest')
+
+    host_name = models.CharField('主持名', max_length=64, blank=True, default='')
+    guest_name = models.CharField('嘉宾名', max_length=64, blank=True, default='')
+    host_voice_id = models.CharField('主持音色ID', max_length=128, blank=True, default='')
+    guest_voice_id = models.CharField('嘉宾音色ID', max_length=128, blank=True, default='')
+
+    timezone_name = models.CharField('时区', max_length=64, default='Asia/Shanghai')
+    run_time = models.TimeField('执行时间', default=dt_time(hour=8, minute=0))
+    frequency = models.CharField('频率', max_length=12, choices=FREQUENCY_CHOICES, default='daily')
+    week_days = models.JSONField('每周执行日', default=list, blank=True, help_text='0-6, 周一到周日')
+
+    is_active = models.BooleanField('启用', default=True)
+    next_run_at = models.DateTimeField('下次执行时间', null=True, blank=True, db_index=True)
+    last_run_at = models.DateTimeField('上次执行时间', null=True, blank=True)
+    last_status = models.CharField('最近状态', max_length=20, choices=STATUS_CHOICES, default='idle')
+    last_error = models.TextField('最近错误', blank=True)
+
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'rss_schedules'
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['creator', 'is_active']),
+            models.Index(fields=['is_active', 'next_run_at']),
+            models.Index(fields=['-updated_at']),
+        ]
+        verbose_name = 'RSS 定时规则'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.name} ({self.creator.username})"
+
+
+class RSSRun(models.Model):
+    """RSS 定时任务运行记录"""
+
+    STATUS_CHOICES = [
+        ('queued', '排队中'),
+        ('running', '执行中'),
+        ('success', '成功'),
+        ('failed', '失败'),
+    ]
+    TRIGGER_CHOICES = [
+        ('auto', '自动触发'),
+        ('manual', '手动触发'),
+    ]
+
+    schedule = models.ForeignKey(
+        RSSSchedule,
+        on_delete=models.CASCADE,
+        related_name='runs',
+        verbose_name='规则',
+    )
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rss_runs',
+        verbose_name='生成单集',
+    )
+    status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='queued')
+    trigger_type = models.CharField('触发方式', max_length=20, choices=TRIGGER_CHOICES, default='auto')
+    message = models.TextField('说明', blank=True)
+    error = models.TextField('错误', blank=True)
+    item_count = models.IntegerField('条目数', default=0)
+    meta = models.JSONField('元数据', default=dict, blank=True)
+    started_at = models.DateTimeField('开始时间', auto_now_add=True)
+    finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+
+    class Meta:
+        db_table = 'rss_runs'
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['schedule', '-started_at']),
+            models.Index(fields=['status', '-started_at']),
+        ]
+        verbose_name = 'RSS 运行记录'
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.schedule.name} - {self.get_status_display()}"

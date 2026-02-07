@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from decouple import config
 import dj_database_url
+from celery.schedules import crontab
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -147,6 +148,12 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    'dispatch-rss-schedules-every-minute': {
+        'task': 'apps.podcasts.tasks.dispatch_rss_schedules_task',
+        'schedule': crontab(minute='*'),
+    },
+}
 
 # Audio settings
 AUDIO_MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB

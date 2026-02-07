@@ -1,7 +1,15 @@
 <template>
     <div class="ai-script-studio">
         <div class="container">
-            <h1 class="page-title">AI 音频创作</h1>
+            <div class="page-head">
+                <h1 class="page-title">AI 音频创作</h1>
+                <router-link
+                    to="/creator/rss-automation"
+                    class="mofa-btn mofa-btn-warning page-head-btn"
+                >
+                    RSS 自动化
+                </router-link>
+            </div>
 
             <!-- 会话列表视图 -->
             <div v-if="!currentSession" class="session-list-view">
@@ -2399,10 +2407,22 @@ onMounted(() => {
     padding: var(--spacing-xl) 0;
 }
 
+.page-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+}
+
 .page-title {
     font-size: var(--font-3xl);
     font-weight: var(--font-bold);
-    margin-bottom: var(--spacing-xl);
+    margin: 0;
+}
+
+.page-head-btn {
+    white-space: nowrap;
 }
 
 /* 会话列表 */
@@ -3541,6 +3561,11 @@ onMounted(() => {
 }
 
 @media (max-width: 1024px) {
+    .page-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .entry-header {
         flex-direction: column;
         align-items: flex-start;

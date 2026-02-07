@@ -25,6 +25,10 @@
           <el-icon><ChatDotRound /></el-icon>
           开始创作
         </router-link>
+        <router-link to="/creator/rss-automation" class="mofa-btn">
+          <el-icon><Clock /></el-icon>
+          RSS 自动化
+        </router-link>
         <router-link to="/creator/shows/create" class="mofa-btn mofa-btn-warning">
           <el-icon><Plus /></el-icon>
           新建节目
@@ -66,7 +70,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
-import { Plus, ChatDotRound } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()

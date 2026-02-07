@@ -93,6 +93,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/creator/rss-automation',
+      name: 'rss-automation',
+      component: () => import('@/views/creator/RSSAutomation.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/creator/script-studio',
       redirect: '/creator/ai-studio'
     },
