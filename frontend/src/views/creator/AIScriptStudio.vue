@@ -342,6 +342,44 @@
               <pre v-else class="script-text">{{ currentSession.current_script }}</pre>
             </div>
 
+            <div v-if="!isEditingScript && scriptSegments.length > 0" class="segment-tools">
+              <div class="segment-tools-header">
+                <h4>试听即改</h4>
+                <span class="hint">段落级试听 / 局部重写 / 局部重生音频</span>
+              </div>
+              <div class="segment-controls">
+                <select v-model.number="selectedSegmentIndex" class="form-select">
+                  <option v-for="segment in scriptSegments" :key="segment.index" :value="segment.index">
+                    段 {{ segment.index + 1 }} · {{ segment.role }}
+                  </option>
+                </select>
+                <button
+                  class="mofa-btn mofa-btn-sm"
+                  :disabled="segmentPreviewLoading || !selectedSegment"
+                  @click="previewSelectedSegment"
+                >
+                  {{ segmentPreviewLoading ? '生成中...' : '试听片段' }}
+                </button>
+                <button
+                  class="mofa-btn mofa-btn-sm mofa-btn-success"
+                  :disabled="segmentRewriteLoading || !selectedSegment || !segmentRewriteInstruction.trim()"
+                  @click="rewriteSelectedSegment"
+                >
+                  {{ segmentRewriteLoading ? '改写中...' : '局部重写' }}
+                </button>
+              </div>
+              <div v-if="selectedSegment" class="segment-selected">
+                <div class="segment-label">当前片段</div>
+                <pre class="script-text">{{ selectedSegment.raw }}</pre>
+              </div>
+              <textarea
+                v-model="segmentRewriteInstruction"
+                class="segment-instruction"
+                placeholder="改写要求：例如 更口语、更短、保留核心观点"
+              ></textarea>
+              <audio v-if="segmentPreviewUrl" :src="segmentPreviewUrl" controls class="segment-audio"></audio>
+            </div>
+
             <div v-if="currentSession.script_versions?.length > 1" class="script-versions">
               <div class="versions-header">历史版本 ({{ currentSession.script_versions.length }})</div>
               <div class="versions-list">
@@ -542,6 +580,37 @@ const scriptMeta = computed(() => {
   }
 })
 
+const selectedSegmentIndex = ref(0)
+const segmentPreviewLoading = ref(false)
+const segmentRewriteLoading = ref(false)
+const segmentPreviewUrl = ref('')
+const segmentRewriteInstruction = ref('')
+
+function parseScriptSegments(script) {
+  if (!script) return []
+  const matches = script.match(/【[^】]+】[\s\S]*?(?=【[^】]+】|$)/g) || []
+  return matches.map((raw, index) => {
+    const roleMatch = raw.match(/^【([^】]+)】/)
+    return {
+      index,
+      raw: raw.trim(),
+      role: roleMatch?.[1] || '未知角色'
+    }
+  }).filter(item => item.raw)
+}
+
+const scriptSegments = computed(() => parseScriptSegments(currentSession.value?.current_script || ''))
+
+const selectedSegment = computed(() => {
+  if (!scriptSegments.value.length) return null
+  const maxIndex = scriptSegments.value.length - 1
+  const index = Math.max(0, Math.min(selectedSegmentIndex.value, maxIndex))
+  if (index !== selectedSegmentIndex.value) {
+    selectedSegmentIndex.value = index
+  }
+  return scriptSegments.value[index]
+})
+
 const availableShows = computed(() => {
   const shows = Array.isArray(myShows.value) ? [...myShows.value] : []
   const currentShow = currentSession.value?.show
@@ -722,6 +791,9 @@ async function loadSession(sessionId) {
   try {
     const session = await podcastsAPI.getScriptSession(sessionId)
     currentSession.value = session
+    selectedSegmentIndex.value = 0
+    segmentPreviewUrl.value = ''
+    segmentRewriteInstruction.value = ''
     await nextTick()
     scrollToBottom()
   } catch (error) {
@@ -733,6 +805,8 @@ async function loadSession(sessionId) {
 // 返回列表
 function backToList() {
   currentSession.value = null
+  segmentPreviewUrl.value = ''
+  segmentRewriteInstruction.value = ''
   loadSessions()
   loadGenerationQueue()
 }
@@ -1119,6 +1193,62 @@ function saveScriptEdit() {
   currentSession.value.current_script = editableScript.value
   isEditingScript.value = false
   ElMessage.success('脚本已更新，可以直接生成播客')
+}
+
+async function previewSelectedSegment() {
+  const segment = selectedSegment.value
+  if (!segment || !currentSession.value?.id) return
+
+  segmentPreviewLoading.value = true
+  try {
+    const data = await podcastsAPI.previewScriptSegment(currentSession.value.id, {
+      segment_text: segment.raw
+    })
+    segmentPreviewUrl.value = data.preview_url || ''
+    ElMessage.success('试听音频已生成')
+  } catch (error) {
+    console.error('生成试听片段失败:', error)
+    ElMessage.error(error.response?.data?.error || '试听生成失败')
+  } finally {
+    segmentPreviewLoading.value = false
+  }
+}
+
+async function rewriteSelectedSegment() {
+  const segment = selectedSegment.value
+  const instruction = segmentRewriteInstruction.value.trim()
+  if (!segment || !currentSession.value?.id || !instruction) return
+
+  segmentRewriteLoading.value = true
+  try {
+    const data = await podcastsAPI.rewriteScriptSegment(currentSession.value.id, {
+      segment_text: segment.raw,
+      instruction
+    })
+    const rewritten = (data.rewritten_segment || '').trim()
+    if (!rewritten) {
+      ElMessage.error('改写结果为空')
+      return
+    }
+
+    const parts = parseScriptSegments(currentSession.value.current_script || '')
+    if (!parts.length || segment.index >= parts.length) {
+      ElMessage.error('脚本片段已变化，请重试')
+      return
+    }
+    parts[segment.index] = {
+      ...parts[segment.index],
+      raw: rewritten
+    }
+    currentSession.value.current_script = parts.map(item => item.raw).join('\n\n')
+    segmentRewriteInstruction.value = ''
+    ElMessage.success('局部改写成功')
+  } catch (error) {
+    console.error('局部改写失败:', error)
+    ElMessage.error(error.response?.data?.error || '局部改写失败')
+  } finally {
+    segmentRewriteLoading.value = false
+  }
 }
 
 // 查看历史版本
@@ -1942,6 +2072,57 @@ onMounted(() => {
   gap: var(--spacing-xs);
 }
 
+.segment-tools {
+  border-top: var(--border-width) solid var(--border-color);
+  padding-top: var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.segment-tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.segment-tools-header h4 {
+  margin: 0;
+  font-size: var(--font-base);
+  font-weight: var(--font-semibold);
+}
+
+.segment-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.segment-selected {
+  margin-bottom: var(--spacing-sm);
+}
+
+.segment-label {
+  font-size: var(--font-xs);
+  color: var(--color-text-tertiary);
+  margin-bottom: 4px;
+}
+
+.segment-instruction {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: var(--border-width) solid var(--border-color);
+  border-radius: var(--radius-default);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+}
+
+.segment-audio {
+  width: 100%;
+}
+
 .script-versions {
   border-top: var(--border-width) solid var(--border-color);
   padding-top: var(--spacing-md);
@@ -2209,6 +2390,10 @@ onMounted(() => {
   }
 
   .rss-form {
+    grid-template-columns: 1fr;
+  }
+
+  .segment-controls {
     grid-template-columns: 1fr;
   }
 }

@@ -135,6 +135,16 @@ export default {
     return client.post(`/podcasts/script-sessions/${sessionId}/chat/`, { message })
   },
 
+  // 段落级试听
+  previewScriptSegment(sessionId, data) {
+    return client.post(`/podcasts/script-sessions/${sessionId}/preview_segment/`, data)
+  },
+
+  // 段落级局部重写
+  rewriteScriptSegment(sessionId, data) {
+    return client.post(`/podcasts/script-sessions/${sessionId}/rewrite_segment/`, data)
+  },
+
   // 上传参考文件
   uploadReference(sessionId, file) {
     const formData = new FormData()

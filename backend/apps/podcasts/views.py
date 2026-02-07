@@ -1,11 +1,14 @@
 """
 播客视图
 """
+import os
+import re
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status, filters, viewsets
 from rest_framework.decorators import api_view, permission_classes, action
@@ -710,6 +713,89 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
             'script': session.current_script,
             'has_script_update': script_updated
         })
+
+    @action(detail=True, methods=['post'])
+    def preview_segment(self, request, pk=None):
+        """段落级试听（局部重生音频）"""
+        from django.conf import settings
+        from .services.generator import PodcastGenerator
+
+        session = self.get_object()
+        segment_text = (request.data.get('segment_text') or '').strip()
+        if not segment_text:
+            return Response({'error': 'segment_text 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+        if not re.match(r"^【[^】]+】", segment_text):
+            return Response({'error': '片段需以【角色】开头'}, status=status.HTTP_400_BAD_REQUEST)
+
+        relative_path = f"previews/{timezone.now().strftime('%Y/%m')}/seg-{session.id}-{uuid4().hex}.mp3"
+        output_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+
+        try:
+            generator = PodcastGenerator()
+            generator.generate(segment_text, output_path)
+        except Exception as e:
+            return Response({'error': f'试听生成失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        media_url = settings.MEDIA_URL if settings.MEDIA_URL.endswith('/') else settings.MEDIA_URL + '/'
+        return Response(
+            {
+                'message': '试听音频已生成',
+                'preview_url': f"{media_url}{relative_path}",
+            },
+            status=status.HTTP_200_OK
+        )
+
+    @action(detail=True, methods=['post'])
+    def rewrite_segment(self, request, pk=None):
+        """段落级局部重写"""
+        from django.conf import settings
+        from openai import OpenAI
+
+        self.get_object()
+        segment_text = (request.data.get('segment_text') or '').strip()
+        instruction = (request.data.get('instruction') or '').strip()
+        if not segment_text:
+            return Response({'error': 'segment_text 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+        if not instruction:
+            return Response({'error': 'instruction 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
+
+        role_match = re.match(r"^(【[^】]+】)", segment_text)
+        role_tag = role_match.group(1) if role_match else ""
+
+        try:
+            client = OpenAI(
+                api_key=getattr(settings, "OPENAI_API_KEY", ""),
+                base_url=getattr(settings, "OPENAI_API_BASE", "https://api.openai.com/v1"),
+            )
+            completion = client.chat.completions.create(
+                model=getattr(settings, "OPENAI_MODEL", "openai/gpt-4o-mini"),
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是播客脚本润色器。只重写给定单段文本，不要输出多段。"
+                            "必须保留【角色】标签开头，输出纯文本，不要代码块。"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"原片段：\n{segment_text}\n\n"
+                            f"改写要求：{instruction}\n\n"
+                            "请输出改写后的单段。"
+                        ),
+                    },
+                ],
+                temperature=0.6,
+            )
+            rewritten = (completion.choices[0].message.content or "").strip()
+            if not rewritten:
+                return Response({'error': '模型返回空结果'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            if role_tag and not rewritten.startswith(role_tag):
+                rewritten = f"{role_tag}{rewritten}"
+            return Response({'rewritten_segment': rewritten}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f'局部重写失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def upload_file(self, request, pk=None):
