@@ -29,6 +29,61 @@ logger = logging.getLogger(__name__)
 DEFAULT_PUNCTUATION_MARKS = "。！？.!?，,、；;：:"
 
 
+def _get_vocal_logo_paths() -> Tuple[Optional[str], Optional[str], bool]:
+    minimax_settings = getattr(settings, "MINIMAX_TTS", {}) or {}
+    enabled = _coerce_bool(minimax_settings.get("enable_vocal_logo"), True)
+    if not enabled:
+        return None, None, False
+
+    base_dir = str(getattr(settings, "BASE_DIR", "") or "")
+    default_start = os.path.join(base_dir, "mofa-vocal-logo-start.mp3") if base_dir else ""
+    default_end = os.path.join(base_dir, "mofa-vocal-logo-end.mp3") if base_dir else ""
+
+    start_path = str(minimax_settings.get("vocal_logo_start_path") or default_start).strip()
+    end_path = str(minimax_settings.get("vocal_logo_end_path") or default_end).strip()
+    return start_path or None, end_path or None, True
+
+
+def _prepend_append_vocal_logo(audio: AudioSegment) -> AudioSegment:
+    start_path, end_path, enabled = _get_vocal_logo_paths()
+    if not enabled:
+        return audio
+
+    start_logo: Optional[AudioSegment] = None
+    end_logo: Optional[AudioSegment] = None
+
+    if start_path and os.path.exists(start_path):
+        try:
+            start_logo = AudioSegment.from_file(start_path)
+        except Exception as exc:
+            logger.warning("加载片头 vocal logo 失败，已跳过: %s (%s)", start_path, exc)
+    elif start_path:
+        logger.warning("片头 vocal logo 文件不存在，已跳过: %s", start_path)
+
+    if end_path and os.path.exists(end_path):
+        try:
+            end_logo = AudioSegment.from_file(end_path)
+        except Exception as exc:
+            logger.warning("加载片尾 vocal logo 失败，已跳过: %s (%s)", end_path, exc)
+    elif end_path:
+        logger.warning("片尾 vocal logo 文件不存在，已跳过: %s", end_path)
+
+    final_audio = audio
+    if start_logo is not None:
+        final_audio = start_logo + final_audio
+    if end_logo is not None:
+        final_audio = final_audio + end_logo
+
+    if start_logo is not None or end_logo is not None:
+        logger.info(
+            "已添加 vocal logo: start=%s, end=%s",
+            start_logo is not None,
+            end_logo is not None,
+        )
+
+    return final_audio
+
+
 def _coerce_bool(value, default: bool = True) -> bool:
     if value is None:
         return default
@@ -278,6 +333,8 @@ class PodcastGenerator:
             final_audio += audio_chunk
             last_speaker = speaker
 
+        final_audio = _prepend_append_vocal_logo(final_audio)
+
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         final_audio.export(output_path, format="mp3")
         logger.info("MiniMax 播客生成完成，输出路径: %s", output_path)
@@ -366,6 +423,8 @@ class PodcastGenerator:
 
             final_audio += audio_chunk
             last_speaker = speaker
+
+        final_audio = _prepend_append_vocal_logo(final_audio)
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         final_audio.export(output_path, format="mp3")

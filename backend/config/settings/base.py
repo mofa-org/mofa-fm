@@ -186,6 +186,17 @@ MINIMAX_TTS = {
     # Random silence between speaker changes
     'silence_min_ms': config('MINIMAX_SILENCE_MIN_MS', default=300, cast=int),
     'silence_max_ms': config('MINIMAX_SILENCE_MAX_MS', default=1200, cast=int),
+
+    # Vocal logo (prepend/append around the final mixed audio)
+    'enable_vocal_logo': config('MINIMAX_ENABLE_VOCAL_LOGO', default=True, cast=bool),
+    'vocal_logo_start_path': config(
+        'MINIMAX_VOCAL_LOGO_START_PATH',
+        default=str(BASE_DIR / 'mofa-vocal-logo-start.mp3')
+    ),
+    'vocal_logo_end_path': config(
+        'MINIMAX_VOCAL_LOGO_END_PATH',
+        default=str(BASE_DIR / 'mofa-vocal-logo-end.mp3')
+    ),
 }
 
 # OpenAI-compatible API for script generation (Moonshot/Kimi)
