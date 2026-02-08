@@ -1,7 +1,11 @@
 <template>
   <div class="episode-card mofa-card">
     <div class="episode-cover" @click="handlePlay">
-      <img :src="episode.cover_url" :alt="episode.title" />
+      <img
+        :src="episode.cover_url"
+        :alt="episode.title"
+        :class="{ 'placeholder-cover': isPlaceholderCover }"
+      />
       <div class="play-overlay">
         <el-icon class="play-icon" :size="48">
           <VideoPlay />
@@ -134,6 +138,18 @@ const resolvedPlaylist = computed(() => {
   return null
 })
 
+const isPlaceholderCover = computed(() => {
+  const url = String(props.episode?.cover_url || '').toLowerCase()
+  if (!url) return true
+  return (
+    url.includes('default_show_logo') ||
+    url.includes('default_avatar') ||
+    url.includes('default-cover') ||
+    url.includes('default_cover') ||
+    url.includes('placeholder')
+  )
+})
+
 // 判断当前用户是否是该节目的创作者
 const isCreator = computed(() => {
   if (!authStore.isAuthenticated || !props.show) return false
@@ -221,6 +237,12 @@ function formatDate(date) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.episode-cover img.placeholder-cover {
+  object-fit: contain;
+  padding: 6px;
+  background: #f3f4f6;
 }
 
 /* 可见性徽章 */
