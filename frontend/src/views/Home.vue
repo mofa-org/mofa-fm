@@ -16,6 +16,27 @@
         </div>
       </section>
 
+      <section class="section">
+        <div class="section-header">
+          <h2 class="section-title">为你推荐</h2>
+          <router-link class="section-more" to="/discover">查看全部</router-link>
+        </div>
+        <div class="recommended-list" v-if="recommendedItems.length > 0">
+          <div
+            v-for="item in recommendedItems"
+            :key="item.episode.id"
+            class="recommended-item"
+          >
+            <div class="recommended-reason">{{ item.reason }}</div>
+            <EpisodeCard
+              :episode="item.episode"
+              :playlist="recommendedEpisodes"
+            />
+          </div>
+        </div>
+        <el-empty v-else description="推荐位加载中" />
+      </section>
+
       <!-- AI功能区 -->
       <section class="section ai-features" v-if="isAuthenticated">
         <h2 class="section-title">创作入口</h2>
@@ -37,27 +58,6 @@
             <div class="feature-action">进入管理 →</div>
           </router-link>
         </div>
-      </section>
-
-      <section class="section">
-        <div class="section-header">
-          <h2 class="section-title">为你推荐</h2>
-          <router-link class="section-more" to="/discover">查看全部</router-link>
-        </div>
-        <div class="recommended-list" v-if="recommendedItems.length > 0">
-          <div
-            v-for="item in recommendedItems"
-            :key="item.episode.id"
-            class="recommended-item"
-          >
-            <div class="recommended-reason">{{ item.reason }}</div>
-            <EpisodeCard
-              :episode="item.episode"
-              :playlist="recommendedEpisodes"
-            />
-          </div>
-        </div>
-        <el-empty v-else description="推荐位加载中" />
       </section>
 
       <!-- 最新单集 -->

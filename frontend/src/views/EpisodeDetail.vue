@@ -29,6 +29,10 @@
               <el-icon><VideoPlay /></el-icon>
               播放
             </el-button>
+            <el-button :disabled="!episode.audio_url" @click="handleDownloadAudio">
+              <el-icon><Download /></el-icon>
+              {{ episode.audio_url ? '下载音频' : '音频未就绪' }}
+            </el-button>
             <el-button
               v-if="isAuthenticated"
               :type="isFollowing ? 'success' : 'warning'"
@@ -123,7 +127,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, Star, UserFilled, Bell, Share } from '@element-plus/icons-vue'
+import { VideoPlay, Star, UserFilled, Bell, Share, Download } from '@element-plus/icons-vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import dayjs from 'dayjs'
@@ -169,6 +173,28 @@ onMounted(async () => {
 
 function handlePlay() {
   playerStore.play(episode.value)
+}
+
+function handleDownloadAudio() {
+  if (!episode.value?.audio_url) return
+
+  if (window.AndroidBridge?.downloadEpisode) {
+    window.AndroidBridge.downloadEpisode(
+      episode.value.id,
+      episode.value.audio_url,
+      episode.value.title,
+      episode.value.show?.title || '未知节目'
+    )
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = episode.value.audio_url
+  link.download = `${episode.value.title || 'episode'}.mp3`
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 async function handleFollow() {

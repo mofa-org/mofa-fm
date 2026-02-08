@@ -1,7 +1,7 @@
 <template>
   <div class="trending-panel-floating">
     <button @click="togglePanel" class="floating-trigger mofa-btn mofa-btn-sm">
-      热门话题
+      热门
     </button>
 
     <Teleport to="body">
@@ -10,7 +10,7 @@
         class="floating-container mofa-card"
       >
         <div class="panel-header">
-          <h3>热门话题</h3>
+          <h3>热门</h3>
           <button @click="togglePanel" class="close-btn">×</button>
         </div>
 
@@ -123,7 +123,7 @@ async function loadAllRoutes() {
     sources.value = routesData.map(route => ({
       name: route.name,
       path: route.path,
-      title: route.name.toUpperCase(),
+      title: normalizeSourceTitle(route.title || route.name),
       total: 0,
       updateTime: null,
       data: null
@@ -161,7 +161,7 @@ async function loadSourceData(sourceName) {
   try {
     const data = await api.podcasts.getTrendingData(sourceName)
 
-    source.title = data.title || data.name || sourceName
+    source.title = normalizeSourceTitle(data.title || data.name || sourceName)
     source.total = data.total || data.data?.length || 0
     source.updateTime = data.updateTime
     source.data = data.data || []
@@ -217,6 +217,14 @@ function formatUpdateTime(timeString) {
 
   const diffDays = Math.floor(diffHours / 24)
   return `${diffDays}天前`
+}
+
+function normalizeSourceTitle(rawTitle) {
+  const title = String(rawTitle || '')
+  if (!title) return ''
+  return title
+    .replace('站内热门', '热门')
+    .replace('热门话题', '热门')
 }
 
 onMounted(() => {

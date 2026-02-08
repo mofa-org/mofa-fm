@@ -435,7 +435,7 @@ def recommended_episodes(request):
 
     append_queryset(
         base_queryset.order_by('-play_count', '-like_count', '-published_at')[: limit * 4],
-        '站内热门',
+        '热门',
     )
     append_queryset(
         base_queryset.order_by('-published_at')[: limit * 4],

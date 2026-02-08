@@ -40,6 +40,17 @@
         <span>{{ episode.play_count }} 播放</span>
         <span>{{ formatDate(episode.published_at) }}</span>
       </div>
+
+      <div class="episode-tools">
+        <button
+          class="mofa-btn mofa-btn-sm"
+          :disabled="!episode.audio_url"
+          @click.stop="handleDownload"
+        >
+          <el-icon><Download /></el-icon>
+          {{ episode.audio_url ? '下载' : '音频未就绪' }}
+        </button>
+      </div>
     </div>
 
     <!-- 创作者操作按钮 -->
@@ -61,7 +72,7 @@
 import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
-import { VideoPlay, Lock, View, User, Share } from '@element-plus/icons-vue'
+import { VideoPlay, Lock, View, User, Share, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -131,6 +142,28 @@ const isCreator = computed(() => {
 
 function handlePlay() {
   playerStore.play(props.episode, resolvedPlaylist.value || null)
+}
+
+function handleDownload() {
+  if (!props.episode?.audio_url) return
+
+  if (window.AndroidBridge?.downloadEpisode) {
+    window.AndroidBridge.downloadEpisode(
+      props.episode.id,
+      props.episode.audio_url,
+      props.episode.title,
+      props.episode.show?.title || '未知节目'
+    )
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = props.episode.audio_url
+  link.download = `${props.episode.title || 'episode'}.mp3`
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 async function handleDelete() {
@@ -293,6 +326,13 @@ function formatDate(date) {
   gap: var(--spacing-md);
   font-size: var(--font-xs);
   color: var(--color-text-tertiary);
+}
+
+.episode-tools {
+  margin-top: var(--spacing-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .episode-actions {
