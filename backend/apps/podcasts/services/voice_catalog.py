@@ -18,20 +18,20 @@ VOICE_CACHE_TTL_SECONDS = 3600
 
 LEGACY_DEFAULT_VOICES: List[Dict[str, str]] = [
     {
-        "voice_id": "ttv-voice-2025103011222725-sg8dZxUP",
-        "voice_name": "大牛（历史默认）",
+        "voice_id": "Chinese (Mandarin)_News_Anchor",
+        "voice_name": "大牛（新闻主播）",
         "language": "zh",
         "source": "legacy_default",
     },
     {
-        "voice_id": "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d",
-        "voice_name": "一帆（历史默认）",
+        "voice_id": "Chinese (Mandarin)_Gentleman",
+        "voice_name": "一帆（绅士）",
         "language": "zh",
         "source": "legacy_default",
     },
     {
-        "voice_id": "moss_audio_9c223de9-7ce1-11f0-9b9f-463feaa3106a",
-        "voice_name": "博宇（历史默认）",
+        "voice_id": "Chinese (Mandarin)_Radio_Host",
+        "voice_name": "博宇（电台主持人）",
         "language": "zh",
         "source": "legacy_default",
     },

@@ -20,7 +20,7 @@ DEBATE_PARTICIPANTS = [
             "- 每次发言100-200字\n\n"
             "注意：保持专业和理性，避免人身攻击。"
         ),
-        voice_id="ttv-voice-2025103011222725-sg8dZxUP"  # 大牛（刘翔，低沉男声）
+        voice_id="Chinese (Mandarin)_News_Anchor"  # 大牛（新闻主播）
     ),
     ParticipantConfig(
         id="llm2",
@@ -35,7 +35,7 @@ DEBATE_PARTICIPANTS = [
             "- 每次发言100-200字\n\n"
             "注意：保持专业和理性，避免人身攻击。"
         ),
-        voice_id="moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d"  # 一帆（豆包，中性）
+        voice_id="Chinese (Mandarin)_Gentleman"  # 一帆（绅士）
     ),
     ParticipantConfig(
         id="judge",
@@ -51,7 +51,7 @@ DEBATE_PARTICIPANTS = [
             "- 开场30-50字，点评80-150字，总结150-250字\n\n"
             "注意：保持中立，不表达个人倾向。"
         ),
-        voice_id="moss_audio_9c223de9-7ce1-11f0-9b9f-463feaa3106a"  # 博宇（高亢）
+        voice_id="Chinese (Mandarin)_Radio_Host"  # 博宇（电台主持人）
     )
 ]
 
@@ -103,7 +103,7 @@ CONFERENCE_PARTICIPANTS = [
             "- 开场30-50字，讲解/总结80-250字\n\n"
             "注意：以学生为中心，避免灌输式教学。"
         ),
-        voice_id="moss_audio_9c223de9-7ce1-11f0-9b9f-463feaa3106a"  # 博宇（高亢）
+        voice_id="Chinese (Mandarin)_Radio_Host"  # 博宇（电台主持人）
     )
 ]
 

@@ -4,6 +4,7 @@
             <div class="page-head">
                 <h1 class="page-title">AI 音频创作</h1>
                 <router-link
+                    v-if="!currentSession"
                     to="/creator/rss-automation"
                     class="mofa-btn mofa-btn-warning page-head-btn"
                 >
@@ -2171,15 +2172,31 @@ function cancelScriptEdit() {
 }
 
 // 保存脚本编辑
-function saveScriptEdit() {
+async function saveScriptEdit() {
     if (!editableScript.value.trim()) {
         ElMessage.warning("脚本内容不能为空");
         return;
     }
 
-    currentSession.value.current_script = editableScript.value;
-    isEditingScript.value = false;
-    ElMessage.success("脚本已更新，可以直接生成音频");
+    if (!currentSession.value?.id) {
+        ElMessage.warning("会话未创建");
+        return;
+    }
+
+    try {
+        // 调用 API 保存到后端
+        await podcastsAPI.updateScriptSession(currentSession.value.id, {
+            current_script: editableScript.value,
+        });
+
+        // 更新本地状态
+        currentSession.value.current_script = editableScript.value;
+        isEditingScript.value = false;
+        ElMessage.success("脚本已保存");
+    } catch (error) {
+        console.error("保存脚本失败:", error);
+        ElMessage.error(error.response?.data?.error || "保存失败");
+    }
 }
 
 async function previewSelectedSegment() {

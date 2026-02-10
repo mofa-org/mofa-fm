@@ -97,10 +97,12 @@ def _extract_webpage_text(url: str, timeout: int = 15) -> Dict[str, str]:
     parser.feed(response.text or "")
 
     title = _strip_html(" ".join(parser.title_parts))
-    text_parts = parser.paragraphs[:12]
+    # 提取所有段落，不限制数量（GPT-4o 支持 128K tokens）
+    text_parts = parser.paragraphs
     body = _strip_html(" ".join(text_parts))
     if not body:
-        body = _strip_html(response.text)[:2000]
+        # 如果解析失败，提取全部文本，限制 50000 字符
+        body = _strip_html(response.text)[:50000]
     if not body:
         raise ValueError("网页正文提取失败")
 

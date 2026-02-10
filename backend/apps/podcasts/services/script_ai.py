@@ -233,9 +233,10 @@ class ScriptAIService:
         )
 
         if reference_texts:
-            base_prompt += "\n## 参考资料（节选）\n"
+            base_prompt += "\n## 参考资料\n"
             for idx, text in enumerate(reference_texts, start=1):
-                snippet = text[:1000] + ('...' if len(text) > 1000 else '')
+                # GPT-4o 支持 128K tokens，这里限制 50000 字符（约 1万+ 中文字）
+                snippet = text[:50000] + ('...' if len(text) > 50000 else '')
                 base_prompt += f"\n### 资料 {idx}\n{snippet}\n"
 
         if current_script:

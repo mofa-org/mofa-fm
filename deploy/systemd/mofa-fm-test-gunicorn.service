@@ -1,0 +1,18 @@
+[Unit]
+Description=MoFA-FM Test Gunicorn
+After=network.target
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory=/root/mofa-fm-test/backend
+Environment="PATH=/root/mofa-fm-test/backend/venv/bin"
+ExecStart=/root/mofa-fm-test/backend/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8001 --timeout 120 --access-logfile /var/log/mofa-fm-test/gunicorn-access.log --error-logfile /var/log/mofa-fm-test/gunicorn-error.log --log-level info config.wsgi:application
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

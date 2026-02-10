@@ -25,10 +25,6 @@
           <el-icon><ChatDotRound /></el-icon>
           开始创作
         </router-link>
-        <router-link to="/creator/rss-automation" class="mofa-btn">
-          <el-icon><Clock /></el-icon>
-          RSS 自动化
-        </router-link>
         <router-link to="/creator/shows/create" class="mofa-btn mofa-btn-warning">
           <el-icon><Plus /></el-icon>
           新建节目

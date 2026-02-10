@@ -173,13 +173,19 @@ class PodcastGenerator:
 
     DEFAULT_VOICES: Dict[str, Dict[str, object]] = {
         "daniu": {
-            "voice_id": "ttv-voice-2025103011222725-sg8dZxUP",
+            "voice_id": "Chinese (Mandarin)_News_Anchor",
             "speed": 1.0,
             "volume": 1.0,
-            "pitch": -1,
+            "pitch": 0,
         },
         "yifan": {
-            "voice_id": "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d",
+            "voice_id": "Chinese (Mandarin)_Gentleman",
+            "speed": 1.0,
+            "volume": 1.0,
+            "pitch": 0,
+        },
+        "boyu": {
+            "voice_id": "Chinese (Mandarin)_Radio_Host",
             "speed": 1.0,
             "volume": 1.0,
             "pitch": 0,
@@ -189,6 +195,11 @@ class PodcastGenerator:
     CHARACTER_ALIASES: Dict[str, str] = {
         "大牛": "daniu",
         "一帆": "yifan",
+        "博宇": "boyu",
+        "主持人": "boyu",
+        "导师": "boyu",
+        "judge": "boyu",
+        "tutor": "boyu",
     }
 
     def __init__(self):
