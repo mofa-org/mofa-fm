@@ -434,7 +434,7 @@ def recommended_episodes(request):
         if recent_show_ids:
             append_queryset(
                 base_queryset.filter(show_id__in=recent_show_ids).order_by('-play_count', '-published_at')[: limit * 3],
-                '与你近期收听相关',
+                '近期相关',
             )
 
     append_queryset(
