@@ -330,7 +330,14 @@ class Episode(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = awesome_slugify(self.title)
+            base_slug = awesome_slugify(self.title)
+            # Ensure unique slug within the show
+            slug = base_slug
+            counter = 1
+            while Episode.objects.filter(show=self.show, slug=slug).exclude(pk=self.pk).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug
         super().save(*args, **kwargs)
 
     @property
