@@ -423,6 +423,10 @@ class ConversationManager:
         """获取完整对话记录"""
         return self.dialogue_log
 
+    def set_dialogue_log(self, dialogue_entries: List[Dict]):
+        """设置对话记录（用于从数据库恢复对话状态）"""
+        self.dialogue_log = dialogue_entries.copy()
+
 
 def _merge_or_append_dialogue_entry(dialogue_entries: List[Dict], entry: Dict):
     """合并或追加对话条目"""
