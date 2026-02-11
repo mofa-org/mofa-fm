@@ -8,17 +8,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.21",
-    "vue-router": "^4.3.0",
-    "pinia": "^2.1.7",
-    "axios": "^1.6.7",
-    "element-plus": "^2.6.0",
     "@element-plus/icons-vue": "^2.3.1",
-    "dayjs": "^1.11.10"
+    "axios": "^1.6.7",
+    "dayjs": "^1.11.10",
+    "element-plus": "^2.6.0",
+    "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
-    "vite": "^5.1.5",
-    "sass": "^1.71.1"
+    "sass": "^1.71.1",
+    "vite": "^5.1.5"
   }
 }

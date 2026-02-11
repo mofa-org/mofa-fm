@@ -150,6 +150,7 @@ import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
 import { VideoPlay, Star, UserFilled, Bell, Share, Download, DocumentCopy, Loading } from '@element-plus/icons-vue'
+import QRCode from 'qrcode'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import dayjs from 'dayjs'
@@ -301,172 +302,88 @@ async function renderSharePoster() {
   const w = canvas.width
   const h = canvas.height
 
-  // 马卡龙渐变背景 - 柔和的粉色到橙色
+  // 深色渐变背景
   const gradient = ctx.createLinearGradient(0, 0, w, h)
-  gradient.addColorStop(0, '#FFF5F5') // 浅粉
-  gradient.addColorStop(0.5, '#FFF0E8') // 米白
-  gradient.addColorStop(1, '#FFE8E0') // 暖橙
+  gradient.addColorStop(0, '#1a1a2e')
+  gradient.addColorStop(0.5, '#16213e')
+  gradient.addColorStop(1, '#0f3460')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, w, h)
 
-  // 装饰圆点 - 马卡龙配色
-  const dots = [
-    { x: 80, y: 100, r: 40, color: 'rgba(255, 179, 186, 0.4)' },
-    { x: w - 100, y: 150, r: 60, color: 'rgba(255, 223, 186, 0.4)' },
-    { x: 150, y: h - 200, r: 50, color: 'rgba(186, 255, 201, 0.3)' },
-    { x: w - 120, y: h - 150, r: 45, color: 'rgba(186, 225, 255, 0.3)' },
-  ]
-  dots.forEach(dot => {
-    ctx.beginPath()
-    ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2)
-    ctx.fillStyle = dot.color
-    ctx.fill()
-  })
-
-  // 白色卡片背景
-  const cardPadding = 50
-  const cardX = cardPadding
-  const cardY = cardPadding
-  const cardW = w - cardPadding * 2
-  const cardH = h - cardPadding * 2
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-  ctx.beginPath()
-  ctx.roundRect(cardX, cardY, cardW, cardH, 24)
-  ctx.fill()
-
-  // 阴影
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.08)'
-  ctx.shadowBlur = 20
-  ctx.shadowOffsetY = 8
-  ctx.fill()
-  ctx.shadowColor = 'transparent'
-
-  // 封面区域
-  const coverSize = 380
-  const coverX = (w - coverSize) / 2
-  const coverY = 120
-
-  if (data.cover_url) {
-    try {
-      const coverImage = await loadImage(data.cover_url)
-      // 圆角封面
-      ctx.save()
-      ctx.beginPath()
-      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
-      ctx.clip()
-      ctx.drawImage(coverImage, coverX, coverY, coverSize, coverSize)
-      ctx.restore()
-    } catch (error) {
-      // 封面加载失败时显示占位
-      ctx.fillStyle = '#FFE8E0'
-      ctx.beginPath()
-      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
-      ctx.fill()
-    }
+  // 绘制 Logo
+  try {
+    const logoImage = await loadImage('/logo.png')
+    const logoSize = 60
+    ctx.drawImage(logoImage, 40, 40, logoSize, logoSize)
+  } catch (e) {
+    // logo 加载失败时显示文字
+    ctx.fillStyle = '#FF6B6B'
+    ctx.font = 'bold 32px sans-serif'
+    ctx.fillText('MoFA FM', 40, 80)
   }
 
-  // 标题
-  ctx.fillStyle = '#2D3748'
-  ctx.font = 'bold 48px "PingFang SC", "Microsoft YaHei", sans-serif'
-  drawWrappedText(ctx, data.title || '', 80, 560, w - 160, 64, 3)
+  // 主标题 - 大字号白色文字
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 56px "PingFang SC", "Microsoft YaHei", sans-serif'
+  drawWrappedText(ctx, data.title || '', 40, 160, w - 200, 72, 3)
 
-  // 节目名称标签
-  const showTagY = 720
-  ctx.fillStyle = '#FFF0E8'
-  ctx.beginPath()
-  ctx.roundRect(80, showTagY - 40, ctx.measureText(data.show_title || '').width + 40, 56, 28)
-  ctx.fill()
+  // 节目名称
   ctx.fillStyle = '#FF6B6B'
   ctx.font = '32px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.fillText(data.show_title || '', 100, showTagY)
+  ctx.fillText(data.show_title || '', 40, 380)
 
   // 描述
-  ctx.fillStyle = '#718096'
-  ctx.font = '28px "PingFang SC", "Microsoft YaHei", sans-serif'
-  drawWrappedText(ctx, data.description || '', 80, 780, w - 160, 44, 3)
-
-  // 分隔线
-  ctx.strokeStyle = '#E2E8F0'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.moveTo(80, 980)
-  ctx.lineTo(w - 80, 980)
-  ctx.stroke()
-
-  // 二维码区域
-  const qrSize = 180
-  const qrX = (w - qrSize) / 2
-  const qrY = 1020
-
-  // 绘制马卡龙色二维码
-  await drawMacaronQRCode(ctx, data.share_url || 'https://mofa.fm', qrX, qrY, qrSize)
-
-  // 扫码提示
-  ctx.fillStyle = '#A0AEC0'
+  ctx.fillStyle = '#a0a0a0'
   ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText('扫码收听', w / 2, qrY + qrSize + 40)
-  ctx.textAlign = 'left'
+  drawWrappedText(ctx, data.description || '', 40, 430, w - 200, 36, 2)
 
-  // 品牌标识
-  ctx.fillStyle = '#FF6B6B'
-  ctx.font = 'bold 32px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText('MoFA FM', w / 2, h - 80)
-  ctx.textAlign = 'left'
+  // 底部信息栏
+  const bottomY = h - 120
+
+  // 左侧：mofa.ai 引流
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 28px "PingFang SC", sans-serif'
+  ctx.fillText('mofa.ai', 40, bottomY + 50)
+
+  ctx.fillStyle = '#888888'
+  ctx.font = '20px "PingFang SC", sans-serif'
+  ctx.fillText('发现更多 AI 播客', 40, bottomY + 80)
+
+  // 右侧：二维码
+  const qrSize = 100
+  const qrX = w - qrSize - 40
+  const qrY = bottomY
+
+  // 白色背景框
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20, 8)
+  ctx.fill()
+
+  // 绘制二维码
+  await drawQRCode(ctx, 'https://mofa.ai', qrX, qrY, qrSize)
 
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
 }
 
 // 绘制标准黑白二维码
-async function drawMacaronQRCode(ctx, text, x, y, size) {
-  // 使用 QRCode.js 或简化的标准二维码
-  // 这里使用简化的标准黑白样式
-  const modules = 25
-  const moduleSize = size / modules
+async function drawQRCode(ctx, text, x, y, size) {
+  try {
+    const qrData = await QRCode.create(text, { errorCorrectionLevel: 'H' })
+    const modules = qrData.modules.size
+    const moduleSize = size / modules
 
-  // 白色背景
-  ctx.fillStyle = '#FFFFFF'
-  ctx.beginPath()
-  ctx.roundRect(x - 8, y - 8, size + 16, size + 16, 8)
-  ctx.fill()
-
-  // 黑色方块
-  ctx.fillStyle = '#000000'
-
-  for (let row = 0; row < modules; row++) {
-    for (let col = 0; col < modules; col++) {
-      // 定位图案（三个角）
-      const isTopLeft = row < 7 && col < 7
-      const isTopRight = row < 7 && col >= modules - 7
-      const isBottomLeft = row >= modules - 7 && col < 7
-
-      let shouldDraw = false
-
-      if (isTopLeft || isTopRight || isBottomLeft) {
-        // 定位图案：7x7 区域
-        const innerRow = isTopLeft ? row : isTopRight ? row : row - (modules - 7)
-        const innerCol = isTopLeft ? col : isTopRight ? col - (modules - 7) : col
-
-        // 定位点样式：外框3层黑，中间白，中心黑
-        const isOuter = innerRow === 0 || innerRow === 6 || innerCol === 0 || innerCol === 6
-        const isInner = innerRow >= 2 && innerRow <= 4 && innerCol >= 2 && innerCol <= 4
-        const isCenter = innerRow === 3 && innerCol === 3
-
-        shouldDraw = isOuter || isCenter
-      } else {
-        // 数据区域 - 使用伪随机但确定性的模式
-        const seed = row * 31 + col * 17 + text.length
-        shouldDraw = (seed % 2 === 0) && (Math.sin(seed) > -0.3)
-      }
-
-      if (shouldDraw) {
-        const px = x + col * moduleSize
-        const py = y + row * moduleSize
-        ctx.fillRect(px + 0.5, py + 0.5, moduleSize - 1, moduleSize - 1)
+    ctx.fillStyle = '#000000'
+    for (let row = 0; row < modules; row++) {
+      for (let col = 0; col < modules; col++) {
+        if (qrData.modules.get(row, col)) {
+          ctx.fillRect(x + col * moduleSize, y + row * moduleSize, moduleSize, moduleSize)
+        }
       }
     }
+  } catch (e) {
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(x, y, size, size)
   }
 }
 
