@@ -162,7 +162,13 @@ async function loadEpisode() {
     loading.value = true
     const data = await api.podcasts.getEpisodeById(route.params.episodeId)
     episode.value = data
-    dialogue.value = data?.dialogue || []
+    console.log('[Debate] loadEpisode, server dialogue length:', data?.dialogue?.length || 0)
+    // 只有在当前没有本地消息时才替换（避免覆盖用户刚发的消息）
+    if (dialogue.value.length === 0) {
+      dialogue.value = data?.dialogue || []
+    } else {
+      console.log('[Debate] Keeping local dialogue, length:', dialogue.value.length)
+    }
     // 初始化消息ID集合
     messageIds.value.clear()
     dialogue.value.forEach(entry => {
@@ -171,6 +177,7 @@ async function loadEpisode() {
         messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
       }
     })
+    console.log('[Debate] Initialized messageIds, count:', messageIds.value.size)
   } catch (err) {
     console.error('Failed to load episode:', err)
     error.value = err.response?.data?.error || '加载失败'
@@ -213,14 +220,18 @@ async function sendMessage() {
       timestamp: new Date().toISOString(),
       clientId  // 客户端唯一标识，用于去重
     }
-    // 添加ID到集合，防止后续被覆盖
+    console.log('[Debate] Adding user message:', userEntry)
+    console.log('[Debate] Before push, dialogue length:', dialogue.value.length)
+    // 使用展开运算符确保响应式
+    dialogue.value = [...dialogue.value, userEntry]
+    // 添加ID到集合
     messageIds.value.add(generateMessageId(userEntry))
-    // 也添加一个基于内容的备用ID
     messageIds.value.add(`user:${message.slice(0, 50)}`)
-    dialogue.value.push(userEntry)
+    console.log('[Debate] After push, dialogue length:', dialogue.value.length)
+    console.log('[Debate] Message IDs:', Array.from(messageIds.value))
     scrollToBottom()
 
-    await api.podcasts.sendDebateMessage(episode.value.id, message)
+    await api.podcasts.sendDebateMessage(episode.value.id, message, clientId)
     inputMessage.value = ''
     episode.value.status = 'processing'
 
@@ -310,12 +321,14 @@ function stopStreaming() {
 }
 
 function mergeOrAppendDialogue(entry) {
+  console.log('[Debate] mergeOrAppendDialogue:', entry)
   if (!entry) return dialogue.value.length - 1
 
   // 1. 检查是否有 clientId 匹配（精确匹配本地乐观添加的消息）
   if (entry.clientId) {
     const idxByClientId = dialogue.value.findIndex((item) => item.clientId === entry.clientId)
     if (idxByClientId >= 0) {
+      console.log('[Debate] Found by clientId, updating:', idxByClientId)
       dialogue.value[idxByClientId] = { ...dialogue.value[idxByClientId], ...entry }
       return idxByClientId
     }
@@ -323,9 +336,12 @@ function mergeOrAppendDialogue(entry) {
 
   // 2. 生成消息ID并检查是否已存在（防止完全重复的消息）
   const msgId = generateMessageId(entry)
+  console.log('[Debate] Generated msgId:', msgId)
+  console.log('[Debate] Current messageIds:', Array.from(messageIds.value))
   if (messageIds.value.has(msgId)) {
     const idx = dialogue.value.findIndex((item) => generateMessageId(item) === msgId)
     if (idx >= 0) {
+      console.log('[Debate] Found by msgId, updating:', idx)
       dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
       return idx
     }
@@ -335,12 +351,14 @@ function mergeOrAppendDialogue(entry) {
   if (entry.participant === 'user' && entry.content) {
     const contentPrefix = entry.content.slice(0, 50)
     const contentId = `user:${contentPrefix}`
+    console.log('[Debate] Checking contentId:', contentId)
     if (messageIds.value.has(contentId)) {
       // 已存在相同内容的用户消息，更新时间戳等信息
       const idx = dialogue.value.findIndex((item) =>
         item.participant === 'user' && item.content === entry.content
       )
       if (idx >= 0) {
+        console.log('[Debate] Found by contentId, updating:', idx)
         dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
         return idx
       }
@@ -355,6 +373,7 @@ function mergeOrAppendDialogue(entry) {
     const nextContent = entry.content || ''
     // 只有当内容有明显包含关系时才合并（流式更新）
     if (nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
+      console.log('[Debate] Streaming update for AI message')
       const clientId = last.clientId
       dialogue.value[lastIndex] = { ...last, ...entry }
       if (clientId) dialogue.value[lastIndex].clientId = clientId
@@ -363,11 +382,13 @@ function mergeOrAppendDialogue(entry) {
   }
 
   // 5. 新消息，追加
+  console.log('[Debate] New message, appending')
   messageIds.value.add(msgId)
   if (entry.participant === 'user' && entry.content) {
     messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
   }
-  dialogue.value.push(entry)
+  dialogue.value = [...dialogue.value, entry]
+  console.log('[Debate] New dialogue length:', dialogue.value.length)
   return dialogue.value.length - 1
 }
 

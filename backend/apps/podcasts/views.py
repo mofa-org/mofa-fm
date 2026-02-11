@@ -1614,13 +1614,17 @@ def debate_message(request, episode_id):
         )
 
     topic = (episode.generation_meta or {}).get('topic') or episode.title
+    client_id = request.data.get('client_id')  # 客户端消息ID，用于去重
 
     dialogue = list(episode.dialogue or [])
-    dialogue.append({
+    entry = {
         'participant': 'user',
         'content': message,
         'timestamp': timezone.now().isoformat()
-    })
+    }
+    if client_id:
+        entry['clientId'] = client_id
+    dialogue.append(entry)
 
     episode.dialogue = dialogue
     episode.status = 'processing'
