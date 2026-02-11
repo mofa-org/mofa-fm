@@ -237,7 +237,8 @@ def fetch_webpage_content(url: str, timeout: int = 30, use_selenium: bool = Fals
     result = _extract_with_readability(html_content, url)
 
     # 如果内容太少，尝试使用 Selenium
-    if len(result.content) < 1000:
+    # 阈值设为3000字符，因为有些网站虽然能抓到1000+字符，但只是通用介绍而非文章主体
+    if len(result.content) < 3000:
         print(f"Content too short ({len(result.content)} chars), trying Selenium...")
         try:
             return _fetch_with_selenium(url, timeout)
