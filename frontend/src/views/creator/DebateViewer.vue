@@ -159,7 +159,17 @@ async function loadEpisode() {
 async function refreshEpisode() {
   const data = await api.podcasts.getEpisodeById(route.params.episodeId)
   episode.value = data
-  dialogue.value = data?.dialogue || []
+  // 合并服务器数据和本地数据，避免覆盖用户刚发送的消息
+  const serverDialogue = data?.dialogue || []
+  const localDialogue = dialogue.value || []
+
+  // 如果本地有用户消息但服务器还没有，保留本地消息
+  if (localDialogue.length > serverDialogue.length) {
+    // 保留本地额外的消息（通常是刚发送的用户消息）
+    dialogue.value = [...serverDialogue, ...localDialogue.slice(serverDialogue.length)]
+  } else {
+    dialogue.value = serverDialogue
+  }
   scrollToBottom()
 }
 
@@ -185,8 +195,7 @@ async function sendMessage() {
     inputMessage.value = ''
     episode.value.status = 'processing'
 
-    await refreshEpisode()
-
+    // 不立即刷新，让 SSE 流来更新对话，避免覆盖刚添加的用户消息
     if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
       startStreaming()
     }
@@ -274,26 +283,41 @@ function stopStreaming() {
 function mergeOrAppendDialogue(entry) {
   if (!entry) return dialogue.value.length - 1
 
+  // 1. 先按时间戳+参与者查找（精确匹配）
   const idxByStamp = dialogue.value.findIndex((item) => {
     return item.timestamp && entry.timestamp && item.timestamp === entry.timestamp && item.participant === entry.participant
   })
-
   if (idxByStamp >= 0) {
     dialogue.value[idxByStamp] = { ...dialogue.value[idxByStamp], ...entry }
     return idxByStamp
   }
 
+  // 2. 对于用户消息，检查是否有内容相同的本地消息（避免重复显示）
+  if (entry.participant === 'user') {
+    const idxByContent = dialogue.value.findIndex((item) => {
+      return item.participant === 'user' && item.content === entry.content
+    })
+    if (idxByContent >= 0) {
+      // 更新时间戳等信息
+      dialogue.value[idxByContent] = { ...dialogue.value[idxByContent], ...entry }
+      return idxByContent
+    }
+  }
+
+  // 3. 对于AI消息，检查是否是要更新现有条目
   const lastIndex = dialogue.value.length - 1
   const last = dialogue.value[lastIndex]
-  if (last && last.participant === entry.participant) {
+  if (last && last.participant === entry.participant && entry.participant !== 'user') {
     const lastContent = last.content || ''
     const nextContent = entry.content || ''
-    if (nextContent === lastContent || nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
+    // 只有当内容有明显包含关系时才合并（流式更新）
+    if (nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
       dialogue.value[lastIndex] = { ...last, ...entry }
       return lastIndex
     }
   }
 
+  // 4. 否则追加为新消息
   dialogue.value.push(entry)
   return dialogue.value.length - 1
 }
