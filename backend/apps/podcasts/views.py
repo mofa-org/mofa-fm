@@ -717,53 +717,62 @@ class GenerateEpisodeView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         from .tasks import generate_podcast_task
         from .services.default_show import get_or_create_default_show
+        import traceback
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
 
-        data = serializer.validated_data
-        speaker_config = normalize_speaker_config({
-            'host_name': data.get('host_name'),
-            'guest_name': data.get('guest_name'),
-            'host_voice_id': data.get('host_voice_id'),
-            'guest_voice_id': data.get('guest_voice_id'),
-        })
-        if data.get('show_id'):
-            show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
-        else:
-            show, _ = get_or_create_default_show(request.user)
-        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
-        generation_meta = {'type': 'script'}
-        if speaker_config:
-            generation_meta['speaker_config'] = speaker_config
+            data = serializer.validated_data
+            speaker_config = normalize_speaker_config({
+                'host_name': data.get('host_name'),
+                'guest_name': data.get('guest_name'),
+                'host_voice_id': data.get('host_voice_id'),
+                'guest_voice_id': data.get('guest_voice_id'),
+            })
+            if data.get('show_id'):
+                show = get_object_or_404(Show, id=data['show_id'], creator=request.user)
+            else:
+                show, _ = get_or_create_default_show(request.user)
+            placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
+            generation_meta = {'type': 'script'}
+            if speaker_config:
+                generation_meta['speaker_config'] = speaker_config
 
-        episode = Episode.objects.create(
-            show=show,
-            title=data['title'],
-            description="AI Generated Podcast",
-            status='processing',
-            generation_stage='queued',
-            generation_error='',
-            generation_meta=generation_meta,
-            audio_file=placeholder_file
-        )
-
-        if speaker_config:
-            generate_podcast_task.delay(
-                episode.id,
-                data['script'],
-                speaker_config=speaker_config,
+            episode = Episode.objects.create(
+                show=show,
+                title=data['title'],
+                description="AI Generated Podcast",
+                status='processing',
+                generation_stage='queued',
+                generation_error='',
+                generation_meta=generation_meta,
+                audio_file=placeholder_file
             )
-        else:
-            generate_podcast_task.delay(episode.id, data['script'])
 
-        return Response(
-            {
-                "message": "Podcast generation started",
-                "episode_id": episode.id
-            },
-            status=status.HTTP_202_ACCEPTED
-        )
+            if speaker_config:
+                generate_podcast_task.delay(
+                    episode.id,
+                    data['script'],
+                    speaker_config=speaker_config,
+                )
+            else:
+                generate_podcast_task.delay(episode.id, data['script'])
+
+            return Response(
+                {
+                    "message": "Podcast generation started",
+                    "episode_id": episode.id
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+        except Exception as e:
+            print(f"[GenerateEpisodeView] Error: {e}")
+            print(traceback.format_exc())
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class GenerateEpisodeFromRSSView(generics.GenericAPIView):
