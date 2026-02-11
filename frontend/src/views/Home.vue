@@ -14,7 +14,7 @@
             </router-link>
             <router-link to="/discover" class="mofa-btn">
               <el-icon><Headset /></el-icon>
-              探索音频
+              发现
             </router-link>
           </template>
           <template v-else>
@@ -28,7 +28,7 @@
             </router-link>
             <router-link to="/discover" class="mofa-btn">
               <el-icon><Headset /></el-icon>
-              探索音频
+              发现
             </router-link>
           </template>
         </div>
