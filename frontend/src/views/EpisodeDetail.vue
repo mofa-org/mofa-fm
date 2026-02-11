@@ -302,94 +302,173 @@ async function renderSharePoster() {
   const w = canvas.width
   const h = canvas.height
 
-  // 深色渐变背景
-  const gradient = ctx.createLinearGradient(0, 0, w, h)
-  gradient.addColorStop(0, '#1a1a2e')
-  gradient.addColorStop(0.5, '#16213e')
-  gradient.addColorStop(1, '#0f3460')
-  ctx.fillStyle = gradient
+  // 纯白背景
+  ctx.fillStyle = '#FFFFFF'
   ctx.fillRect(0, 0, w, h)
 
-  // 顶部 Logo
+  // 顶部 Logo - 面积*8 (原50 -> 140)
   try {
     const logoImage = await loadImage('/logo.png')
-    const logoSize = 50
-    ctx.drawImage(logoImage, 40, 30, logoSize, logoSize)
+    const logoSize = 140
+    ctx.drawImage(logoImage, 60, 40, logoSize, logoSize)
   } catch (e) {
-    ctx.fillStyle = '#FF6B6B'
-    ctx.font = 'bold 28px sans-serif'
-    ctx.fillText('MoFA FM', 40, 70)
+    ctx.fillStyle = '#FF513B'
+    ctx.font = 'bold 80px sans-serif'
+    ctx.fillText('MoFA FM', 60, 120)
   }
 
-  // 主封面 - 大尺寸居中
-  const coverSize = 320
+  // 主封面 - 面积*2 (原320 -> 450)
+  const coverSize = 450
   const coverX = (w - coverSize) / 2
-  const coverY = 100
+  const coverY = 220
 
   if (data.cover_url) {
     try {
       const coverImage = await loadImage(data.cover_url)
-      // 圆角封面
-      ctx.save()
-      ctx.beginPath()
-      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
-      ctx.clip()
       ctx.drawImage(coverImage, coverX, coverY, coverSize, coverSize)
-      ctx.restore()
     } catch (error) {
-      // 封面加载失败时显示占位
-      ctx.fillStyle = '#2a2a4a'
-      ctx.beginPath()
-      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
-      ctx.fill()
+      ctx.fillStyle = '#f5f5f5'
+      ctx.fillRect(coverX, coverY, coverSize, coverSize)
     }
   }
 
-  // 标题 - 封面下方
-  ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 48px "PingFang SC", "Microsoft YaHei", sans-serif'
-  drawWrappedText(ctx, data.title || '', 40, coverY + coverSize + 50, w - 80, 60, 2)
+  // 底部区域固定位置
+  const bottomY = h - 280
 
-  // 节目名称
-  ctx.fillStyle = '#FF6B6B'
-  ctx.font = '28px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.fillText(data.show_title || '', 40, coverY + coverSize + 140)
+  // 左侧：mofa.fm 品牌文字 - 字体*2 (原36 -> 72)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = 'bold 72px "PingFang SC", sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText('mofa.fm', 60, bottomY + 80)
 
-  // 底部区域
-  const bottomY = h - 160
-
-  // 左侧：mofa.fm
-  ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 32px "PingFang SC", sans-serif'
-  ctx.fillText('mofa.fm', 40, bottomY + 40)
-
-  // powered by mofa.ai
+  // powered by mofa.ai - 字体*2 (原16 -> 32)
   ctx.fillStyle = '#888888'
-  ctx.font = '18px "PingFang SC", sans-serif'
-  ctx.fillText('powered by mofa.ai', 40, bottomY + 70)
+  ctx.font = '32px "PingFang SC", sans-serif'
+  ctx.fillText('powered by mofa.ai', 60, bottomY + 140)
 
-  // 右侧：大二维码
-  const qrSize = 120
-  const qrX = w - qrSize - 40
-  const qrY = bottomY
-
-  // 白色背景框
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  ctx.roundRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
-  ctx.fill()
+  // 右侧：二维码 - 面积*4 (原100 -> 200)
+  const qrSize = 200
+  const qrX = w - qrSize - 60
+  const qrY = bottomY - 20
 
   // 绘制二维码
   await drawQRCode(ctx, data.share_url || 'https://mofa.fm', qrX, qrY, qrSize)
 
-  // 扫码提示
-  ctx.fillStyle = '#a0a0a0'
-  ctx.font = '16px "PingFang SC", sans-serif'
+  // 扫码提示 - 字体*2 (原14 -> 28)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = 'bold 28px "PingFang SC", sans-serif'
   ctx.textAlign = 'center'
-  ctx.fillText('扫码收听', qrX + qrSize/2, qrY + qrSize + 30)
-  ctx.textAlign = 'left'
+  ctx.fillText('扫码收听', qrX + qrSize/2, qrY + qrSize + 50)
 
+  // ===== 中间文字区域动态布局 =====
+  ctx.textAlign = 'center'
+
+  // 可用空间：封面底部到二维码顶部
+  const textAreaTop = coverY + coverSize + 60
+  const textAreaBottom = bottomY - 40
+  const textAreaHeight = textAreaBottom - textAreaTop
+
+  // 尝试不同字体大小，找到最合适的
+  let titleFontSize = 72
+  let showNameFontSize = 56
+  let descFontSize = 44
+  const lineSpacing = 50 // 三段文字之间的相同间距
+
+  // 计算标题行数（预估）
+  ctx.font = `bold ${titleFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  const titleLines = calculateLines(ctx, data.title || '', w - 80)
+
+  // 如果标题会换行，缩小字体
+  if (titleLines > 1 && titleFontSize > 56) {
+    titleFontSize = 56
+    ctx.font = `bold ${titleFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  }
+
+  // 计算描述行数
+  ctx.font = `${descFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  const descLines = data.description ? calculateLines(ctx, data.description, w - 100) : 0
+  const descMaxLines = Math.min(descLines, 2)
+
+  // 计算总高度
+  const titleHeight = titleLines === 1 ? titleFontSize : titleFontSize * 1.2 * titleLines
+  const descHeight = descMaxLines * (descFontSize * 1.3)
+  const totalContentHeight = titleHeight + showNameFontSize + descHeight
+  const totalSpacing = 2 * lineSpacing
+  const totalHeight = totalContentHeight + totalSpacing
+
+  // 垂直居中在可用区域内
+  const startY = textAreaTop + (textAreaHeight - totalHeight) / 2 + titleFontSize
+
+  // 绘制标题
+  ctx.fillStyle = '#1a1a1a'
+  ctx.font = `bold ${titleFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  const titleEndY = drawWrappedTextWithReturn(ctx, data.title || '', w / 2, startY, w - 80, titleFontSize * 1.2, 2)
+
+  // 绘制节目名称（与标题等间距）
+  ctx.fillStyle = '#6DCAD0'
+  ctx.font = `${showNameFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+  const showNameY = titleEndY + lineSpacing + showNameFontSize * 0.8
+  ctx.fillText(data.show_title || '', w / 2, showNameY)
+
+  // 绘制描述（与节目名称等间距）
+  if (data.description) {
+    ctx.fillStyle = '#666666'
+    ctx.font = `${descFontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const descY = showNameY + lineSpacing + descFontSize * 0.5
+    drawWrappedTextWithReturn(ctx, data.description, w / 2, descY, w - 100, descFontSize * 1.3, 2)
+  }
+
+  ctx.textAlign = 'left'
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
+}
+
+// 计算文本需要几行
+function calculateLines(ctx, text, maxWidth) {
+  const chars = String(text).split('')
+  let line = ''
+  let lineCount = 1
+  for (const char of chars) {
+    const testLine = line + char
+    const testWidth = ctx.measureText(testLine).width
+    if (testWidth > maxWidth && line) {
+      line = char
+      lineCount++
+    } else {
+      line = testLine
+    }
+  }
+  return lineCount
+}
+
+// 绘制换行文字并返回最终Y坐标
+function drawWrappedTextWithReturn(ctx, text, x, y, maxWidth, lineHeight, maxLines = 0) {
+  if (!text) return y
+  const chars = String(text).split('')
+  let line = ''
+  let offsetY = 0
+  let lineCount = 0
+  for (const char of chars) {
+    const testLine = line + char
+    const testWidth = ctx.measureText(testLine).width
+    if (testWidth > maxWidth && line) {
+      ctx.fillText(line, x, y + offsetY)
+      line = char
+      offsetY += lineHeight
+      lineCount++
+      if (maxLines > 0 && lineCount >= maxLines) {
+        if (chars.indexOf(char) < chars.length - 1) {
+          ctx.fillText('...', x + ctx.measureText(line).width, y + offsetY)
+        }
+        return y + offsetY
+      }
+    } else {
+      line = testLine
+    }
+  }
+  if (line) {
+    ctx.fillText(line, x, y + offsetY)
+  }
+  return y + offsetY
 }
 
 // 绘制标准黑白二维码

@@ -27,34 +27,68 @@
       <!-- 中间：播放控制 -->
       <div class="player-controls">
         <div class="control-buttons">
-          <button
-            class="player-btn player-btn-nav"
-            @click="playerStore.playPrevious()"
-            :disabled="!hasPrevious"
-            title="上一首"
-          >
-            <el-icon><ArrowLeftBold /></el-icon>
-          </button>
-          <button class="player-btn player-btn-skip" @click="playerStore.skip(-15)" title="后退15秒">
-            <el-icon><DArrowLeft /></el-icon>
-          </button>
+          <!-- 桌面端：完整控制按钮 -->
+          <template v-if="!isMobile">
+            <button
+              class="player-btn player-btn-nav"
+              @click="playerStore.playPrevious()"
+              :disabled="!hasPrevious"
+              title="上一首"
+            >
+              <el-icon><ArrowLeftBold /></el-icon>
+            </button>
+            <button class="player-btn player-btn-skip" @click="playerStore.skip(-15)" title="后退15秒">
+              <el-icon><DArrowLeft /></el-icon>
+            </button>
+          </template>
+
           <button class="player-btn player-btn-play" @click="playerStore.toggle()">
             <el-icon :size="24">
               <VideoPause v-if="isPlaying" />
               <VideoPlay v-else />
             </el-icon>
           </button>
-          <button class="player-btn player-btn-skip" @click="playerStore.skip(15)" title="前进15秒">
-            <el-icon><DArrowRight /></el-icon>
-          </button>
-          <button
-            class="player-btn player-btn-nav"
-            @click="playerStore.playNext()"
-            :disabled="!hasNext"
-            title="下一首"
-          >
-            <el-icon><ArrowRightBold /></el-icon>
-          </button>
+
+          <!-- 桌面端：完整控制按钮 -->
+          <template v-if="!isMobile">
+            <button class="player-btn player-btn-skip" @click="playerStore.skip(15)" title="前进15秒">
+              <el-icon><DArrowRight /></el-icon>
+            </button>
+            <button
+              class="player-btn player-btn-nav"
+              @click="playerStore.playNext()"
+              :disabled="!hasNext"
+              title="下一首"
+            >
+              <el-icon><ArrowRightBold /></el-icon>
+            </button>
+          </template>
+
+          <!-- 移动端：更多菜单（包含快进快退、脚本） -->
+          <el-dropdown v-if="isMobile" @command="handleMobileCommand" trigger="click">
+            <button class="player-btn player-btn-icon" title="更多">
+              <el-icon><MoreFilled /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="skipBack" :disabled="!currentEpisode.audio_url">
+                  <el-icon><DArrowLeft /></el-icon> 后退15秒
+                </el-dropdown-item>
+                <el-dropdown-item command="skipForward" :disabled="!currentEpisode.audio_url">
+                  <el-icon><DArrowRight /></el-icon> 前进15秒
+                </el-dropdown-item>
+                <el-dropdown-item v-if="currentEpisode.script" command="script">
+                  <el-icon><Document /></el-icon> 查看脚本
+                </el-dropdown-item>
+                <el-dropdown-item command="prev" :disabled="!hasPrevious">
+                  <el-icon><ArrowLeftBold /></el-icon> 上一首
+                </el-dropdown-item>
+                <el-dropdown-item command="next" :disabled="!hasNext">
+                  <el-icon><ArrowRightBold /></el-icon> 下一首
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
 
         <div class="progress-bar">
@@ -71,6 +105,16 @@
 
       <!-- 右侧：倍速控制 -->
       <div class="player-options">
+        <!-- 桌面端：脚本按钮 -->
+        <button
+          v-if="currentEpisode.script && !isMobile"
+          class="player-btn player-btn-icon player-btn-script"
+          @click="toggleScriptPanel"
+          title="展开脚本"
+        >
+          <el-icon><Document /></el-icon>
+        </button>
+
         <!-- 下载按钮 -->
         <button
           v-if="currentEpisode.audio_url"
@@ -79,16 +123,6 @@
           title="下载音频"
         >
           <el-icon><Download /></el-icon>
-        </button>
-
-        <!-- 展开脚本按钮 -->
-        <button
-          v-if="currentEpisode.script"
-          class="player-btn player-btn-icon player-btn-script"
-          @click="toggleScriptPanel"
-          title="展开脚本"
-        >
-          <el-icon><Document /></el-icon>
         </button>
 
         <el-dropdown @command="handleRateChange" trigger="click">
@@ -160,7 +194,8 @@ import {
   ArrowDown,
   Document,
   Download,
-  Close
+  Close,
+  MoreFilled
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
@@ -260,6 +295,26 @@ function handleSeek(val) {
 
 function handleRateChange(rate) {
   playerStore.setPlaybackRate(parseFloat(rate))
+}
+
+function handleMobileCommand(command) {
+  switch (command) {
+    case 'skipBack':
+      playerStore.skip(-15)
+      break
+    case 'skipForward':
+      playerStore.skip(15)
+      break
+    case 'script':
+      toggleScriptPanel()
+      break
+    case 'prev':
+      playerStore.playPrevious()
+      break
+    case 'next':
+      playerStore.playNext()
+      break
+  }
 }
 
 function handleScriptUpdated(updatedEpisode) {
