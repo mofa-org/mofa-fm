@@ -171,6 +171,16 @@ async function sendMessage() {
     sending.value = true
     error.value = ''
 
+    // 乐观更新：立即将用户消息添加到本地对话
+    const userEntry = {
+      participant: 'user',
+      role: '我',
+      content: message,
+      timestamp: new Date().toISOString()
+    }
+    dialogue.value.push(userEntry)
+    scrollToBottom()
+
     await api.podcasts.sendDebateMessage(episode.value.id, message)
     inputMessage.value = ''
     episode.value.status = 'processing'
