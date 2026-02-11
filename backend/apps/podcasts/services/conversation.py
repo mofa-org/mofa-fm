@@ -15,6 +15,7 @@ class ParticipantConfig:
     role: str  # 角色名称（如：正方辩手、主持人）
     system_prompt: str  # system prompt
     voice_id: Optional[str] = None  # TTS音色ID（预留）
+    word_count: int = 0  # 字数统计（用于unified_ratio策略）
 
 
 class ConversationManager:
@@ -67,6 +68,60 @@ class ConversationManager:
         )
         self.model = getattr(settings, 'OPENAI_MODEL', 'moonshot-v1-8k')
 
+    def _get_next_speaker(self, topic: str, round_num: int) -> Optional[str]:
+        """
+        根据策略决定下一发言人
+
+        Args:
+            topic: 对话主题
+            round_num: 当前轮次
+
+        Returns:
+            下一发言者的ID
+        """
+        participant_order = list(self.participants.keys())
+
+        if self.policy == "sequential":
+            # 顺序策略：按固定顺序轮流
+            idx = (round_num - 1) % len(participant_order)
+            return participant_order[idx]
+
+        elif self.policy == "unified_ratio":
+            # 统一比例策略：字数比例最低的优先
+            # 第一轮：judge/tutor 开场
+            if round_num == 0:
+                return participant_order[2] if len(participant_order) >= 3 else participant_order[0]
+
+            # 计算每个参与者的字数比例
+            total_words = sum(p.word_count for p in self.participants.values())
+            if total_words == 0:
+                # 冷启动：选择第一个非主持人参与者
+                for pid in participant_order:
+                    if pid != participant_order[2]:
+                        return pid
+                return participant_order[0]
+
+            # 选择比例最低的参与者
+            min_ratio = float('inf')
+            next_speaker = participant_order[0]
+            for pid in participant_order:
+                p = self.participants[pid]
+                ratio = p.word_count / total_words if total_words > 0 else 0
+                if ratio < min_ratio:
+                    min_ratio = ratio
+                    next_speaker = pid
+
+            return next_speaker
+
+        # 默认顺序策略
+        idx = (round_num - 1) % len(participant_order)
+        return participant_order[idx]
+
+    def _update_word_count(self, participant_id: str, content: str):
+        """更新参与者字数统计"""
+        if participant_id in self.participants:
+            self.participants[participant_id].word_count += len(content)
+
     def generate_dialogue(
         self,
         topic: str,
@@ -80,17 +135,35 @@ class ConversationManager:
             on_chunk: 回调函数 on_chunk(participant_id, content_chunk)
 
         Yields:
-            {"participant": "llm1", "content": "...", "timestamp": "..."}
+            {"participant": "llm1", "content": "...", "timestamp": "...", "role": "..."}
         """
+        if self.policy == "sequential":
+            # 顺序策略：固定顺序生成
+            yield from self._generate_sequential(topic, on_chunk)
+        elif self.policy == "unified_ratio":
+            # 统一比例策略：智能选择发言人
+            yield from self._generate_unified_ratio(topic, on_chunk)
+        else:
+            # 默认顺序策略
+            yield from self._generate_sequential(topic, on_chunk)
+
+    def _generate_sequential(
+        self,
+        topic: str,
+        on_chunk: Optional[Callable[[str, str], None]] = None
+    ) -> Iterator[Dict]:
+        """顺序策略生成对话（原有逻辑）"""
         # 获取参与者顺序（根据participants的顺序）
         participant_order = list(self.participants.keys())
 
         # 第一轮：judge/tutor开场
         moderator_id = participant_order[2]  # 假设第3个是主持人/导师
-        opening = self._generate_opening(moderator_id, topic, on_chunk=on_chunk)
+        opening = self._generate_opening(moderator_id, topic)
 
         # 记录并yield开场白
         entry = self._log_message(moderator_id, opening)
+        if on_chunk:
+            on_chunk(moderator_id, opening)
         yield entry
 
         # 多轮对话
@@ -99,124 +172,79 @@ class ConversationManager:
             response_1 = self._generate_response(
                 participant_order[0],
                 topic,
-                round_num,
-                on_chunk=on_chunk
+                round_num
             )
             entry_1 = self._log_message(participant_order[0], response_1)
+            if on_chunk:
+                on_chunk(participant_order[0], response_1)
             yield entry_1
 
             # 参与者2发言
             response_2 = self._generate_response(
                 participant_order[1],
                 topic,
-                round_num,
-                on_chunk=on_chunk
+                round_num
             )
             entry_2 = self._log_message(participant_order[1], response_2)
+            if on_chunk:
+                on_chunk(participant_order[1], response_2)
             yield entry_2
 
             # 主持人/导师点评
             if round_num < self.rounds:  # 不是最后一轮
-                comment = self._generate_comment(moderator_id, round_num, on_chunk=on_chunk)
+                comment = self._generate_comment(moderator_id, round_num)
             else:  # 最后一轮，总结
-                comment = self._generate_summary(moderator_id, on_chunk=on_chunk)
+                comment = self._generate_summary(moderator_id)
 
             entry_mod = self._log_message(moderator_id, comment)
+            if on_chunk:
+                on_chunk(moderator_id, comment)
             yield entry_mod
 
-    def set_dialogue_log(self, dialogue: List[Dict]) -> None:
-        """加载已有对话到上下文，用于继续辩论。"""
-        self.dialogue_log = [dict(item) for item in (dialogue or [])]
-
-    def get_next_round_number(self) -> int:
-        """基于已有记录估算下一轮轮次。"""
-        speaker_ids = list(self.participants.keys())
-        primary_ids = set(speaker_ids[:2])
-        primary_count = sum(1 for entry in self.dialogue_log if entry.get("participant") in primary_ids)
-        return max(1, primary_count // 2 + 1)
-
-    def generate_followup_round(
+    def _generate_unified_ratio(
         self,
         topic: str,
         on_chunk: Optional[Callable[[str, str], None]] = None
     ) -> Iterator[Dict]:
         """
-        继续生成一轮：参与者1 -> 参与者2 -> 主持人点评。
+        统一比例策略生成对话
+        根据字数比例智能选择发言人，实现更平衡的对话
         """
-        participant_order = list(self.participants.keys())
-        round_num = self.get_next_round_number()
+        # 开场：judge/tutor 开场
+        moderator_id = self._get_next_speaker(topic, 0)
+        opening = self._generate_opening(moderator_id, topic)
+        self._update_word_count(moderator_id, opening)
 
-        response_1 = self._generate_response(
-            participant_order[0],
-            topic,
-            round_num,
-            on_chunk=on_chunk
-        )
-        yield self._log_message(participant_order[0], response_1)
-
-        response_2 = self._generate_response(
-            participant_order[1],
-            topic,
-            round_num,
-            on_chunk=on_chunk
-        )
-        yield self._log_message(participant_order[1], response_2)
-
-        comment = self._generate_comment(
-            participant_order[2],
-            round_num,
-            on_chunk=on_chunk
-        )
-        yield self._log_message(participant_order[2], comment)
-
-    def _stream_or_generate(
-        self,
-        participant_id: str,
-        messages: List[Dict[str, str]],
-        temperature: float,
-        max_tokens: int,
-        on_chunk: Optional[Callable[[str, str], None]] = None
-    ) -> str:
-        """
-        生成一段文本；若提供 on_chunk，则启用模型流式输出。
-        """
+        entry = self._log_message(moderator_id, opening)
         if on_chunk:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True
-            )
-            chunks: List[str] = []
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta.content
-                if not delta:
-                    continue
-                chunks.append(delta)
-                on_chunk(participant_id, delta)
+            on_chunk(moderator_id, opening)
+        yield entry
 
-            streamed_content = "".join(chunks).strip()
-            if streamed_content:
-                return streamed_content
+        # 多轮对话，每轮根据比例选择发言人
+        for round_num in range(1, self.rounds * 2 + 1):  # 更多发言机会
+            speaker_id = self._get_next_speaker(topic, round_num)
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        content = response.choices[0].message.content or ""
-        return content.strip()
+            # 生成发言
+            if speaker_id == moderator_id:
+                # 主持人/导师发言
+                if round_num < self.rounds * 2:
+                    content = self._generate_comment(moderator_id, round_num)
+                else:
+                    content = self._generate_summary(moderator_id)
+            else:
+                # 其他参与者发言
+                content = self._generate_response(speaker_id, topic, round_num)
 
-    def _generate_opening(
-        self,
-        participant_id: str,
-        topic: str,
-        on_chunk: Optional[Callable[[str, str], None]] = None
-    ) -> str:
+            # 更新字数统计
+            self._update_word_count(speaker_id, content)
+
+            # 记录并yield
+            entry = self._log_message(speaker_id, content)
+            if on_chunk:
+                on_chunk(speaker_id, content)
+            yield entry
+
+    def _generate_opening(self, participant_id: str, topic: str) -> str:
         """生成开场白"""
         participant = self.participants[participant_id]
 
@@ -227,13 +255,14 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        content = self._stream_or_generate(
-            participant_id=participant_id,
+        response = self.client.chat.completions.create(
+            model=self.model,
             messages=messages,
             temperature=0.8,
-            max_tokens=200,
-            on_chunk=on_chunk
+            max_tokens=200
         )
+
+        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
@@ -244,8 +273,7 @@ class ConversationManager:
         self,
         participant_id: str,
         topic: str,
-        round_num: int,
-        on_chunk: Optional[Callable[[str, str], None]] = None
+        round_num: int
     ) -> str:
         """生成参与者回复"""
         participant = self.participants[participant_id]
@@ -269,13 +297,14 @@ class ConversationManager:
         for msg in self.histories[participant_id]:
             messages.insert(-1, msg)  # 插在最后一条user消息前
 
-        content = self._stream_or_generate(
-            participant_id=participant_id,
+        response = self.client.chat.completions.create(
+            model=self.model,
             messages=messages,
             temperature=0.9,
-            max_tokens=500,
-            on_chunk=on_chunk
+            max_tokens=500
         )
+
+        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "user", "content": prompt})
@@ -283,12 +312,7 @@ class ConversationManager:
 
         return content
 
-    def _generate_comment(
-        self,
-        participant_id: str,
-        round_num: int,
-        on_chunk: Optional[Callable[[str, str], None]] = None
-    ) -> str:
+    def _generate_comment(self, participant_id: str, round_num: int) -> str:
         """生成主持人点评"""
         participant = self.participants[participant_id]
 
@@ -306,24 +330,21 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        content = self._stream_or_generate(
-            participant_id=participant_id,
+        response = self.client.chat.completions.create(
+            model=self.model,
             messages=messages,
             temperature=0.7,
-            max_tokens=400,
-            on_chunk=on_chunk
+            max_tokens=400
         )
+
+        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
 
         return content
 
-    def _generate_summary(
-        self,
-        participant_id: str,
-        on_chunk: Optional[Callable[[str, str], None]] = None
-    ) -> str:
+    def _generate_summary(self, participant_id: str) -> str:
         """生成总结"""
         participant = self.participants[participant_id]
 
@@ -344,13 +365,14 @@ class ConversationManager:
             {"role": "user", "content": prompt}
         ]
 
-        content = self._stream_or_generate(
-            participant_id=participant_id,
+        response = self.client.chat.completions.create(
+            model=self.model,
             messages=messages,
             temperature=0.6,
-            max_tokens=600,
-            on_chunk=on_chunk
+            max_tokens=600
         )
+
+        content = response.choices[0].message.content.strip()
 
         # 添加到历史
         self.histories[participant_id].append({"role": "assistant", "content": content})
@@ -365,6 +387,12 @@ class ConversationManager:
         """构建其他参与者的发言上下文"""
         context_parts = []
 
+        # 获取其他参与者
+        other_participants = [
+            pid for pid in self.participants.keys()
+            if pid != exclude_participant
+        ]
+
         if recent_only:
             # 只取最近一轮的发言
             relevant_entries = self.dialogue_log[-2:]
@@ -373,25 +401,18 @@ class ConversationManager:
             relevant_entries = self.dialogue_log
 
         for entry in relevant_entries:
-            participant_id = entry.get('participant')
-            if participant_id == exclude_participant:
-                continue
-
-            if participant_id in self.participants:
-                participant_role = self.participants[participant_id].role
-            elif participant_id == 'user':
-                participant_role = '用户'
-            else:
-                participant_role = participant_id or '未知角色'
-
-            context_parts.append(f"{participant_role}: {entry.get('content', '')}")
+            if entry['participant'] in other_participants:
+                participant_role = self.participants[entry['participant']].role
+                context_parts.append(f"{participant_role}: {entry['content']}")
 
         return "\n\n".join(context_parts)
 
     def _log_message(self, participant_id: str, content: str) -> Dict:
         """记录消息到对话日志"""
+        participant = self.participants.get(participant_id)
         entry = {
             "participant": participant_id,
+            "role": participant.role if participant else participant_id,
             "content": content,
             "timestamp": datetime.now().isoformat()
         }

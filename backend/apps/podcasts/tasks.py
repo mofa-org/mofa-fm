@@ -3,10 +3,10 @@
 """
 from celery import shared_task
 from django.utils import timezone
-from uuid import uuid4
+from django.db import transaction
 import os
-import time
-from utils.audio_processor import process_audio
+from utils.audio_processor import process_audio, get_audio_duration
+import json
 
 
 @shared_task
@@ -65,477 +65,66 @@ def process_episode_audio(episode_id):
             pass
         raise
 
-def _set_episode_generation_state(
-    episode,
-    *,
-    status_value=None,
-    stage_value=None,
-    error_value=None,
-):
-    update_fields = []
-    if status_value is not None and episode.status != status_value:
-        episode.status = status_value
-        update_fields.append('status')
-    if stage_value is not None and episode.generation_stage != stage_value:
-        episode.generation_stage = stage_value
-        update_fields.append('generation_stage')
-    if error_value is not None and episode.generation_error != error_value:
-        episode.generation_error = error_value
-        update_fields.append('generation_error')
-    if update_fields:
-        update_fields.append('updated_at')
-        episode.save(update_fields=update_fields)
-
-
-def _publish_generated_episode(episode, script_content, speaker_config=None):
-    from .services.generator import PodcastGenerator
-    from .services.speaker_config import apply_speaker_names, build_generator_runtime_options
-    from pydub import AudioSegment
-    from django.conf import settings
-    from .services.cover_ai import generate_episode_cover
-
-    _set_episode_generation_state(
-        episode,
-        status_value='processing',
-        stage_value='audio_generating',
-        error_value='',
-    )
-
-    generator = PodcastGenerator()
-    normalized_script = apply_speaker_names(script_content, speaker_config)
-    character_aliases, voice_overrides = build_generator_runtime_options(speaker_config)
-
-    filename = f"generated_{episode.slug}_{episode.id}.mp3"
-    relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
-    full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
-
-    # 清理占位文件，避免残留空文件
-    placeholder_name = episode.audio_file.name
-    if placeholder_name and placeholder_name != relative_path:
-        storage = episode.audio_file.storage
-        if storage.exists(placeholder_name):
-            storage.delete(placeholder_name)
-
-    generator.generate(
-        normalized_script,
-        full_path,
-        character_aliases=character_aliases,
-        voice_overrides=voice_overrides,
-    )
-
-    episode.audio_file.name = relative_path
-    episode.script = normalized_script
-    episode.status = 'published'
-    episode.generation_stage = 'cover_generating'
-    episode.generation_error = ''
-    episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
-    episode.file_size = os.path.getsize(full_path)
-    episode.published_at = timezone.now()
-    episode.save(
-        update_fields=[
-            'audio_file',
-            'script',
-            'status',
-            'generation_stage',
-            'generation_error',
-            'duration',
-            'file_size',
-            'published_at',
-            'updated_at',
-        ]
-    )
-
-    # 封面失败不阻断发布
-    try:
-        generate_episode_cover(episode)
-    except Exception as cover_exc:
-        print(f"Failed to generate cover for episode {episode.id}: {cover_exc}")
-
-    _set_episode_generation_state(
-        episode,
-        status_value='published',
-        stage_value='completed',
-        error_value='',
-    )
-
-    if episode.show_id:
-        show = episode.show
-        show.episodes_count = show.episodes.filter(status='published').count()
-        show.save(update_fields=['episodes_count', 'updated_at'])
-
-
 @shared_task
-def generate_podcast_task(episode_id, script_content, speaker_config=None):
+def generate_podcast_task(episode_id, script_content, voice_config=None):
     """
     Background task to generate podcast audio from script.
     """
     from .models import Episode
-
-    episode = None
+    from .services.generator import PodcastGenerator
+    from pydub import AudioSegment
+    import os
+    from django.conf import settings
+    
+    episode = None # Initialize episode to None for error handling
     try:
         episode = Episode.objects.get(id=episode_id)
-        _publish_generated_episode(
-            episode=episode,
-            script_content=script_content,
-            speaker_config=speaker_config,
-        )
+        episode.status = 'processing'
+        episode.save()
+        
+        # Initialize generator
+        generator = PodcastGenerator()
+        
+        # Define output path
+        # e.g. media/episodes/YYYY/MM/uuid.mp3
+        filename = f"generated_{episode.slug}_{episode.id}.mp3"
+        relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
+        full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+
+        # 清理占位文件，避免残留空文件
+        placeholder_name = episode.audio_file.name
+        if placeholder_name and placeholder_name != relative_path:
+            storage = episode.audio_file.storage
+            if storage.exists(placeholder_name):
+                storage.delete(placeholder_name)
+        
+        # Generate
+        generator.generate(script_content, full_path, voice_config=voice_config)
+
+        # Update episode
+        episode.audio_file.name = relative_path
+        episode.script = script_content  # 保存脚本，默认使用AI生成的脚本
+        episode.status = 'published'
+        episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
+        episode.file_size = os.path.getsize(full_path)
+        episode.published_at = timezone.now()
+        episode.save()
+
+        # 更新节目统计
+        show = episode.show
+        show.episodes_count = show.episodes.filter(status='published').count()
+        show.save()
+
     except Exception as e:
         print(f"Failed to generate podcast for episode {episode_id}: {e}")
-        if episode:
-            _set_episode_generation_state(
-                episode,
-                status_value='failed',
-                stage_value='failed',
-                error_value=str(e)[:1000],
-            )
+        if episode: # Only update status if episode object was successfully retrieved
+            episode.status = 'failed'
+            episode.save()
         raise
 
 
 @shared_task
-def generate_source_podcast_task(
-    episode_id,
-    source_url,
-    max_items=8,
-    template='news_flash',
-    speaker_config=None,
-):
-    """
-    Background task to generate podcast from source URL (RSS/webpage).
-    """
-    from .models import Episode
-    from .services.source_ingest import collect_source_material, generate_script_from_material
-
-    episode = None
-    try:
-        episode = Episode.objects.get(id=episode_id)
-        _set_episode_generation_state(
-            episode,
-            status_value='processing',
-            stage_value='source_fetching',
-            error_value='',
-        )
-
-        material = collect_source_material(source_url=source_url, max_items=max_items)
-
-        _set_episode_generation_state(
-            episode,
-            status_value='processing',
-            stage_value='script_generating',
-        )
-        script = generate_script_from_material(material, template=template)
-
-        meta = dict(episode.generation_meta or {})
-        meta.update({
-            "type": material.get("source_type") or "source",
-            "source_url": source_url,
-            "max_items": max_items,
-            "template": template,
-            "source_title": material.get("source_title") or "",
-            "item_count": len(material.get("items") or []),
-        })
-        if speaker_config:
-            meta["speaker_config"] = speaker_config
-
-        if meta.get("auto_title"):
-            source_title = material.get("source_title") or "来源内容"
-            episode.title = f"{source_title} 快报"
-
-        episode.script = script
-        episode.generation_meta = meta
-        episode.save(update_fields=['title', 'script', 'generation_meta', 'updated_at'])
-
-        _publish_generated_episode(
-            episode=episode,
-            script_content=script,
-            speaker_config=speaker_config,
-        )
-    except Exception as e:
-        print(f"Failed to generate source podcast for episode {episode_id}: {e}")
-        if episode:
-            _set_episode_generation_state(
-                episode,
-                status_value='failed',
-                stage_value='failed',
-                error_value=str(e)[:1000],
-            )
-        raise
-
-
-@shared_task
-def generate_rss_podcast_task(
-    episode_id,
-    rss_urls,
-    max_items=8,
-    deduplicate=True,
-    sort_by='latest',
-    template='news_flash',
-    speaker_config=None,
-):
-    """
-    Background task to generate podcast from multi RSS sources.
-    """
-    from .models import Episode
-    from .services.rss_ingest import collect_rss_material, generate_script_from_rss_material
-
-    episode = None
-    try:
-        episode = Episode.objects.get(id=episode_id)
-        _set_episode_generation_state(
-            episode,
-            status_value='processing',
-            stage_value='source_fetching',
-            error_value='',
-        )
-
-        material = collect_rss_material(
-            rss_urls=list(rss_urls or []),
-            max_items=max_items,
-            deduplicate=bool(deduplicate),
-            sort_by=sort_by,
-        )
-
-        _set_episode_generation_state(
-            episode,
-            status_value='processing',
-            stage_value='script_generating',
-        )
-        script = generate_script_from_rss_material(material, template=template)
-
-        meta = dict(episode.generation_meta or {})
-        meta.update({
-            "type": "rss",
-            "source_url": (rss_urls or [''])[0],
-            "rss_urls": list(rss_urls or []),
-            "max_items": max_items,
-            "template": template,
-            "deduplicate": bool(deduplicate),
-            "sort_by": sort_by,
-            "source_title": material.get("source_title") or "",
-            "item_count": len(material.get("items") or []),
-        })
-        if speaker_config:
-            meta["speaker_config"] = speaker_config
-
-        if meta.get("auto_title"):
-            source_title = material.get("source_title") or "RSS 来源"
-            episode.title = f"{source_title} 快报"
-
-        episode.script = script
-        episode.generation_meta = meta
-        episode.save(update_fields=['title', 'script', 'generation_meta', 'updated_at'])
-
-        _publish_generated_episode(
-            episode=episode,
-            script_content=script,
-            speaker_config=speaker_config,
-        )
-    except Exception as e:
-        print(f"Failed to generate rss podcast for episode {episode_id}: {e}")
-        if episode:
-            _set_episode_generation_state(
-                episode,
-                status_value='failed',
-                stage_value='failed',
-                error_value=str(e)[:1000],
-            )
-        raise
-
-
-@shared_task
-def dispatch_rss_schedules_task(limit=50):
-    """
-    扫描并派发到期的 RSS 自动化任务。
-    建议由 celery beat 每分钟触发一次。
-    """
-    from django.db import transaction
-    from .models import RSSSchedule
-    from .services.rss_schedule import compute_next_run_at
-
-    now = timezone.now()
-    queued = 0
-    with transaction.atomic():
-        due_schedules = list(
-            RSSSchedule.objects
-            .select_for_update(skip_locked=True)
-            .filter(is_active=True, next_run_at__isnull=False, next_run_at__lte=now)
-            .order_by('next_run_at')[: int(limit)]
-        )
-        for schedule in due_schedules:
-            schedule.last_status = 'queued'
-            schedule.last_error = ''
-            schedule.next_run_at = compute_next_run_at(schedule, from_dt=now)
-            schedule.save(update_fields=['last_status', 'last_error', 'next_run_at', 'updated_at'])
-            run_rss_schedule_task.delay(schedule.id, trigger_type='auto')
-            queued += 1
-    return f"Queued {queued} schedules"
-
-
-@shared_task
-def run_rss_schedule_task(schedule_id, trigger_type='auto'):
-    """
-    执行单个 RSS 自动化任务。
-    """
-    from django.core.files.base import ContentFile
-    from .models import RSSSchedule, RSSRun, Episode
-    from .services.default_show import get_or_create_default_show
-    from .services.rss_ingest import collect_rss_material, generate_script_from_rss_material
-    from .services.speaker_config import apply_speaker_names
-    from .services.rss_schedule import build_speaker_config_from_schedule
-
-    schedule = None
-    run = None
-    episode = None
-    try:
-        schedule = (
-            RSSSchedule.objects
-            .select_related('creator', 'rss_list', 'show')
-            .prefetch_related('rss_list__sources')
-            .get(id=schedule_id)
-        )
-
-        if not schedule.is_active and trigger_type == 'auto':
-            return f"Schedule {schedule_id} is inactive"
-
-        rss_urls = list(
-            schedule.rss_list.sources.filter(is_active=True).values_list('url', flat=True)
-        )
-        if not rss_urls:
-            raise ValueError('RSS 列表中无可用源')
-
-        run = RSSRun.objects.create(
-            schedule=schedule,
-            status='running',
-            trigger_type=trigger_type,
-            message='开始执行',
-        )
-        schedule.last_status = 'running'
-        schedule.last_error = ''
-        schedule.save(update_fields=['last_status', 'last_error', 'updated_at'])
-
-        material = collect_rss_material(
-            rss_urls=rss_urls,
-            max_items=schedule.max_items,
-            deduplicate=schedule.deduplicate,
-            sort_by=schedule.sort_by,
-        )
-        script = generate_script_from_rss_material(material, template=schedule.template)
-        speaker_config = build_speaker_config_from_schedule(schedule)
-        script = apply_speaker_names(script, speaker_config)
-
-        if schedule.show_id and schedule.show and schedule.show.creator_id == schedule.creator_id:
-            show = schedule.show
-        else:
-            show, _ = get_or_create_default_show(schedule.creator)
-
-        source_title = str(material.get('source_title') or schedule.name).strip()
-        title = f"{source_title} 快报"
-        if len(title) > 255:
-            title = title[:255]
-        placeholder_file = ContentFile(b'', name=f'pending-{uuid4().hex}.mp3')
-
-        generation_meta = {
-            'type': 'rss_schedule',
-            'schedule_id': schedule.id,
-            'rss_urls': rss_urls,
-            'max_items': schedule.max_items,
-            'template': schedule.template,
-            'deduplicate': schedule.deduplicate,
-            'sort_by': schedule.sort_by,
-            'source_title': source_title,
-            'item_count': len(material.get('items') or []),
-            'trigger_type': trigger_type,
-        }
-        if speaker_config:
-            generation_meta['speaker_config'] = speaker_config
-
-        episode = Episode.objects.create(
-            show=show,
-            title=title,
-            description=f"AI Generated Podcast from RSS schedule: {schedule.name}",
-            status='processing',
-            generation_stage='queued',
-            generation_error='',
-            generation_meta=generation_meta,
-            script=script,
-            audio_file=placeholder_file,
-        )
-
-        _publish_generated_episode(
-            episode=episode,
-            script_content=script,
-            speaker_config=speaker_config,
-        )
-
-        run.status = 'success'
-        run.episode = episode
-        run.item_count = len(material.get('items') or [])
-        run.message = '执行成功'
-        run.meta = {
-            'source_title': source_title,
-            'rss_urls': rss_urls,
-        }
-        run.finished_at = timezone.now()
-        run.save(
-            update_fields=[
-                'status', 'episode', 'item_count',
-                'message', 'meta', 'finished_at',
-            ]
-        )
-
-        schedule.last_run_at = timezone.now()
-        schedule.last_status = 'success'
-        schedule.last_error = ''
-        schedule.save(update_fields=['last_run_at', 'last_status', 'last_error', 'updated_at'])
-        return f"Schedule {schedule_id} executed successfully"
-    except Exception as e:
-        error_text = str(e)[:1000]
-        if episode:
-            _set_episode_generation_state(
-                episode,
-                status_value='failed',
-                stage_value='failed',
-                error_value=error_text,
-            )
-        if run:
-            run.status = 'failed'
-            run.error = error_text
-            run.message = '执行失败'
-            run.finished_at = timezone.now()
-            run.save(update_fields=['status', 'error', 'message', 'finished_at'])
-        if schedule:
-            schedule.last_run_at = timezone.now()
-            schedule.last_status = 'failed'
-            schedule.last_error = error_text
-            schedule.save(update_fields=['last_run_at', 'last_status', 'last_error', 'updated_at'])
-        raise
-
-
-def _merge_or_append_dialogue_entry(dialogue_entries, entry):
-    if dialogue_entries and dialogue_entries[-1].get('participant') == entry.get('participant'):
-        existing_content = dialogue_entries[-1].get('content', '')
-        incoming_content = entry.get('content', '')
-        if incoming_content.startswith(existing_content) or existing_content.startswith(incoming_content):
-            dialogue_entries[-1] = entry
-            return
-    dialogue_entries.append(entry)
-
-
-def _build_script_from_dialogue(dialogue_entries, participants):
-    participant_role_map = {p.id: p.role for p in participants}
-    script_lines = []
-    for entry in dialogue_entries:
-        participant_id = entry.get('participant')
-        role_name = participant_role_map.get(participant_id)
-        if not role_name and participant_id == 'user':
-            role_name = '用户'
-        if not role_name:
-            role_name = participant_id or '未知角色'
-        script_lines.append(f"【{role_name}】{entry.get('content', '')}\n")
-    return "\n".join(script_lines)
-
-
-@shared_task
-def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
+def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
     """
     Background task to generate debate/conference dialogue (text-only, no audio).
 
@@ -553,8 +142,7 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
     try:
         episode = Episode.objects.get(id=episode_id)
         episode.status = 'processing'
-        episode.dialogue = []
-        episode.save(update_fields=['status', 'dialogue', 'updated_at'])
+        episode.save()
 
         # 获取参与者配置
         participants = get_participants_by_mode(mode)
@@ -569,7 +157,7 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
             }
             for p in participants
         ]
-        episode.save(update_fields=['participants_config', 'updated_at'])
+        episode.save()
 
         # 创建对话管理器
         manager = ConversationManager(
@@ -578,46 +166,38 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
             rounds=rounds
         )
 
-        # 生成对话（流式，增量写入）
+        # 生成对话（流式，每生成一条就保存）
         dialogue_entries = []
-        last_flush_at = 0.0
+        for entry in manager.generate_dialogue(topic):
+            dialogue_entries.append(entry)
 
-        def flush_dialogue(force=False):
-            nonlocal last_flush_at
-            now = time.monotonic()
-            if not force and now - last_flush_at < 0.25:
-                return
-            episode.dialogue = [dict(item) for item in dialogue_entries]
-            episode.save(update_fields=['dialogue', 'updated_at'])
-            last_flush_at = now
+            # 实时保存，让前端可以看到进度
+            episode.dialogue = dialogue_entries.copy()
+            episode.save(update_fields=['dialogue'])
 
-        def on_chunk(participant_id, content_chunk):
-            if not content_chunk:
-                return
-            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
-                dialogue_entries.append({
-                    "participant": participant_id,
-                    "content": content_chunk,
-                    "timestamp": timezone.now().isoformat()
-                })
-            else:
-                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
-            flush_dialogue()
-
-        for entry in manager.generate_dialogue(topic, on_chunk=on_chunk):
-            _merge_or_append_dialogue_entry(dialogue_entries, entry)
-            flush_dialogue(force=True)
+            # 显式提交事务，让SSE能立即看到更新
+            transaction.commit()
 
         # 最终保存（确保完整）
-        episode.dialogue = [dict(item) for item in dialogue_entries]
+        episode.dialogue = dialogue_entries
 
         # 将对话转换为脚本格式（用于兼容现有前端）
-        episode.script = _build_script_from_dialogue(dialogue_entries, participants)
+        script_lines = []
+        for entry in dialogue_entries:
+            participant_config = next(
+                (p for p in participants if p.id == entry['participant']),
+                None
+            )
+            if participant_config:
+                role_name = participant_config.role
+                script_lines.append(f"【{role_name}】{entry['content']}\n")
+
+        episode.script = "\n".join(script_lines)
 
         # 更新状态为已发布（因为是纯文本，无需音频处理）
         episode.status = 'published'
         episode.published_at = timezone.now()
-        episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
+        episode.save()
 
         # 更新节目统计（如果关联了show）
         if episode.show_id:  # 使用show_id避免触发RelatedObjectDoesNotExist
@@ -631,89 +211,7 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=1):
         print(f"Failed to generate debate for episode {episode_id}: {e}")
         if episode:
             episode.status = 'failed'
-            episode.generation_error = str(e)[:1000]
-            episode.save(update_fields=['status', 'generation_error', 'updated_at'])
-        raise
-
-
-@shared_task
-def generate_debate_followup_task(episode_id, topic, mode='debate'):
-    """
-    在现有辩论上继续生成一轮（用于用户插话后的群聊推进）。
-    """
-    from .models import Episode
-    from .services.conversation import ConversationManager
-    from .services.participants import get_participants_by_mode
-
-    episode = None
-    try:
-        episode = Episode.objects.get(id=episode_id)
-        episode.status = 'processing'
-        episode.generation_error = ''
-        episode.save(update_fields=['status', 'generation_error', 'updated_at'])
-
-        participants = get_participants_by_mode(mode)
-        if not episode.participants_config:
-            episode.participants_config = [
-                {
-                    "id": p.id,
-                    "role": p.role,
-                    "system_prompt": p.system_prompt,
-                    "voice_id": p.voice_id
-                }
-                for p in participants
-            ]
-            episode.save(update_fields=['participants_config', 'updated_at'])
-
-        dialogue_entries = [dict(item) for item in (episode.dialogue or [])]
-        last_flush_at = 0.0
-
-        manager = ConversationManager(
-            participants=participants,
-            policy='sequential',
-            rounds=1
-        )
-        manager.set_dialogue_log(dialogue_entries)
-
-        def flush_dialogue(force=False):
-            nonlocal last_flush_at
-            now = time.monotonic()
-            if not force and now - last_flush_at < 0.25:
-                return
-            episode.dialogue = [dict(item) for item in dialogue_entries]
-            episode.save(update_fields=['dialogue', 'updated_at'])
-            last_flush_at = now
-
-        def on_chunk(participant_id, content_chunk):
-            if not content_chunk:
-                return
-            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
-                dialogue_entries.append({
-                    'participant': participant_id,
-                    'content': content_chunk,
-                    'timestamp': timezone.now().isoformat()
-                })
-            else:
-                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
-            flush_dialogue()
-
-        for entry in manager.generate_followup_round(topic, on_chunk=on_chunk):
-            _merge_or_append_dialogue_entry(dialogue_entries, entry)
-            flush_dialogue(force=True)
-
-        episode.dialogue = [dict(item) for item in dialogue_entries]
-        episode.script = _build_script_from_dialogue(dialogue_entries, participants)
-        episode.status = 'published'
-        episode.published_at = timezone.now()
-        episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
-
-        return f"Debate/Conference {episode_id} followup generated"
-    except Exception as e:
-        print(f"Failed to generate debate followup for episode {episode_id}: {e}")
-        if episode:
-            episode.status = 'failed'
-            episode.generation_error = str(e)[:1000]
-            episode.save(update_fields=['status', 'generation_error', 'updated_at'])
+            episode.save()
         raise
 
 
@@ -784,3 +282,88 @@ def generate_debate_audio_task(episode_id, show_id):
             episode.status = 'failed'
             episode.save()
         raise
+
+
+async def stream_debate_response(episode_id: int, room_group_name: str):
+    """
+    Stream debate response via WebSocket.
+    This is an async function for use with WebSocket consumers.
+    """
+    import asyncio
+    from channels.layers import get_channel_layer
+    from .models import Episode
+    from .services.conversation import ConversationManager
+    from .services.participants import get_participants_by_mode
+
+    channel_layer = get_channel_layer()
+
+    try:
+        episode = await asyncio.to_thread(Episode.objects.get, id=episode_id)
+        mode = episode.mode or 'debate'
+        topic = episode.generation_meta.get('topic', '')
+
+        participants = get_participants_by_mode(mode)
+
+        # Send status update
+        await channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'status_update',
+                'status': 'generating',
+                'message': 'AI is thinking...'
+            }
+        )
+
+        # Create conversation manager with policy
+        manager = ConversationManager(
+            participants=participants,
+            policy='unified_ratio',
+            rounds=1
+        )
+        manager.set_dialogue_log(list(episode.dialogue or []))
+
+        # Stream dialogue entries
+        for entry in manager.generate_dialogue(topic):
+            await channel_layer.group_send(
+                room_group_name,
+                {
+                    'type': 'dialogue_entry',
+                    'entry': {
+                        'participant': entry.get('participant'),
+                        'role': entry.get('role'),
+                        'content': entry.get('content'),
+                        'timestamp': entry.get('timestamp'),
+                        'is_human': False
+                    }
+                }
+            )
+
+        # Send completion status
+        await channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'status_update',
+                'status': 'completed',
+                'message': 'Response completed'
+            }
+        )
+
+    except Episode.DoesNotExist:
+        await channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'status_update',
+                'status': 'error',
+                'message': 'Episode not found'
+            }
+        )
+    except Exception as e:
+        print(f"Error in stream_debate_response: {e}")
+        await channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'status_update',
+                'status': 'error',
+                'message': str(e)[:100]
+            }
+        )

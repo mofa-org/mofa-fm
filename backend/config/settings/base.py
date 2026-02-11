@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from decouple import config
 import dj_database_url
-from celery.schedules import crontab
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -17,6 +16,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -69,6 +69,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
 DATABASES = {
@@ -78,8 +79,13 @@ DATABASES = {
     )
 }
 
-# Password validation - 无限制
-AUTH_PASSWORD_VALIDATORS = []
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 # Internationalization
 LANGUAGE_CODE = 'zh-hans'
@@ -148,12 +154,6 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULE = {
-    'dispatch-rss-schedules-every-minute': {
-        'task': 'apps.podcasts.tasks.dispatch_rss_schedules_task',
-        'schedule': crontab(minute='*'),
-    },
-}
 
 # Audio settings
 AUDIO_MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500MB
@@ -186,28 +186,25 @@ MINIMAX_TTS = {
     # Random silence between speaker changes
     'silence_min_ms': config('MINIMAX_SILENCE_MIN_MS', default=300, cast=int),
     'silence_max_ms': config('MINIMAX_SILENCE_MAX_MS', default=1200, cast=int),
-
-    # Vocal logo (prepend/append around the final mixed audio)
-    'enable_vocal_logo': config('MINIMAX_ENABLE_VOCAL_LOGO', default=True, cast=bool),
-    'vocal_logo_start_path': config(
-        'MINIMAX_VOCAL_LOGO_START_PATH',
-        default=str(BASE_DIR / 'mofa-vocal-logo-start.mp3')
-    ),
-    'vocal_logo_end_path': config(
-        'MINIMAX_VOCAL_LOGO_END_PATH',
-        default=str(BASE_DIR / 'mofa-vocal-logo-end.mp3')
-    ),
 }
 
 # OpenAI-compatible API for script generation (Moonshot/Kimi)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_API_BASE = config('OPENAI_API_BASE', default='https://api.moonshot.cn/v1')
 OPENAI_MODEL = config('OPENAI_MODEL', default='moonshot-v1-8k')
-OPENAI_REQUEST_TIMEOUT = config('OPENAI_REQUEST_TIMEOUT', default=90, cast=int)
-OPENAI_JUDGE_TIMEOUT = config('OPENAI_JUDGE_TIMEOUT', default=20, cast=int)
 
 # Trending API
-TRENDING_API_URL = config('TRENDING_API_URL', default='https://hot.mofa.fm')
+TRENDING_API_URL = config('TRENDING_API_URL', default='http://154.21.90.242:1145')
 
 # Tavily Search API for AI tool calling
 TAVILY_API_KEY = config('TAVILY_API_KEY', default='')
+
+# Channels (WebSocket)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [config('REDIS_URL', default='redis://localhost:6379/0')],
+        },
+    },
+}
