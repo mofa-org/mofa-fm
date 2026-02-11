@@ -361,7 +361,7 @@ async function renderSharePoster() {
   ctx.fill()
 
   // 绘制二维码
-  await drawQRCode(ctx, 'https://mofa.ai', qrX, qrY, qrSize)
+  await drawQRCode(ctx, data.share_url || 'https://mofa.fm', qrX, qrY, qrSize)
 
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
 }
