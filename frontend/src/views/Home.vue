@@ -7,12 +7,30 @@
         <h1 class="hero-title">欢迎来到 MoFA FM</h1>
         <p class="hero-subtitle">人人可创作，人人可收听</p>
         <div class="hero-actions">
-          <router-link v-if="!isAuthenticated" to="/register" class="mofa-btn mofa-btn-primary">
-            立即开始
-          </router-link>
-          <router-link to="/discover" class="mofa-btn">
-            探索音频
-          </router-link>
+          <template v-if="!isAuthenticated">
+            <router-link to="/register" class="mofa-btn mofa-btn-primary">
+              <el-icon><User /></el-icon>
+              立即开始
+            </router-link>
+            <router-link to="/discover" class="mofa-btn">
+              <el-icon><Headset /></el-icon>
+              探索音频
+            </router-link>
+          </template>
+          <template v-else>
+            <router-link to="/creator/ai-studio" class="mofa-btn mofa-btn-primary">
+              <el-icon><Edit /></el-icon>
+              开始创作
+            </router-link>
+            <router-link to="/creator" class="mofa-btn">
+              <el-icon><Folder /></el-icon>
+              内容管理
+            </router-link>
+            <router-link to="/discover" class="mofa-btn">
+              <el-icon><Headset /></el-icon>
+              探索音频
+            </router-link>
+          </template>
         </div>
       </section>
 
@@ -35,29 +53,6 @@
           </div>
         </div>
         <el-empty v-else description="推荐位加载中" />
-      </section>
-
-      <!-- AI功能区 -->
-      <section class="section ai-features" v-if="isAuthenticated">
-        <h2 class="section-title">创作入口</h2>
-        <div class="feature-cards">
-          <router-link to="/creator/ai-studio" class="feature-card mofa-card">
-            <div class="feature-icon">
-              <el-icon :size="32"><Edit /></el-icon>
-            </div>
-            <h3 class="feature-title">开始创作</h3>
-            <p class="feature-desc">链接、RSS、脚本、辩论模式统一在同一创作页完成</p>
-            <div class="feature-action">进入创作 →</div>
-          </router-link>
-          <router-link to="/creator" class="feature-card mofa-card">
-            <div class="feature-icon">
-              <el-icon :size="32"><ChatDotRound /></el-icon>
-            </div>
-            <h3 class="feature-title">内容管理</h3>
-            <p class="feature-desc">统一管理我的音频、频道与发布记录</p>
-            <div class="feature-action">进入管理 →</div>
-          </router-link>
-        </div>
       </section>
 
       <!-- 最新单集 -->
@@ -100,7 +95,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { ChatDotRound, Edit } from '@element-plus/icons-vue'
+import { ChatDotRound, Edit, Headset, Folder, User } from '@element-plus/icons-vue'
 import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 
@@ -185,6 +180,18 @@ function formatNumber(num) {
   display: flex;
   gap: var(--spacing-md);
   justify-content: center;
+  flex-wrap: wrap;
+}
+
+.hero-actions .mofa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+}
+
+.hero-actions .el-icon {
+  font-size: 18px;
 }
 
 .stats {

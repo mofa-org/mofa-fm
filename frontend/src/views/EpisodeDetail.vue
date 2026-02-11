@@ -25,30 +25,36 @@
           </div>
 
           <div class="episode-actions">
-            <el-button type="primary" size="large" @click="handlePlay">
+            <button class="mofa-btn mofa-btn-primary mofa-btn-lg" @click="handlePlay">
               <el-icon><VideoPlay /></el-icon>
               播放
-            </el-button>
-            <el-button :disabled="!episode.audio_url" @click="handleDownloadAudio">
+            </button>
+            <button class="mofa-btn" :disabled="!episode.audio_url" @click="handleDownloadAudio">
               <el-icon><Download /></el-icon>
               {{ episode.audio_url ? '下载音频' : '音频未就绪' }}
-            </el-button>
-            <el-button
+            </button>
+            <button
               v-if="isAuthenticated"
-              :type="isFollowing ? 'success' : 'warning'"
+              class="mofa-btn"
+              :class="{ 'mofa-btn-success': isFollowing }"
               @click="handleFollow"
             >
               <el-icon><Bell /></el-icon>
               {{ isFollowing ? '已订阅' : '订阅此节目' }}
-            </el-button>
-            <el-button v-if="isAuthenticated" @click="handleLike">
-              <el-icon><Star :style="episode.is_liked ? { color: '#ffc63e' } : {}" /></el-icon>
+            </button>
+            <button
+              v-if="isAuthenticated"
+              class="mofa-btn"
+              :class="{ 'is-liked': episode.is_liked }"
+              @click="handleLike"
+            >
+              <el-icon><Star /></el-icon>
               {{ episode.is_liked ? '已点赞' : '点赞' }}
-            </el-button>
-            <el-button @click="openShareCard" :loading="shareLoading">
+            </button>
+            <button class="mofa-btn" @click="openShareCard" :disabled="shareLoading">
               <el-icon><Share /></el-icon>
               分享卡片
-            </el-button>
+            </button>
           </div>
         </div>
       </div>
@@ -423,6 +429,36 @@ function downloadSharePoster() {
   flex-wrap: wrap;
 }
 
+.episode-actions .mofa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.episode-actions .mofa-btn-lg {
+  padding: 12px 24px;
+  font-size: var(--font-lg);
+}
+
+.episode-actions .mofa-btn-success {
+  background: var(--color-success, #67c23a);
+  border-color: var(--color-success, #67c23a);
+  color: white;
+}
+
+.episode-actions .mofa-btn-success:hover {
+  background: var(--color-success-hover, #85ce61);
+}
+
+.episode-actions .is-liked {
+  color: #ffc63e;
+  border-color: #ffc63e;
+}
+
+.episode-actions .is-liked:hover {
+  background: rgba(255, 198, 62, 0.1);
+}
+
 .script-section {
   margin-top: var(--spacing-2xl);
 }
@@ -553,15 +589,16 @@ function downloadSharePoster() {
     font-size: var(--font-sm);
   }
 
-  .episode-actions :deep(.el-button) {
+  .episode-actions .mofa-btn {
     flex: 1 1 auto;
+    justify-content: center;
   }
 
   .share-actions {
     justify-content: stretch;
   }
 
-  .share-actions :deep(.el-button) {
+  .share-actions .mofa-btn {
     flex: 1 1 0;
   }
 
