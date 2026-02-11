@@ -7,6 +7,7 @@ from django.db import transaction
 import os
 from utils.audio_processor import process_audio, get_audio_duration
 import json
+import time
 
 
 @shared_task
@@ -288,10 +289,13 @@ def generate_debate_audio_task(episode_id, show_id):
 def generate_debate_followup_task(episode_id, topic, mode='debate'):
     """
     在现有辩论上继续生成一轮（用于用户插话后的群聊推进）。
+    只生成一条AI回复来回应用户消息。
     """
     from .models import Episode
-    from .services.conversation import ConversationManager
+    from .services.conversation import ConversationManager, _build_script_from_dialogue
     from .services.participants import get_participants_by_mode
+    from openai import OpenAI
+    from django.conf import settings
 
     episode = None
     try:
@@ -313,50 +317,72 @@ def generate_debate_followup_task(episode_id, topic, mode='debate'):
             ]
             episode.save(update_fields=['participants_config', 'updated_at'])
 
+        # 加载现有对话
         dialogue_entries = [dict(item) for item in (episode.dialogue or [])]
-        last_flush_at = 0.0
 
-        manager = ConversationManager(
-            participants=participants,
-            policy='sequential',
-            rounds=1
+        # 确定下一发言人（轮询：judge -> llm1 -> llm2 -> judge）
+        participant_order = ['judge', 'llm1', 'llm2'] if mode == 'debate' else ['tutor', 'student1', 'student2']
+
+        # 根据最后的发言者确定下一个
+        last_speaker = dialogue_entries[-1].get('participant') if dialogue_entries else None
+        if last_speaker in participant_order:
+            last_idx = participant_order.index(last_speaker)
+            next_idx = (last_idx + 1) % len(participant_order)
+        else:
+            # 如果最后一个是user或其他，选择第一个非主持人
+            next_idx = 1 if len(participant_order) > 1 else 0
+
+        next_speaker_id = participant_order[next_idx]
+        next_speaker = next(p for p in participants if p.id == next_speaker_id)
+
+        # 构建上下文（最近的几条消息）
+        recent_context = "\n\n".join([
+            f"{item.get('role', item.get('participant'))}: {item.get('content', '')}"
+            for item in dialogue_entries[-5:]  # 最近5条
+        ])
+
+        # 生成AI回复
+        prompt = (
+            f"当前正在讨论：{topic}\n\n"
+            f"最近的对话：\n{recent_context}\n\n"
+            f"请作为{next_speaker.role}，针对用户的最新发言给出你的观点回应。长度100-200字。"
         )
-        manager.set_dialogue_log(dialogue_entries)
 
-        def flush_dialogue(force=False):
-            nonlocal last_flush_at
-            now = time.monotonic()
-            if not force and now - last_flush_at < 0.25:
-                return
-            episode.dialogue = [dict(item) for item in dialogue_entries]
-            episode.save(update_fields=['dialogue', 'updated_at'])
-            last_flush_at = now
+        client = OpenAI(
+            api_key=getattr(settings, 'OPENAI_API_KEY', ''),
+            base_url=getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1')
+        )
+        model = getattr(settings, 'OPENAI_MODEL', 'moonshot-v1-8k')
 
-        def on_chunk(participant_id, content_chunk):
-            if not content_chunk:
-                return
-            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
-                dialogue_entries.append({
-                    'participant': participant_id,
-                    'content': content_chunk,
-                    'timestamp': timezone.now().isoformat()
-                })
-            else:
-                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
-            flush_dialogue()
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": next_speaker.system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.9,
+            max_tokens=500
+        )
 
-        for entry in manager.generate_dialogue(topic, on_chunk=on_chunk):
-            from .services.conversation import _merge_or_append_dialogue_entry
-            _merge_or_append_dialogue_entry(dialogue_entries, entry)
-            flush_dialogue(force=True)
+        content = response.choices[0].message.content.strip()
 
-        episode.dialogue = [dict(item) for item in dialogue_entries]
+        # 添加AI回复到对话
+        new_entry = {
+            'participant': next_speaker_id,
+            'role': next_speaker.role,
+            'content': content,
+            'timestamp': timezone.now().isoformat()
+        }
+        dialogue_entries.append(new_entry)
+
+        # 更新episode
+        episode.dialogue = dialogue_entries
         episode.script = _build_script_from_dialogue(dialogue_entries, participants)
         episode.status = 'published'
         episode.published_at = timezone.now()
         episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
 
-        return f"Debate followup {episode_id} generated successfully with {len(dialogue_entries)} entries"
+        return f"Debate followup {episode_id} generated successfully"
 
     except Exception as e:
         print(f"Failed to generate debate followup for episode {episode_id}: {e}")
