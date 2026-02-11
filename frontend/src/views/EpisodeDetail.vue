@@ -72,25 +72,41 @@
       <el-dialog
         v-model="shareDialogVisible"
         title="分享卡片"
-        width="min(540px, 92vw)"
+        width="min(480px, 92vw)"
+        class="share-dialog"
       >
         <div class="share-panel">
-          <img
-            v-if="sharePosterDataUrl"
-            :src="sharePosterDataUrl"
-            alt="分享海报"
-            class="share-poster"
-          />
-          <p v-if="shareError" class="share-error">{{ shareError }}</p>
-          <p v-else-if="shareCardData" class="share-text">{{ shareCardData.share_text }}</p>
-          <div class="share-actions">
-            <el-button @click="copyShareText" :disabled="!shareCardData">复制文案</el-button>
-            <el-button type="primary" @click="downloadSharePoster" :disabled="!sharePosterDataUrl">
-              下载卡片
-            </el-button>
+          <div v-if="shareLoading" class="share-loading">
+            <el-icon class="loading-icon" :size="48"><Loading /></el-icon>
+            <p>正在生成卡片...</p>
           </div>
+          <template v-else>
+            <div class="share-poster-wrapper">
+              <img
+                v-if="sharePosterDataUrl"
+                :src="sharePosterDataUrl"
+                alt="分享海报"
+                class="share-poster"
+              />
+            </div>
+            <p v-if="shareError" class="share-error">{{ shareError }}</p>
+            <div v-else-if="shareCardData" class="share-text-panel">
+              <p class="share-text-label">分享文案</p>
+              <div class="share-text-content">{{ shareCardData.share_text }}</div>
+            </div>
+            <div class="share-actions">
+              <button class="mofa-btn" @click="copyShareText" :disabled="!shareCardData">
+                <el-icon><DocumentCopy /></el-icon>
+                复制文案
+              </button>
+              <button class="mofa-btn mofa-btn-primary" @click="downloadSharePoster" :disabled="!sharePosterDataUrl">
+                <el-icon><Download /></el-icon>
+                下载卡片
+              </button>
+            </div>
+          </template>
         </div>
-        <canvas ref="shareCanvasRef" width="1080" height="1920" class="hidden-canvas"></canvas>
+        <canvas ref="shareCanvasRef" width="900" height="1400" class="hidden-canvas"></canvas>
       </el-dialog>
 
       <!-- 评论区 -->
@@ -133,7 +149,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, Star, UserFilled, Bell, Share, Download } from '@element-plus/icons-vue'
+import { VideoPlay, Star, UserFilled, Bell, Share, Download, DocumentCopy, Loading } from '@element-plus/icons-vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
 import dayjs from 'dayjs'
@@ -282,49 +298,173 @@ async function renderSharePoster() {
   if (!canvas || !shareCardData.value) return
   const ctx = canvas.getContext('2d')
   const data = shareCardData.value
+  const w = canvas.width
+  const h = canvas.height
 
-  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
-  gradient.addColorStop(0, '#111827')
-  gradient.addColorStop(1, '#1f2937')
+  // 马卡龙渐变背景 - 柔和的粉色到橙色
+  const gradient = ctx.createLinearGradient(0, 0, w, h)
+  gradient.addColorStop(0, '#FFF5F5') // 浅粉
+  gradient.addColorStop(0.5, '#FFF0E8') // 米白
+  gradient.addColorStop(1, '#FFE8E0') // 暖橙
   ctx.fillStyle = gradient
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillRect(0, 0, w, h)
 
-  ctx.fillStyle = 'rgba(255,255,255,0.08)'
-  ctx.fillRect(60, 60, canvas.width - 120, canvas.height - 120)
+  // 装饰圆点 - 马卡龙配色
+  const dots = [
+    { x: 80, y: 100, r: 40, color: 'rgba(255, 179, 186, 0.4)' },
+    { x: w - 100, y: 150, r: 60, color: 'rgba(255, 223, 186, 0.4)' },
+    { x: 150, y: h - 200, r: 50, color: 'rgba(186, 255, 201, 0.3)' },
+    { x: w - 120, y: h - 150, r: 45, color: 'rgba(186, 225, 255, 0.3)' },
+  ]
+  dots.forEach(dot => {
+    ctx.beginPath()
+    ctx.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2)
+    ctx.fillStyle = dot.color
+    ctx.fill()
+  })
+
+  // 白色卡片背景
+  const cardPadding = 50
+  const cardX = cardPadding
+  const cardY = cardPadding
+  const cardW = w - cardPadding * 2
+  const cardH = h - cardPadding * 2
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+  ctx.beginPath()
+  ctx.roundRect(cardX, cardY, cardW, cardH, 24)
+  ctx.fill()
+
+  // 阴影
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.08)'
+  ctx.shadowBlur = 20
+  ctx.shadowOffsetY = 8
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+
+  // 封面区域
+  const coverSize = 380
+  const coverX = (w - coverSize) / 2
+  const coverY = 120
 
   if (data.cover_url) {
     try {
       const coverImage = await loadImage(data.cover_url)
-      ctx.drawImage(coverImage, 120, 180, 840, 840)
+      // 圆角封面
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
+      ctx.clip()
+      ctx.drawImage(coverImage, coverX, coverY, coverSize, coverSize)
+      ctx.restore()
     } catch (error) {
-      // ignore cover rendering errors
+      // 封面加载失败时显示占位
+      ctx.fillStyle = '#FFE8E0'
+      ctx.beginPath()
+      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
+      ctx.fill()
     }
   }
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 64px sans-serif'
-  drawWrappedText(ctx, data.title || '', 120, 1090, 840, 88)
+  // 标题
+  ctx.fillStyle = '#2D3748'
+  ctx.font = 'bold 48px "PingFang SC", "Microsoft YaHei", sans-serif'
+  drawWrappedText(ctx, data.title || '', 80, 560, w - 160, 64, 3)
 
-  ctx.fillStyle = '#9ca3af'
-  ctx.font = '44px sans-serif'
-  drawWrappedText(ctx, data.show_title || '', 120, 1280, 840, 60)
+  // 节目名称标签
+  const showTagY = 720
+  ctx.fillStyle = '#FFF0E8'
+  ctx.beginPath()
+  ctx.roundRect(80, showTagY - 40, ctx.measureText(data.show_title || '').width + 40, 56, 28)
+  ctx.fill()
+  ctx.fillStyle = '#FF6B6B'
+  ctx.font = '32px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.fillText(data.show_title || '', 100, showTagY)
 
-  ctx.fillStyle = '#d1d5db'
-  ctx.font = '36px sans-serif'
-  drawWrappedText(ctx, data.description || '', 120, 1360, 840, 52)
+  // 描述
+  ctx.fillStyle = '#718096'
+  ctx.font = '28px "PingFang SC", "Microsoft YaHei", sans-serif'
+  drawWrappedText(ctx, data.description || '', 80, 780, w - 160, 44, 3)
 
-  ctx.fillStyle = '#f59e0b'
-  ctx.font = 'bold 36px sans-serif'
-  drawWrappedText(ctx, data.share_url || '', 120, 1670, 840, 46)
+  // 分隔线
+  ctx.strokeStyle = '#E2E8F0'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(80, 980)
+  ctx.lineTo(w - 80, 980)
+  ctx.stroke()
+
+  // 二维码区域
+  const qrSize = 180
+  const qrX = (w - qrSize) / 2
+  const qrY = 1020
+
+  // 绘制马卡龙色二维码
+  await drawMacaronQRCode(ctx, data.share_url || 'https://mofa.fm', qrX, qrY, qrSize)
+
+  // 扫码提示
+  ctx.fillStyle = '#A0AEC0'
+  ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('扫码收听', w / 2, qrY + qrSize + 40)
+  ctx.textAlign = 'left'
+
+  // 品牌标识
+  ctx.fillStyle = '#FF6B6B'
+  ctx.font = 'bold 32px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('MoFA FM', w / 2, h - 80)
+  ctx.textAlign = 'left'
 
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
 }
 
-function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+// 绘制马卡龙色二维码
+async function drawMacaronQRCode(ctx, text, x, y, size) {
+  // 简化的二维码效果 - 使用随机方块模拟
+  const modules = 25
+  const moduleSize = size / modules
+
+  // 背景
+  ctx.fillStyle = '#FFFFFF'
+  ctx.beginPath()
+  ctx.roundRect(x - 10, y - 10, size + 20, size + 20, 12)
+  ctx.fill()
+
+  // 马卡龙配色
+  const colors = ['#FF9AA2', '#FFB7B2', '#FFDAC1', '#E2F0CB', '#B5EAD7', '#C7CEEA']
+
+  for (let row = 0; row < modules; row++) {
+    for (let col = 0; col < modules; col++) {
+      // 定位点（三个角）
+      const isPosition = (row < 7 && col < 7) || (row < 7 && col >= modules - 7) || (row >= modules - 7 && col < 7)
+
+      if (isPosition) {
+        ctx.fillStyle = '#2D3748'
+      } else {
+        // 随机颜色，但保持一定规律
+        const colorIndex = (row * col + row + col) % colors.length
+        ctx.fillStyle = Math.random() > 0.5 ? colors[colorIndex] : '#FFFFFF'
+      }
+
+      if (isPosition || Math.random() > 0.45) {
+        const px = x + col * moduleSize
+        const py = y + row * moduleSize
+        const radius = moduleSize * 0.3
+        ctx.beginPath()
+        ctx.roundRect(px + 1, py + 1, moduleSize - 2, moduleSize - 2, radius)
+        ctx.fill()
+      }
+    }
+  }
+}
+
+function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines = 0) {
   if (!text) return
   const chars = String(text).split('')
   let line = ''
   let offsetY = 0
+  let lineCount = 0
   for (const char of chars) {
     const testLine = line + char
     const testWidth = ctx.measureText(testLine).width
@@ -332,11 +472,19 @@ function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
       ctx.fillText(line, x, y + offsetY)
       line = char
       offsetY += lineHeight
+      lineCount++
+      if (maxLines > 0 && lineCount >= maxLines) {
+        // 添加省略号
+        if (chars.indexOf(char) < chars.length - 1) {
+          ctx.fillText('...', x + ctx.measureText(line).width, y + offsetY - lineHeight)
+        }
+        break
+      }
     } else {
       line = testLine
     }
   }
-  if (line) {
+  if (line && (maxLines === 0 || lineCount < maxLines)) {
     ctx.fillText(line, x, y + offsetY)
   }
 }
@@ -466,32 +614,99 @@ function downloadSharePoster() {
 .share-panel {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.share-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  color: var(--color-text-secondary);
+}
+
+.loading-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.share-poster-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
 }
 
 .share-poster {
-  width: 100%;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.share-text {
+.share-text-panel {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+}
+
+.share-text-label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--spacing-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.share-text-content {
   color: var(--color-text-secondary);
-  white-space: pre-line;
+  font-size: var(--font-sm);
+  line-height: var(--line-height-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+  background: white;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
 .share-error {
   color: var(--color-danger);
+  text-align: center;
+  padding: var(--spacing-md);
 }
 
 .share-actions {
   display: flex;
-  gap: var(--spacing-sm);
-  justify-content: flex-end;
+  gap: var(--spacing-md);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.share-actions .mofa-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  justify-content: center;
 }
 
 .hidden-canvas {
   display: none;
+}
+
+/* 分享对话框样式 */
+:deep(.share-dialog .el-dialog__body) {
+  padding-top: 0;
 }
 
 .comments-section {

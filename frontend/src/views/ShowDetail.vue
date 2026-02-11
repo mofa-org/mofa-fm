@@ -19,13 +19,15 @@
             <span>{{ show.total_plays }} 播放</span>
           </div>
 
-          <el-button
+          <button
             v-if="isAuthenticated"
-            :type="isFollowing ? 'success' : 'primary'"
+            class="mofa-btn"
+            :class="{ 'mofa-btn-primary': !isFollowing, 'mofa-btn-success': isFollowing }"
             @click="handleFollow"
           >
+            <el-icon><Bell /></el-icon>
             {{ isFollowing ? '已关注' : '关注' }}
-          </el-button>
+          </button>
         </div>
       </div>
 
@@ -53,6 +55,7 @@ import api from '@/api'
 import EpisodeCard from '@/components/podcast/EpisodeCard.vue'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import { ElMessage } from 'element-plus'
+import { Bell } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const authStore = useAuthStore()
