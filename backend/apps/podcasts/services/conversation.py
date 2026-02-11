@@ -422,3 +422,40 @@ class ConversationManager:
     def get_dialogue_log(self) -> List[Dict]:
         """获取完整对话记录"""
         return self.dialogue_log
+
+
+def _merge_or_append_dialogue_entry(dialogue_entries: List[Dict], entry: Dict):
+    """合并或追加对话条目"""
+    if not dialogue_entries:
+        dialogue_entries.append(entry)
+        return
+
+    last_entry = dialogue_entries[-1]
+    if last_entry.get('participant') == entry.get('participant'):
+        # 同一参与者，合并内容
+        last_entry['content'] = f"{last_entry.get('content', '')}{entry.get('content', '')}"
+        if 'timestamp' in entry:
+            last_entry['timestamp'] = entry['timestamp']
+    else:
+        dialogue_entries.append(entry)
+
+
+def _build_script_from_dialogue(dialogue_entries: List[Dict], participants) -> str:
+    """从对话条目构建脚本格式"""
+    script_lines = []
+    participant_map = {p.id: p for p in participants}
+
+    for entry in dialogue_entries:
+        participant_id = entry.get('participant', '')
+        content = entry.get('content', '')
+
+        if participant_id == 'user':
+            role_name = '用户'
+        elif participant_id in participant_map:
+            role_name = participant_map[participant_id].role
+        else:
+            role_name = participant_id
+
+        script_lines.append(f"【{role_name}】{content}\n")
+
+    return "\n".join(script_lines)

@@ -284,6 +284,89 @@ def generate_debate_audio_task(episode_id, show_id):
         raise
 
 
+@shared_task
+def generate_debate_followup_task(episode_id, topic, mode='debate'):
+    """
+    在现有辩论上继续生成一轮（用于用户插话后的群聊推进）。
+    """
+    from .models import Episode
+    from .services.conversation import ConversationManager
+    from .services.participants import get_participants_by_mode
+
+    episode = None
+    try:
+        episode = Episode.objects.get(id=episode_id)
+        episode.status = 'processing'
+        episode.generation_error = ''
+        episode.save(update_fields=['status', 'generation_error', 'updated_at'])
+
+        participants = get_participants_by_mode(mode)
+        if not episode.participants_config:
+            episode.participants_config = [
+                {
+                    "id": p.id,
+                    "role": p.role,
+                    "system_prompt": p.system_prompt,
+                    "voice_id": p.voice_id
+                }
+                for p in participants
+            ]
+            episode.save(update_fields=['participants_config', 'updated_at'])
+
+        dialogue_entries = [dict(item) for item in (episode.dialogue or [])]
+        last_flush_at = 0.0
+
+        manager = ConversationManager(
+            participants=participants,
+            policy='sequential',
+            rounds=1
+        )
+        manager.set_dialogue_log(dialogue_entries)
+
+        def flush_dialogue(force=False):
+            nonlocal last_flush_at
+            now = time.monotonic()
+            if not force and now - last_flush_at < 0.25:
+                return
+            episode.dialogue = [dict(item) for item in dialogue_entries]
+            episode.save(update_fields=['dialogue', 'updated_at'])
+            last_flush_at = now
+
+        def on_chunk(participant_id, content_chunk):
+            if not content_chunk:
+                return
+            if not dialogue_entries or dialogue_entries[-1].get('participant') != participant_id:
+                dialogue_entries.append({
+                    'participant': participant_id,
+                    'content': content_chunk,
+                    'timestamp': timezone.now().isoformat()
+                })
+            else:
+                dialogue_entries[-1]['content'] = f"{dialogue_entries[-1].get('content', '')}{content_chunk}"
+            flush_dialogue()
+
+        for entry in manager.generate_dialogue(topic, on_chunk=on_chunk):
+            from .services.conversation import _merge_or_append_dialogue_entry
+            _merge_or_append_dialogue_entry(dialogue_entries, entry)
+            flush_dialogue(force=True)
+
+        episode.dialogue = [dict(item) for item in dialogue_entries]
+        episode.script = _build_script_from_dialogue(dialogue_entries, participants)
+        episode.status = 'published'
+        episode.published_at = timezone.now()
+        episode.save(update_fields=['dialogue', 'script', 'status', 'published_at', 'updated_at'])
+
+        return f"Debate followup {episode_id} generated successfully with {len(dialogue_entries)} entries"
+
+    except Exception as e:
+        print(f"Failed to generate debate followup for episode {episode_id}: {e}")
+        if episode:
+            episode.status = 'failed'
+            episode.generation_error = str(e)[:1000]
+            episode.save(update_fields=['status', 'generation_error', 'updated_at'])
+        raise
+
+
 async def stream_debate_response(episode_id: int, room_group_name: str):
     """
     Stream debate response via WebSocket.
