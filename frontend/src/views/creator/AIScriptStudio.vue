@@ -686,10 +686,7 @@
                             <h3>脚本预览</h3>
                             <div class="panel-actions">
                                 <button
-                                    v-if="
-                                        currentSession.current_script &&
-                                        !isEditingScript
-                                    "
+                                    v-if="!isEditingScript"
                                     @click="startEditScript"
                                     class="mofa-btn mofa-btn-sm"
                                 >
@@ -746,21 +743,21 @@
                         </div>
 
                         <div class="script-content">
+                            <textarea
+                                v-if="isEditingScript"
+                                v-model="editableScript"
+                                class="script-editor"
+                                placeholder="在这里编辑脚本，可以直接粘贴外部内容..."
+                            ></textarea>
                             <div
-                                v-if="!currentSession.current_script"
+                                v-else-if="!currentSession.current_script"
                                 class="script-empty"
                             >
                                 <p>还没有生成脚本</p>
                                 <p class="hint">
-                                    在左侧与 AI 对话，让它帮你创作脚本
+                                    点击"编辑"按钮直接粘贴内容，或在左侧与 AI 对话创作
                                 </p>
                             </div>
-                            <textarea
-                                v-else-if="isEditingScript"
-                                v-model="editableScript"
-                                class="script-editor"
-                                placeholder="在这里编辑脚本..."
-                            ></textarea>
                             <pre v-else class="script-text">{{
                                 currentSession.current_script
                             }}</pre>
@@ -2155,7 +2152,7 @@ function copyScript() {
 
 // 开始编辑脚本
 function startEditScript() {
-    editableScript.value = currentSession.value.current_script;
+    editableScript.value = currentSession.value.current_script || "";
     isEditingScript.value = true;
 }
 
