@@ -7,9 +7,12 @@
         :class="{ 'placeholder-cover': isPlaceholderCover }"
       />
       <div class="play-overlay">
-        <el-icon class="play-icon" :size="48">
-          <VideoPlay />
-        </el-icon>
+        <div class="play-button">
+          <el-icon class="play-icon" :size="36">
+            <VideoPlay />
+          </el-icon>
+          <span class="play-text">播放</span>
+        </div>
       </div>
       <!-- 可见性徽章 -->
       <div v-if="visibilityBadge" class="visibility-badge" :class="`badge-${effectiveVisibility}`">
@@ -31,7 +34,9 @@
       </div>
 
       <router-link v-if="episode.show" :to="`/shows/${episode.show.slug}`" class="show-name">
-        {{ episode.show.title }}
+        <el-icon><Folder /></el-icon>
+        <span>{{ episode.show.title }}</span>
+        <el-icon class="arrow-icon"><ArrowRight /></el-icon>
       </router-link>
       <div v-else class="show-name debate-badge">
         {{ episode.mode === 'debate' ? 'AI辩论' : 'AI会议' }}
@@ -76,7 +81,7 @@
 import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
-import { VideoPlay, Lock, View, User, Share, Download } from '@element-plus/icons-vue'
+import { VideoPlay, Lock, View, User, Share, Download, Folder, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -289,20 +294,49 @@ function formatDate(date) {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: var(--transition);
+  transition: all 0.3s ease;
 }
 
 .episode-cover:hover .play-overlay {
   opacity: 1;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.play-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transform: scale(0.8);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.episode-cover:hover .play-button {
+  transform: scale(1);
+}
+
+.play-button:hover {
+  background: white;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .play-icon {
-  color: white;
+  color: var(--color-primary);
+}
+
+.play-text {
+  font-size: 11px;
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
 }
 
 .episode-info {
@@ -324,13 +358,33 @@ function formatDate(date) {
 
 .show-name {
   font-size: var(--font-sm);
-  color: var(--color-text-tertiary);
-  display: block;
+  font-weight: var(--font-semibold);
+  color: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-bottom: var(--spacing-sm);
+  padding: 2px 8px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
 }
 
 .show-name:hover {
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+}
+
+.show-name .arrow-icon {
+  font-size: 12px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: var(--transition);
+}
+
+.show-name:hover .arrow-icon {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .episode-description {
@@ -370,6 +424,21 @@ function formatDate(date) {
     height: 100px;
   }
 
+  /* 移动端始终显示播放按钮 */
+  .play-overlay {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .play-button {
+    transform: scale(0.85);
+    padding: 10px 16px;
+  }
+
+  .play-text {
+    display: none;
+  }
+
   .episode-title {
     font-size: var(--font-base);
   }
@@ -397,11 +466,17 @@ function formatDate(date) {
   }
 
   .play-overlay {
-    opacity: 0.7;
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.2);
   }
 
-  .play-icon {
-    font-size: 32px !important;
+  .play-button {
+    transform: scale(0.75);
+    padding: 8px 12px;
+  }
+
+  .play-text {
+    display: none;
   }
 
   .episode-title {

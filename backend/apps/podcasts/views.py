@@ -122,7 +122,10 @@ class EpisodeListView(generics.ListAPIView):
     ordering = ['-published_at']
 
     def get_queryset(self):
-        queryset = Episode.objects.filter(status='published').select_related('show__creator')
+        queryset = Episode.objects.filter(
+            status='published',
+            published_at__isnull=False
+        ).select_related('show__creator')
 
         # 如果提供了 show_slug，过滤该节目的单集
         show_slug = self.request.query_params.get('show_slug')
