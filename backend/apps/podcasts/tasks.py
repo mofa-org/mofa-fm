@@ -100,7 +100,7 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
                 storage.delete(placeholder_name)
         
         # Generate
-        generator.generate(script_content, full_path, voice_config=voice_config)
+        generator.generate(script_content, full_path, voice_overrides=voice_config)
 
         # Update episode
         episode.audio_file.name = relative_path
