@@ -11,10 +11,16 @@
     <div class="player-content">
       <!-- 左侧：单集信息 -->
       <div class="player-info">
-        <img :src="currentEpisode.cover_url" alt="封面" class="player-cover" />
+        <router-link :to="episodeLink" class="player-cover-link">
+          <img :src="currentEpisode.cover_url" alt="封面" class="player-cover" />
+        </router-link>
         <div class="player-meta">
-          <div class="episode-title">{{ currentEpisode.title }}</div>
-          <div class="show-title">{{ currentEpisode.show.title }}</div>
+          <router-link :to="episodeLink" class="episode-title-link">
+            <div class="episode-title">{{ currentEpisode.title }}</div>
+          </router-link>
+          <router-link :to="showLink" class="show-title-link">
+            <div class="show-title">{{ currentEpisode.show.title }}</div>
+          </router-link>
         </div>
       </div>
 
@@ -75,12 +81,12 @@
           <el-icon><Download /></el-icon>
         </button>
 
-        <!-- 查看脚本按钮 -->
+        <!-- 展开脚本按钮 -->
         <button
           v-if="currentEpisode.script"
-          class="player-btn player-btn-icon"
-          @click="showScriptDialog = true"
-          title="查看脚本"
+          class="player-btn player-btn-icon player-btn-script"
+          @click="toggleScriptPanel"
+          title="展开脚本"
         >
           <el-icon><Document /></el-icon>
         </button>
@@ -100,6 +106,23 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+      </div>
+    </div>
+
+    <!-- 脚本面板（底部展开） -->
+    <div
+      v-if="isScriptPanelOpen && currentEpisode?.script"
+      class="script-panel"
+      :class="{ 'mobile': isMobile }"
+    >
+      <div class="script-panel-header">
+        <h4 class="script-panel-title">播客脚本</h4>
+        <button class="script-panel-close" @click="toggleScriptPanel">
+          <el-icon><Close /></el-icon>
+        </button>
+      </div>
+      <div class="script-panel-content">
+        <div class="script-text" v-html="formattedScript"></div>
       </div>
     </div>
 
@@ -136,7 +159,8 @@ import {
   ArrowUp,
   ArrowDown,
   Document,
-  Download
+  Download,
+  Close
 } from '@element-plus/icons-vue'
 
 const playerStore = usePlayerStore()
@@ -147,6 +171,34 @@ const sliderValue = ref(0)
 const isCollapsed = ref(false)
 const showScriptDialog = ref(false)
 const isInApp = ref(false)
+const isScriptPanelOpen = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
+
+// 监听窗口大小变化
+window.addEventListener('resize', () => {
+  isMobile.value = window.innerWidth <= 768
+})
+
+// 链接计算
+const episodeLink = computed(() => {
+  if (!currentEpisode.value?.show?.slug) return '/'
+  return `/shows/${currentEpisode.value.show.slug}/episodes/${currentEpisode.value.slug}`
+})
+
+const showLink = computed(() => {
+  if (!currentEpisode.value?.show?.slug) return '/'
+  return `/shows/${currentEpisode.value.show.slug}`
+})
+
+// 格式化脚本（简单换行处理）
+const formattedScript = computed(() => {
+  if (!currentEpisode.value?.script) return ''
+  return currentEpisode.value.script.replace(/\n/g, '<br>')
+})
+
+function toggleScriptPanel() {
+  isScriptPanelOpen.value = !isScriptPanelOpen.value
+}
 
 const currentEpisode = computed(() => playerStore.currentEpisode)
 
@@ -499,6 +551,105 @@ function handleScriptUpdated(updatedEpisode) {
 
 .progress-slider :deep(.el-slider__button):hover {
   transform: scale(1.2);
+}
+
+/* 脚本面板 */
+.script-panel {
+  position: fixed;
+  bottom: var(--player-height);
+  left: 0;
+  right: 0;
+  background: var(--color-white);
+  border-top: 2px solid var(--border-color);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 98;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.script-panel.mobile {
+  max-height: 70vh;
+  bottom: 0;
+}
+
+.script-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--color-bg-secondary);
+}
+
+.script-panel-title {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-bold);
+  color: var(--color-text-primary);
+}
+
+.script-panel-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-white);
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: var(--transition-fast);
+}
+
+.script-panel-close:hover {
+  background: var(--color-light-gray);
+  color: var(--color-primary);
+}
+
+.script-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  background: var(--color-bg-primary);
+}
+
+.script-text {
+  font-size: var(--font-base);
+  line-height: 1.8;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+}
+
+/* 标题链接样式 */
+.player-cover-link {
+  display: block;
+  flex-shrink: 0;
+}
+
+.episode-title-link,
+.show-title-link {
+  text-decoration: none;
+  display: block;
+}
+
+.episode-title-link:hover .episode-title,
+.show-title-link:hover .show-title {
+  color: var(--color-primary);
+}
+
+/* 脚本按钮 */
+.player-btn-script {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.player-btn-script .btn-text {
+  font-size: 10px;
+  font-weight: var(--font-bold);
 }
 
 /* 响应式 */

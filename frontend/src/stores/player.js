@@ -4,6 +4,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 export const usePlayerStore = defineStore('player', () => {
   const currentEpisode = ref(null)
@@ -90,7 +91,7 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   // 播放单集
-  function play(episode, episodeList = null) {
+  async function play(episode, episodeList = null) {
     initAudio()
 
     // 如果提供了播放列表，更新播放列表
@@ -105,13 +106,25 @@ export const usePlayerStore = defineStore('player', () => {
 
     // 切换单集
     if (!currentEpisode.value || currentEpisode.value.id !== episode.id) {
-      currentEpisode.value = episode
-      audio.value.src = episode.audio_url
+      // 获取完整的 episode 详情（包含 script）
+      let fullEpisode = episode
+      if (!episode.script && episode.id) {
+        try {
+          const res = await api.podcasts.getEpisodeById(episode.id)
+          fullEpisode = res.data || res
+        } catch (e) {
+          console.warn('获取 episode 详情失败，使用列表数据', e)
+        }
+      }
+
+      currentEpisode.value = fullEpisode
+      audio.value.src = fullEpisode.audio_url || episode.audio_url
       audio.value.load()
 
       // 恢复播放进度
-      if (episode.play_position) {
-        audio.value.currentTime = episode.play_position
+      const playPosition = fullEpisode.play_position || episode.play_position
+      if (playPosition) {
+        audio.value.currentTime = playPosition
       }
     }
 
@@ -200,6 +213,10 @@ export const usePlayerStore = defineStore('player', () => {
   // 保存播放进度到服务器
   async function saveProgress(completed = false) {
     if (!currentEpisode.value) return
+
+    // 未登录用户不保存进度
+    const authStore = useAuthStore()
+    if (!authStore.isAuthenticated) return
 
     try {
       await api.interactions.updatePlayProgress({

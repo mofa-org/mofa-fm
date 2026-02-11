@@ -111,13 +111,7 @@
                                         >{{
                                             session.chat_history?.length || 0
                                         }}
-                                        条对话</span
-                                    >
-                                    <span
-                                        >{{
-                                            session.uploaded_files_count || 0
-                                        }}
-                                        个文件</span
+                                        轮对话</span
                                     >
                                 </div>
                                 <div
