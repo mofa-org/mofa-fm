@@ -310,58 +310,84 @@ async function renderSharePoster() {
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, w, h)
 
-  // 绘制 Logo
+  // 顶部 Logo
   try {
     const logoImage = await loadImage('/logo.png')
-    const logoSize = 60
-    ctx.drawImage(logoImage, 40, 40, logoSize, logoSize)
+    const logoSize = 50
+    ctx.drawImage(logoImage, 40, 30, logoSize, logoSize)
   } catch (e) {
-    // logo 加载失败时显示文字
     ctx.fillStyle = '#FF6B6B'
-    ctx.font = 'bold 32px sans-serif'
-    ctx.fillText('MoFA FM', 40, 80)
+    ctx.font = 'bold 28px sans-serif'
+    ctx.fillText('MoFA FM', 40, 70)
   }
 
-  // 主标题 - 大字号白色文字
+  // 主封面 - 大尺寸居中
+  const coverSize = 320
+  const coverX = (w - coverSize) / 2
+  const coverY = 100
+
+  if (data.cover_url) {
+    try {
+      const coverImage = await loadImage(data.cover_url)
+      // 圆角封面
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
+      ctx.clip()
+      ctx.drawImage(coverImage, coverX, coverY, coverSize, coverSize)
+      ctx.restore()
+    } catch (error) {
+      // 封面加载失败时显示占位
+      ctx.fillStyle = '#2a2a4a'
+      ctx.beginPath()
+      ctx.roundRect(coverX, coverY, coverSize, coverSize, 16)
+      ctx.fill()
+    }
+  }
+
+  // 标题 - 封面下方
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 56px "PingFang SC", "Microsoft YaHei", sans-serif'
-  drawWrappedText(ctx, data.title || '', 40, 160, w - 200, 72, 3)
+  ctx.font = 'bold 48px "PingFang SC", "Microsoft YaHei", sans-serif'
+  drawWrappedText(ctx, data.title || '', 40, coverY + coverSize + 50, w - 80, 60, 2)
 
   // 节目名称
   ctx.fillStyle = '#FF6B6B'
-  ctx.font = '32px "PingFang SC", "Microsoft YaHei", sans-serif'
-  ctx.fillText(data.show_title || '', 40, 380)
+  ctx.font = '28px "PingFang SC", "Microsoft YaHei", sans-serif'
+  ctx.fillText(data.show_title || '', 40, coverY + coverSize + 140)
 
-  // 描述
-  ctx.fillStyle = '#a0a0a0'
-  ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif'
-  drawWrappedText(ctx, data.description || '', 40, 430, w - 200, 36, 2)
+  // 底部区域
+  const bottomY = h - 160
 
-  // 底部信息栏
-  const bottomY = h - 120
-
-  // 左侧：mofa.ai 引流
+  // 左侧：mofa.fm
   ctx.fillStyle = '#ffffff'
-  ctx.font = 'bold 28px "PingFang SC", sans-serif'
-  ctx.fillText('mofa.ai', 40, bottomY + 50)
+  ctx.font = 'bold 32px "PingFang SC", sans-serif'
+  ctx.fillText('mofa.fm', 40, bottomY + 40)
 
+  // powered by mofa.ai
   ctx.fillStyle = '#888888'
-  ctx.font = '20px "PingFang SC", sans-serif'
-  ctx.fillText('发现更多 AI 播客', 40, bottomY + 80)
+  ctx.font = '18px "PingFang SC", sans-serif'
+  ctx.fillText('powered by mofa.ai', 40, bottomY + 70)
 
-  // 右侧：二维码
-  const qrSize = 100
+  // 右侧：大二维码
+  const qrSize = 120
   const qrX = w - qrSize - 40
   const qrY = bottomY
 
   // 白色背景框
   ctx.fillStyle = '#ffffff'
   ctx.beginPath()
-  ctx.roundRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20, 8)
+  ctx.roundRect(qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 12)
   ctx.fill()
 
   // 绘制二维码
   await drawQRCode(ctx, data.share_url || 'https://mofa.fm', qrX, qrY, qrSize)
+
+  // 扫码提示
+  ctx.fillStyle = '#a0a0a0'
+  ctx.font = '16px "PingFang SC", sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('扫码收听', qrX + qrSize/2, qrY + qrSize + 30)
+  ctx.textAlign = 'left'
 
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
 }
