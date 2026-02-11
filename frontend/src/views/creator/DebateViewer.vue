@@ -106,7 +106,22 @@ const sending = ref(false)
 const activeStreamingIndex = ref(-1)
 const chatPanelRef = ref(null)
 
+// 消息ID集合，用于去重（防止消息被重复添加或覆盖）
+const messageIds = ref(new Set())
+
 let eventSource = null
+
+// 生成唯一ID
+function generateMessageId(entry) {
+  if (!entry) return ''
+  // 使用参与者+内容哈希+时间戳（取到秒）生成唯一ID
+  const content = entry.content || ''
+  const participant = entry.participant || ''
+  const timestamp = entry.timestamp || ''
+  // 取时间戳的前19位（到秒），忽略毫秒差异
+  const tsPrefix = typeof timestamp === 'string' ? timestamp.slice(0, 19) : timestamp
+  return `${participant}:${tsPrefix}:${content.slice(0, 50)}`
+}
 
 const participantConfig = computed(() => {
   if (!episode.value?.participants_config) return {}
@@ -148,6 +163,14 @@ async function loadEpisode() {
     const data = await api.podcasts.getEpisodeById(route.params.episodeId)
     episode.value = data
     dialogue.value = data?.dialogue || []
+    // 初始化消息ID集合
+    messageIds.value.clear()
+    dialogue.value.forEach(entry => {
+      messageIds.value.add(generateMessageId(entry))
+      if (entry.participant === 'user' && entry.content) {
+        messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
+      }
+    })
   } catch (err) {
     console.error('Failed to load episode:', err)
     error.value = err.response?.data?.error || '加载失败'
@@ -182,12 +205,18 @@ async function sendMessage() {
     error.value = ''
 
     // 乐观更新：立即将用户消息添加到本地对话
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const userEntry = {
       participant: 'user',
       role: '我',
       content: message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      clientId  // 客户端唯一标识，用于去重
     }
+    // 添加ID到集合，防止后续被覆盖
+    messageIds.value.add(generateMessageId(userEntry))
+    // 也添加一个基于内容的备用ID
+    messageIds.value.add(`user:${message.slice(0, 50)}`)
     dialogue.value.push(userEntry)
     scrollToBottom()
 
@@ -283,28 +312,42 @@ function stopStreaming() {
 function mergeOrAppendDialogue(entry) {
   if (!entry) return dialogue.value.length - 1
 
-  // 1. 先按时间戳+参与者查找（精确匹配）
-  const idxByStamp = dialogue.value.findIndex((item) => {
-    return item.timestamp && entry.timestamp && item.timestamp === entry.timestamp && item.participant === entry.participant
-  })
-  if (idxByStamp >= 0) {
-    dialogue.value[idxByStamp] = { ...dialogue.value[idxByStamp], ...entry }
-    return idxByStamp
-  }
-
-  // 2. 对于用户消息，检查是否有内容相同的本地消息（避免重复显示）
-  if (entry.participant === 'user') {
-    const idxByContent = dialogue.value.findIndex((item) => {
-      return item.participant === 'user' && item.content === entry.content
-    })
-    if (idxByContent >= 0) {
-      // 更新时间戳等信息
-      dialogue.value[idxByContent] = { ...dialogue.value[idxByContent], ...entry }
-      return idxByContent
+  // 1. 检查是否有 clientId 匹配（精确匹配本地乐观添加的消息）
+  if (entry.clientId) {
+    const idxByClientId = dialogue.value.findIndex((item) => item.clientId === entry.clientId)
+    if (idxByClientId >= 0) {
+      dialogue.value[idxByClientId] = { ...dialogue.value[idxByClientId], ...entry }
+      return idxByClientId
     }
   }
 
-  // 3. 对于AI消息，检查是否是要更新现有条目
+  // 2. 生成消息ID并检查是否已存在（防止完全重复的消息）
+  const msgId = generateMessageId(entry)
+  if (messageIds.value.has(msgId)) {
+    const idx = dialogue.value.findIndex((item) => generateMessageId(item) === msgId)
+    if (idx >= 0) {
+      dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
+      return idx
+    }
+  }
+
+  // 3. 特殊处理用户消息：检查内容是否匹配（防止乐观添加的消息和SSE推送的重复）
+  if (entry.participant === 'user' && entry.content) {
+    const contentPrefix = entry.content.slice(0, 50)
+    const contentId = `user:${contentPrefix}`
+    if (messageIds.value.has(contentId)) {
+      // 已存在相同内容的用户消息，更新时间戳等信息
+      const idx = dialogue.value.findIndex((item) =>
+        item.participant === 'user' && item.content === entry.content
+      )
+      if (idx >= 0) {
+        dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
+        return idx
+      }
+    }
+  }
+
+  // 4. 特殊处理：检查是否是同一参与者的流式更新（内容前缀匹配）
   const lastIndex = dialogue.value.length - 1
   const last = dialogue.value[lastIndex]
   if (last && last.participant === entry.participant && entry.participant !== 'user') {
@@ -312,12 +355,18 @@ function mergeOrAppendDialogue(entry) {
     const nextContent = entry.content || ''
     // 只有当内容有明显包含关系时才合并（流式更新）
     if (nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
+      const clientId = last.clientId
       dialogue.value[lastIndex] = { ...last, ...entry }
+      if (clientId) dialogue.value[lastIndex].clientId = clientId
       return lastIndex
     }
   }
 
-  // 4. 否则追加为新消息
+  // 5. 新消息，追加
+  messageIds.value.add(msgId)
+  if (entry.participant === 'user' && entry.content) {
+    messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
+  }
   dialogue.value.push(entry)
   return dialogue.value.length - 1
 }
