@@ -66,7 +66,7 @@
 
       <div v-if="isCreator && !isEditing" class="tip">
         <el-icon><InfoFilled /></el-icon>
-        提示：您可以编辑脚本来调整TTS发音，比如使用错别字让AI读得更准确
+        提示：您可以编辑脚本来调整TTS发音，比如使用同音字让AI读得更准确
       </div>
     </div>
   </div>
