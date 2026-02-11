@@ -100,6 +100,8 @@ class MiniMaxWebSocketClient:
         ssl_context.verify_mode = ssl.CERT_NONE
 
         try:
+            # MiniMax WebSocket API uses Bearer token in Authorization header
+            headers = {"Authorization": f"Bearer {self.config.api_key}"}
             self._ws = await websockets.connect(
                 "wss://api.minimax.io/ws/v1/t2a_v2",
                 additional_headers=headers,

@@ -31,6 +31,7 @@ from .serializers import (
 from .permissions import IsShowOwner
 from .services.speaker_config import normalize_speaker_config, apply_speaker_names
 from .services.rss_schedule import compute_next_run_at
+from slugify import slugify as awesome_slugify
 
 User = get_user_model()
 
@@ -557,7 +558,7 @@ def retry_generation(request, episode_id):
                 sort_by,
                 template,
             )
-    elif source_url and generation_type in {'source', 'webpage'}:
+    elif source_url and generation_type in {'source', 'webpage', 'web'}:
         if speaker_config:
             generate_source_podcast_task.delay(
                 episode.id,
@@ -1251,6 +1252,8 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
         session = self.get_object()
         segment_text = (request.data.get('segment_text') or '').strip()
+        voice_id = (request.data.get('voice_id') or '').strip()
+
         if not segment_text:
             return Response({'error': 'segment_text 不能为空'}, status=status.HTTP_400_BAD_REQUEST)
         if not re.match(r"^【[^】]+】", segment_text):
@@ -1261,7 +1264,24 @@ class ScriptSessionViewSet(viewsets.ModelViewSet):
 
         try:
             generator = PodcastGenerator()
-            generator.generate(segment_text, output_path)
+
+            # 如果指定了 voice_id，构建 voice_overrides
+            voice_overrides = None
+            if voice_id:
+                # 从片段中提取角色名
+                role_match = re.match(r"^【([^】]+)】", segment_text)
+                if role_match:
+                    role_name = role_match.group(1).strip()
+                    # 获取角色的 alias
+                    role_alias = generator.character_aliases.get(role_name)
+                    if role_alias:
+                        voice_overrides = {role_alias: {"voice_id": voice_id}}
+
+            generator.generate(
+                segment_text,
+                output_path,
+                voice_overrides=voice_overrides
+            )
         except Exception as e:
             return Response({'error': f'试听生成失败: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1726,3 +1746,67 @@ def my_debates(request):
 
     serializer = EpisodeDetailSerializer(episodes, many=True, context={'request': request})
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_episode_from_web(request):
+    """
+    从网页 URL 创建播客对话会话
+    接收网页链接，抓取内容生成播客脚本，创建对话会话供用户编辑
+    """
+    from .services.web_ingest import fetch_webpage_content, generate_podcast_script_from_web
+
+    url = request.data.get('url')
+    show_id = request.data.get('show_id')
+
+    if not url:
+        return Response({'error': '请提供网页链接'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # 抓取网页内容
+        web_content = fetch_webpage_content(url)
+
+        if not web_content.content or len(web_content.content) < 100:
+            return Response({'error': '无法提取网页内容，请检查链接是否有效'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 使用 AI 将网页内容转换为播客脚本
+        podcast_script = generate_podcast_script_from_web(web_content)
+
+        if not podcast_script or len(podcast_script) < 100:
+            return Response({'error': '无法生成播客脚本，请稍后重试'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 创建对话会话，把生成的脚本放进去
+        title = web_content.title or f"网页播客 {uuid4().hex[:6]}"
+        session = ScriptSession.objects.create(
+            creator=request.user,
+            title=title,
+            current_script=podcast_script,
+            chat_history=[
+                {
+                    'role': 'system',
+                    'content': f'已从网页生成播客脚本：{url}',
+                    'timestamp': timezone.now().isoformat(),
+                },
+                {
+                    'role': 'assistant',
+                    'content': f'我已根据网页内容生成了播客脚本，你可以直接编辑脚本或与我对话修改。',
+                    'timestamp': timezone.now().isoformat(),
+                }
+            ],
+            voice_config={
+                'target_show_id': show_id,
+                'source_url': url,
+            } if show_id else {'source_url': url},
+        )
+
+        return Response({
+            'message': '已从网页生成播客脚本',
+            'session_id': session.id,
+            'title': title,
+            'script': podcast_script,
+            'word_count': web_content.word_count,
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response({'error': f'处理失败: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -44,6 +44,13 @@
                         </button>
                         <button
                             class="mode-tab"
+                            :class="{ active: entryMode === 'web' }"
+                            @click="entryMode = 'web'"
+                        >
+                            网页转播客
+                        </button>
+                        <button
+                            class="mode-tab"
                             :class="{ active: entryMode === 'debate' }"
                             @click="entryMode = 'debate'"
                         >
@@ -126,6 +133,55 @@
                                     }}...
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div v-else-if="entryMode === 'web'" class="mode-panel">
+                        <p class="section-tip">
+                            输入网页链接，AI 自动提取内容并转换成播客音频。
+                        </p>
+                        <div class="web-form">
+                            <div class="form-group">
+                                <label>网页链接</label>
+                                <input
+                                    v-model="webUrl"
+                                    type="url"
+                                    class="form-input"
+                                    placeholder="https://example.com/article"
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label>目标节目（可选）</label>
+                                <select v-model="webTargetShowId" class="form-select">
+                                    <option value="">默认节目</option>
+                                    <option
+                                        v-for="show in myShows"
+                                        :key="show.id"
+                                        :value="show.id"
+                                    >
+                                        {{ show.title }}
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>标题（可选）</label>
+                                <input
+                                    v-model="webTitle"
+                                    type="text"
+                                    class="form-input"
+                                    placeholder="不填则自动使用网页标题"
+                                />
+                            </div>
+                        </div>
+                        <p v-if="webError" class="error-message">{{ webError }}</p>
+                        <div class="rss-actions">
+                            <button
+                                class="mofa-btn mofa-btn-primary"
+                                :disabled="!webUrl || webSubmitting"
+                                @click="createFromWeb"
+                            >
+                                {{ webSubmitting ? "生成中..." : "开始生成" }}
+                            </button>
                         </div>
                     </div>
 
@@ -534,14 +590,6 @@
                         >
                             删除会话
                         </button>
-                        <button
-                            v-if="currentSession.current_script"
-                            @click="openGenerateDialog"
-                            class="mofa-btn mofa-btn-success"
-                            :disabled="generating"
-                        >
-                            {{ generating ? "生成中..." : "生成音频" }}
-                        </button>
                     </div>
                 </div>
 
@@ -763,16 +811,41 @@
                             }}</pre>
                         </div>
 
+                        <!-- 生成音频按钮 -->
+                        <div
+                            v-if="currentSession.current_script && !isEditingScript"
+                            class="script-generate-action"
+                        >
+                            <button
+                                @click="openGenerateDialog"
+                                class="mofa-btn mofa-btn-success"
+                                :disabled="generating"
+                            >
+                                <el-icon><VideoPlay /></el-icon>
+                                {{ generating ? "生成中..." : "生成音频" }}
+                            </button>
+                            <p class="hint">脚本已准备好，点击生成音频</p>
+                        </div>
+
                         <div
                             v-if="!isEditingScript && scriptSegments.length > 0"
                             class="segment-tools"
+                            :class="{ collapsed: segmentToolsCollapsed }"
                         >
-                            <div class="segment-tools-header">
+                            <div
+                                class="segment-tools-header"
+                                @click="segmentToolsCollapsed = !segmentToolsCollapsed"
+                                style="cursor: pointer;"
+                            >
                                 <h4>试听即改</h4>
                                 <span class="hint"
                                     >段落级试听 / 局部重写 / 局部重生音频</span
                                 >
+                                <span class="collapse-icon">
+                                    {{ segmentToolsCollapsed ? '▼' : '▲' }}
+                                </span>
                             </div>
+                            <div v-show="!segmentToolsCollapsed" class="segment-tools-content">
                             <div class="segment-controls">
                                 <select
                                     v-model.number="selectedSegmentIndex"
@@ -787,35 +860,51 @@
                                         {{ segment.role }}
                                     </option>
                                 </select>
-                                <button
-                                    class="mofa-btn mofa-btn-sm"
-                                    :disabled="
-                                        segmentPreviewLoading ||
-                                        !selectedSegment
-                                    "
-                                    @click="previewSelectedSegment"
+                                <select
+                                    v-model="selectedSegmentVoiceId"
+                                    class="form-select"
+                                    title="选择音色"
                                 >
-                                    {{
-                                        segmentPreviewLoading
-                                            ? "生成中..."
-                                            : "试听片段"
-                                    }}
-                                </button>
-                                <button
-                                    class="mofa-btn mofa-btn-sm mofa-btn-success"
-                                    :disabled="
-                                        segmentRewriteLoading ||
-                                        !selectedSegment ||
-                                        !segmentRewriteInstruction.trim()
-                                    "
-                                    @click="rewriteSelectedSegment"
-                                >
-                                    {{
-                                        segmentRewriteLoading
-                                            ? "改写中..."
-                                            : "局部重写"
-                                    }}
-                                </button>
+                                    <option value="">默认音色</option>
+                                    <option
+                                        v-for="voice in availableTTSVoices"
+                                        :key="`segment-voice-${voice.voice_id}`"
+                                        :value="voice.voice_id"
+                                    >
+                                        {{ formatVoiceLabel(voice) }}
+                                    </option>
+                                </select>
+                                <div class="segment-controls-row">
+                                    <button
+                                        class="mofa-btn mofa-btn-sm"
+                                        :disabled="
+                                            segmentPreviewLoading ||
+                                            !selectedSegment
+                                        "
+                                        @click="previewSelectedSegment"
+                                    >
+                                        {{
+                                            segmentPreviewLoading
+                                                ? "生成中..."
+                                                : "试听片段"
+                                        }}
+                                    </button>
+                                    <button
+                                        class="mofa-btn mofa-btn-sm mofa-btn-success"
+                                        :disabled="
+                                            segmentRewriteLoading ||
+                                            !selectedSegment ||
+                                            !segmentRewriteInstruction.trim()
+                                        "
+                                        @click="rewriteSelectedSegment"
+                                    >
+                                        {{
+                                            segmentRewriteLoading
+                                                ? "改写中..."
+                                                : "局部重写"
+                                        }}
+                                    </button>
+                                </div>
                             </div>
                             <div
                                 v-if="selectedSegment"
@@ -837,18 +926,25 @@
                                 controls
                                 class="segment-audio"
                             ></audio>
+                            </div>
                         </div>
 
                         <div
                             v-if="currentSession.script_versions?.length > 1"
                             class="script-versions"
+                            :class="{ collapsed: scriptVersionsCollapsed }"
                         >
-                            <div class="versions-header">
-                                历史版本 ({{
-                                    currentSession.script_versions.length
-                                }})
+                            <div
+                                class="versions-header"
+                                @click="scriptVersionsCollapsed = !scriptVersionsCollapsed"
+                                style="cursor: pointer;"
+                            >
+                                <span>历史版本 ({{ currentSession.script_versions.length }})</span>
+                                <span class="collapse-icon">
+                                    {{ scriptVersionsCollapsed ? '▼' : '▲' }}
+                                </span>
                             </div>
-                            <div class="versions-list">
+                            <div v-show="!scriptVersionsCollapsed" class="versions-list">
                                 <button
                                     v-for="(
                                         version, index
@@ -1228,6 +1324,13 @@ const generationQueue = ref([]);
 const queueLoading = ref(false);
 const queueFilters = ref([]); // 空数组表示显示所有状态的任务
 
+// 网页生成相关
+const webUrl = ref("");
+const webTargetShowId = ref("");
+const webTitle = ref("");
+const webSubmitting = ref(false);
+const webError = ref("");
+
 // 聊天相关
 const userMessage = ref("");
 const aiThinking = ref(false);
@@ -1269,6 +1372,9 @@ const segmentPreviewLoading = ref(false);
 const segmentRewriteLoading = ref(false);
 const segmentPreviewUrl = ref("");
 const segmentRewriteInstruction = ref("");
+const selectedSegmentVoiceId = ref("");
+const segmentToolsCollapsed = ref(true); // 默认折叠试听即改区域
+const scriptVersionsCollapsed = ref(true); // 默认折叠历史版本区域
 
 function parseScriptSegments(script) {
     if (!script) return [];
@@ -1669,6 +1775,7 @@ async function loadSession(sessionId) {
     } catch (error) {
         console.error("加载会话失败:", error);
         ElMessage.error("加载会话失败，请稍后重试");
+        throw error; // 重新抛出让上层知道失败了
     }
 }
 
@@ -2079,7 +2186,10 @@ function openGenerateDialog() {
     showGenerateDialog.value = true;
     generateError.value = "";
     generateTitle.value = currentSession.value.title || "";
-    const currentShowId = currentSession.value.show?.id ?? null;
+    // 优先从会话的 show 关联获取，其次从 voice_config.target_show_id 获取（网页/RSS生成）
+    const currentShowId = currentSession.value.show?.id
+        ?? currentSession.value.voice_config?.target_show_id
+        ?? null;
     generateShowId.value = currentShowId;
     if (!generateHostName.value.trim()) {
         generateHostName.value = DEFAULT_HOST_NAME;
@@ -2196,11 +2306,16 @@ async function previewSelectedSegment() {
 
     segmentPreviewLoading.value = true;
     try {
+        const payload = {
+            segment_text: segment.raw,
+        };
+        // 如果选择了特定音色，传入 voice_id
+        if (selectedSegmentVoiceId.value) {
+            payload.voice_id = selectedSegmentVoiceId.value;
+        }
         const data = await podcastsAPI.previewScriptSegment(
             currentSession.value.id,
-            {
-                segment_text: segment.raw,
-            },
+            payload,
         );
         segmentPreviewUrl.value = data.preview_url || "";
         ElMessage.success("试听音频已生成");
@@ -2408,6 +2523,49 @@ onMounted(() => {
     loadMyShows();
     loadGenerationQueue();
 });
+
+// 从网页创建播客
+async function createFromWeb() {
+    if (!webUrl.value) return;
+    if (webSubmitting.value) return; // 防止重复提交
+
+    webSubmitting.value = true;
+    webError.value = "";
+
+    try {
+        const result = await podcastsAPI.createFromWeb({
+            url: webUrl.value,
+            show_id: webTargetShowId.value || null,
+            title: webTitle.value || undefined,
+        });
+
+        // 清空表单
+        webUrl.value = "";
+        webTargetShowId.value = "";
+        webTitle.value = "";
+
+        // 关闭网页转播客面板（切换回对话模式）
+        entryMode.value = 'dialogue';
+
+        // 切换到对话模式并加载新会话
+        entryMode.value = 'dialogue';
+        await loadSessions();
+
+        // 选中新创建的会话
+        if (result.session_id) {
+            await loadSession(result.session_id);
+            ElMessage.success("已生成播客脚本，进入编辑界面");
+        } else {
+            throw new Error("未返回会话ID");
+        }
+    } catch (error) {
+        console.error("创建失败:", error);
+        webError.value = error.response?.data?.error || error.message || "创建失败，请检查链接是否有效";
+        ElMessage.error(webError.value);
+    } finally {
+        webSubmitting.value = false;
+    }
+}
 </script>
 
 <style scoped>
@@ -3182,6 +3340,39 @@ onMounted(() => {
     justify-content: space-between;
     gap: var(--spacing-sm);
     margin-bottom: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+    user-select: none;
+}
+
+.segment-tools-header:hover {
+    background-color: var(--bg-secondary);
+    margin: 0 calc(-1 * var(--spacing-md));
+    padding: var(--spacing-xs) var(--spacing-md);
+}
+
+.segment-tools.collapsed .segment-tools-header {
+    margin-bottom: 0;
+}
+
+.collapse-icon {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    margin-left: var(--spacing-xs);
+}
+
+.segment-tools-content {
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .segment-tools-header h4 {
@@ -3192,9 +3383,30 @@ onMounted(() => {
 
 .segment-controls {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr 1fr;
     gap: var(--spacing-sm);
     margin-bottom: var(--spacing-sm);
+    align-items: center;
+}
+
+.segment-controls-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    grid-column: 1 / -1;
+}
+
+.segment-controls .form-select {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.segment-controls .mofa-btn {
+    white-space: nowrap;
+    flex: 1;
+    min-width: 80px;
+    height: 32px;
+    padding: 0 var(--spacing-sm);
 }
 
 .segment-selected {
@@ -3207,9 +3419,16 @@ onMounted(() => {
     margin-bottom: 4px;
 }
 
+.segment-tools-content {
+    animation: slideDown 0.2s ease-out;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .segment-instruction {
     width: 100%;
-    min-height: 72px;
+    min-height: 60px;
+    max-height: 100px;
     resize: vertical;
     border: var(--border-width) solid var(--border-color);
     border-radius: var(--radius-default);
@@ -3230,6 +3449,21 @@ onMounted(() => {
     font-weight: var(--font-semibold);
     margin-bottom: var(--spacing-sm);
     font-size: var(--font-sm);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-xs) 0;
+    user-select: none;
+}
+
+.versions-header:hover {
+    background-color: var(--bg-secondary);
+    margin: 0 calc(-1 * var(--spacing-md));
+    padding: var(--spacing-xs) var(--spacing-md);
+}
+
+.script-versions.collapsed .versions-header {
+    margin-bottom: 0;
 }
 
 .versions-list {
@@ -3342,6 +3576,27 @@ onMounted(() => {
 
 .modal-body {
     margin-bottom: var(--spacing-md);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* 脚本生成按钮区域 */
+.script-generate-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+    background: var(--color-bg);
+    border-radius: var(--radius-default);
+    border: 2px dashed var(--color-primary);
+}
+
+.script-generate-action .hint {
+    color: var(--color-text-secondary);
+    font-size: var(--font-sm);
+    margin: 0;
 }
 
 .modal-footer {
@@ -3617,6 +3872,21 @@ onMounted(() => {
     }
 
     .cover-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* 移动端对话框适配 */
+    .modal-content {
+        width: 95%;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+
+    .modal-body {
+        max-height: 50vh;
+    }
+
+    .speaker-grid {
         grid-template-columns: 1fr;
     }
 }

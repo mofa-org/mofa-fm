@@ -25,11 +25,55 @@
           <el-icon><ChatDotRound /></el-icon>
           开始创作
         </router-link>
+        <button @click="showWebToPodcastDialog = true" class="mofa-btn mofa-btn-info">
+          <el-icon><Link /></el-icon>
+          从网址创建
+        </button>
         <router-link to="/creator/shows/create" class="mofa-btn mofa-btn-warning">
           <el-icon><Plus /></el-icon>
           新建节目
         </router-link>
       </div>
+
+      <!-- 从网址创建对话框 -->
+      <el-dialog
+        v-model="showWebToPodcastDialog"
+        title="从网址创建播客"
+        width="500px"
+      >
+        <div class="web-to-podcast-form">
+          <p class="form-hint">输入网页链接，AI 将自动提取内容并生成播客</p>
+          <el-input
+            v-model="webUrl"
+            placeholder="https://example.com/article"
+            size="large"
+            clearable
+          />
+          <el-select
+            v-model="webTargetShowId"
+            placeholder="选择目标节目"
+            size="large"
+            class="show-select"
+          >
+            <el-option
+              v-for="show in shows"
+              :key="show.id"
+              :label="show.title"
+              :value="show.id"
+            />
+          </el-select>
+        </div>
+        <template #footer>
+          <button class="mofa-btn" @click="showWebToPodcastDialog = false">取消</button>
+          <button
+            class="mofa-btn mofa-btn-primary"
+            :disabled="!webUrl || !webTargetShowId || webLoading"
+            @click="handleCreateFromWeb"
+          >
+            {{ webLoading ? '生成中...' : '开始生成' }}
+          </button>
+        </template>
+      </el-dialog>
 
       <!-- 我的音频列表 -->
       <h2 class="section-title">我的音频</h2>
@@ -66,7 +110,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
-import { Plus, ChatDotRound, Clock } from '@element-plus/icons-vue'
+import { Plus, ChatDotRound, Clock, Link } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()
@@ -76,6 +120,12 @@ const stats = ref({
   shows_count: 0,
   total_plays: 0
 })
+
+// 从网址创建相关
+const showWebToPodcastDialog = ref(false)
+const webUrl = ref('')
+const webTargetShowId = ref('')
+const webLoading = ref(false)
 
 onMounted(async () => {
   await loadShows()
@@ -110,6 +160,30 @@ async function handleDeleteShow(show) {
       console.error('删除失败：', error)
       ElMessage.error('删除失败')
     }
+  }
+}
+
+// 从网址创建播客
+async function handleCreateFromWeb() {
+  if (!webUrl.value || !webTargetShowId.value) return
+
+  webLoading.value = true
+  try {
+    const result = await api.podcasts.createFromWeb({
+      url: webUrl.value,
+      show_id: webTargetShowId.value
+    })
+    ElMessage.success('已开始生成播客，请稍后查看')
+    showWebToPodcastDialog.value = false
+    webUrl.value = ''
+    webTargetShowId.value = ''
+    // 可以跳转到任务状态页或节目详情页
+    // router.push(`/creator/status`)
+  } catch (error) {
+    console.error('创建失败：', error)
+    ElMessage.error(error.response?.data?.error || '创建失败')
+  } finally {
+    webLoading.value = false
   }
 }
 </script>
@@ -153,6 +227,22 @@ async function handleDeleteShow(show) {
   margin-bottom: var(--spacing-xl);
   display: flex;
   gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.web-to-podcast-form {
+  padding: var(--spacing-md) 0;
+}
+
+.web-to-podcast-form .form-hint {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-sm);
+}
+
+.web-to-podcast-form .show-select {
+  margin-top: var(--spacing-md);
+  width: 100%;
 }
 
 .section-title {

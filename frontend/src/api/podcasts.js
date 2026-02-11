@@ -88,6 +88,11 @@ export default {
     return client.post('/podcasts/episodes/generate-from-source/', data)
   },
 
+  // 从网址创建播客
+  createFromWeb(data) {
+    return client.post('/podcasts/episodes/create-from-web/', data)
+  },
+
   // 更新单集
   updateEpisode(episodeId, data) {
     return client.put(`/podcasts/episodes/${episodeId}/update/`, data, {
