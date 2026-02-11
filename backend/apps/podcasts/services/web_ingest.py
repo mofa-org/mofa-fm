@@ -218,7 +218,7 @@ def generate_podcast_script_from_web(
 原文链接：{content.url}
 
 原文内容：
-{content.content[:8000]}
+{content.content}
 
 请生成播客脚本："""
 
