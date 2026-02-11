@@ -754,7 +754,7 @@ class GenerateEpisodeView(generics.GenericAPIView):
                 generate_podcast_task.delay(
                     episode.id,
                     data['script'],
-                    speaker_config=speaker_config,
+                    voice_config=speaker_config,
                 )
             else:
                 generate_podcast_task.delay(episode.id, data['script'])
