@@ -69,23 +69,25 @@ def process_episode_audio(episode_id):
 @shared_task
 def generate_podcast_task(episode_id, script_content, voice_config=None):
     """
-    Background task to generate podcast audio from script.
+    Background task to generate podcast audio from script and AI cover.
     """
     from .models import Episode
     from .services.generator import PodcastGenerator
+    from .services.cover_ai import generate_episode_cover
     from pydub import AudioSegment
     import os
     from django.conf import settings
-    
+
     episode = None # Initialize episode to None for error handling
     try:
         episode = Episode.objects.get(id=episode_id)
         episode.status = 'processing'
+        episode.generation_stage = 'generating_audio'
         episode.save()
-        
+
         # Initialize generator
         generator = PodcastGenerator()
-        
+
         # Define output path
         # e.g. media/episodes/YYYY/MM/uuid.mp3
         filename = f"generated_{episode.slug}_{episode.id}.mp3"
@@ -98,16 +100,28 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
             storage = episode.audio_file.storage
             if storage.exists(placeholder_name):
                 storage.delete(placeholder_name)
-        
-        # Generate
+
+        # Generate audio
         generator.generate(script_content, full_path, voice_overrides=voice_config)
 
-        # Update episode
+        # Update episode with audio
         episode.audio_file.name = relative_path
         episode.script = script_content  # 保存脚本，默认使用AI生成的脚本
-        episode.status = 'published'
         episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
         episode.file_size = os.path.getsize(full_path)
+        episode.generation_stage = 'generating_cover'
+        episode.save()
+
+        # Generate AI cover if not already has one
+        if not episode.cover:
+            try:
+                generate_episode_cover(episode)
+            except Exception as cover_err:
+                # Cover generation failure should not block audio publishing
+                print(f"Cover generation failed for episode {episode_id}: {cover_err}")
+
+        # Mark as published
+        episode.status = 'published'
         episode.published_at = timezone.now()
         episode.save()
 
@@ -120,6 +134,7 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
         print(f"Failed to generate podcast for episode {episode_id}: {e}")
         if episode: # Only update status if episode object was successfully retrieved
             episode.status = 'failed'
+            episode.generation_error = str(e)[:1000]
             episode.save()
         raise
 
