@@ -173,13 +173,13 @@ class PodcastGenerator:
 
     DEFAULT_VOICES: Dict[str, Dict[str, object]] = {
         "daniu": {
-            "voice_id": "Chinese (Mandarin)_News_Anchor",
+            "voice_id": "ttv-voice-2025103011222725-sg8dZxUP",
             "speed": 1.0,
             "volume": 1.0,
-            "pitch": 0,
+            "pitch": -1,
         },
         "yifan": {
-            "voice_id": "Chinese (Mandarin)_Gentleman",
+            "voice_id": "moss_audio_aaa1346a-7ce7-11f0-8e61-2e6e3c7ee85d",
             "speed": 1.0,
             "volume": 1.0,
             "pitch": 0,
