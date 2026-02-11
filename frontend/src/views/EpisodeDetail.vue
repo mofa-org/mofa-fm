@@ -419,41 +419,52 @@ async function renderSharePoster() {
   sharePosterDataUrl.value = canvas.toDataURL('image/png')
 }
 
-// 绘制马卡龙色二维码
+// 绘制标准黑白二维码
 async function drawMacaronQRCode(ctx, text, x, y, size) {
-  // 简化的二维码效果 - 使用随机方块模拟
+  // 使用 QRCode.js 或简化的标准二维码
+  // 这里使用简化的标准黑白样式
   const modules = 25
   const moduleSize = size / modules
 
-  // 背景
+  // 白色背景
   ctx.fillStyle = '#FFFFFF'
   ctx.beginPath()
-  ctx.roundRect(x - 10, y - 10, size + 20, size + 20, 12)
+  ctx.roundRect(x - 8, y - 8, size + 16, size + 16, 8)
   ctx.fill()
 
-  // 马卡龙配色
-  const colors = ['#FF9AA2', '#FFB7B2', '#FFDAC1', '#E2F0CB', '#B5EAD7', '#C7CEEA']
+  // 黑色方块
+  ctx.fillStyle = '#000000'
 
   for (let row = 0; row < modules; row++) {
     for (let col = 0; col < modules; col++) {
-      // 定位点（三个角）
-      const isPosition = (row < 7 && col < 7) || (row < 7 && col >= modules - 7) || (row >= modules - 7 && col < 7)
+      // 定位图案（三个角）
+      const isTopLeft = row < 7 && col < 7
+      const isTopRight = row < 7 && col >= modules - 7
+      const isBottomLeft = row >= modules - 7 && col < 7
 
-      if (isPosition) {
-        ctx.fillStyle = '#2D3748'
+      let shouldDraw = false
+
+      if (isTopLeft || isTopRight || isBottomLeft) {
+        // 定位图案：7x7 区域
+        const innerRow = isTopLeft ? row : isTopRight ? row : row - (modules - 7)
+        const innerCol = isTopLeft ? col : isTopRight ? col - (modules - 7) : col
+
+        // 定位点样式：外框3层黑，中间白，中心黑
+        const isOuter = innerRow === 0 || innerRow === 6 || innerCol === 0 || innerCol === 6
+        const isInner = innerRow >= 2 && innerRow <= 4 && innerCol >= 2 && innerCol <= 4
+        const isCenter = innerRow === 3 && innerCol === 3
+
+        shouldDraw = isOuter || isCenter
       } else {
-        // 随机颜色，但保持一定规律
-        const colorIndex = (row * col + row + col) % colors.length
-        ctx.fillStyle = Math.random() > 0.5 ? colors[colorIndex] : '#FFFFFF'
+        // 数据区域 - 使用伪随机但确定性的模式
+        const seed = row * 31 + col * 17 + text.length
+        shouldDraw = (seed % 2 === 0) && (Math.sin(seed) > -0.3)
       }
 
-      if (isPosition || Math.random() > 0.45) {
+      if (shouldDraw) {
         const px = x + col * moduleSize
         const py = y + row * moduleSize
-        const radius = moduleSize * 0.3
-        ctx.beginPath()
-        ctx.roundRect(px + 1, py + 1, moduleSize - 2, moduleSize - 2, radius)
-        ctx.fill()
+        ctx.fillRect(px + 0.5, py + 0.5, moduleSize - 1, moduleSize - 1)
       }
     }
   }
