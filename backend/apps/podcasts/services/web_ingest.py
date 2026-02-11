@@ -136,18 +136,86 @@ def _extract_with_beautifulsoup(html_content: str, url: str) -> WebContent:
     )
 
 
-def fetch_webpage_content(url: str, timeout: int = 30) -> WebContent:
+def _fetch_with_selenium(url: str, timeout: int = 30) -> WebContent:
+    """
+    使用 Selenium 抓取 JavaScript 动态加载的网页内容
+    """
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time
+
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+
+    driver = None
+    try:
+        # 尝试使用系统安装的 chromium-browser
+        try:
+            service = Service('/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception:
+            # 如果系统 chromedriver 失败，尝试让 selenium 自动查找
+            driver = webdriver.Chrome(options=chrome_options)
+
+        driver.get(url)
+
+        # 等待页面加载完成
+        wait = WebDriverWait(driver, timeout)
+
+        # 等待 body 标签出现
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+        # 额外等待 JavaScript 渲染（给动态内容加载时间）
+        time.sleep(5)
+
+        # 获取页面标题
+        title = driver.title or ""
+
+        # 直接获取 body 文本（这样可以拿到动态加载的所有内容）
+        body = driver.find_element(By.TAG_NAME, "body")
+        text = body.text
+
+        # 清理文本
+        cleaned_text = _clean_text(text)
+
+        return WebContent(
+            url=url,
+            title=_clean_text(title),
+            content=cleaned_text,
+            word_count=len(cleaned_text)
+        )
+
+    finally:
+        if driver:
+            driver.quit()
+
+
+def fetch_webpage_content(url: str, timeout: int = 30, use_selenium: bool = False) -> WebContent:
     """
     抓取网页并提取内容
 
     Args:
         url: 网页 URL
         timeout: 请求超时时间（秒）
+        use_selenium: 是否使用 Selenium 抓取（用于 JavaScript 动态加载的页面）
 
     Returns:
         WebContent: 提取的网页内容
     """
     url = _validate_url(url)
+
+    # 如果使用 Selenium 或普通请求获取的内容太少，使用 Selenium
+    if use_selenium:
+        return _fetch_with_selenium(url, timeout)
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -166,7 +234,17 @@ def fetch_webpage_content(url: str, timeout: int = 30) -> WebContent:
     html_content = response.text
 
     # 优先使用 readability，回退到 BeautifulSoup
-    return _extract_with_readability(html_content, url)
+    result = _extract_with_readability(html_content, url)
+
+    # 如果内容太少，尝试使用 Selenium
+    if len(result.content) < 1000:
+        print(f"Content too short ({len(result.content)} chars), trying Selenium...")
+        try:
+            return _fetch_with_selenium(url, timeout)
+        except Exception as e:
+            print(f"Selenium failed: {e}, returning original result")
+
+    return result
 
 
 def generate_podcast_script_from_web(
@@ -212,13 +290,19 @@ def generate_podcast_script_from_web(
 6. 格式：【大牛】说话内容... 【一帆】说话内容...
 7. 每个段落都要有角色标记，不要有大段旁白
 8. **重要：直接输出纯净的 Markdown 文本，不要用 ```markdown 代码块包裹**
+
+特殊情况处理：
+- 如果原文内容很少（少于2000字）或看起来只是网页的通用介绍而非文章主体，请基于文章标题和URL中的关键信息，结合你对该主题的专业知识，生成一个合理的播客脚本
+- 例如标题提到"2026年三大开源语音合成模型TTS推荐与测评"，就应该围绕这三个具体模型展开讨论，而不是泛泛地聊TTS技术历史
 """
+
+    content_text = content.content if len(content.content) > 500 else f"[网页内容提取不完整，请基于标题'{content.title}'和主题生成内容]"
 
     user_prompt = f"""原文标题：{content.title}
 原文链接：{content.url}
 
 原文内容：
-{content.content}
+{content_text}
 
 请生成播客脚本："""
 
