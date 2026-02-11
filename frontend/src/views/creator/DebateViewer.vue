@@ -106,7 +106,22 @@ const sending = ref(false)
 const activeStreamingIndex = ref(-1)
 const chatPanelRef = ref(null)
 
+// 消息ID集合，用于去重（防止消息被重复添加或覆盖）
+const messageIds = ref(new Set())
+
 let eventSource = null
+
+// 生成唯一ID
+function generateMessageId(entry) {
+  if (!entry) return ''
+  // 使用参与者+内容哈希+时间戳（取到秒）生成唯一ID
+  const content = entry.content || ''
+  const participant = entry.participant || ''
+  const timestamp = entry.timestamp || ''
+  // 取时间戳的前19位（到秒），忽略毫秒差异
+  const tsPrefix = typeof timestamp === 'string' ? timestamp.slice(0, 19) : timestamp
+  return `${participant}:${tsPrefix}:${content.slice(0, 50)}`
+}
 
 const participantConfig = computed(() => {
   if (!episode.value?.participants_config) return {}
@@ -147,7 +162,22 @@ async function loadEpisode() {
     loading.value = true
     const data = await api.podcasts.getEpisodeById(route.params.episodeId)
     episode.value = data
-    dialogue.value = data?.dialogue || []
+    console.log('[Debate] loadEpisode, server dialogue length:', data?.dialogue?.length || 0)
+    // 只有在当前没有本地消息时才替换（避免覆盖用户刚发的消息）
+    if (dialogue.value.length === 0) {
+      dialogue.value = data?.dialogue || []
+    } else {
+      console.log('[Debate] Keeping local dialogue, length:', dialogue.value.length)
+    }
+    // 初始化消息ID集合
+    messageIds.value.clear()
+    dialogue.value.forEach(entry => {
+      messageIds.value.add(generateMessageId(entry))
+      if (entry.participant === 'user' && entry.content) {
+        messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
+      }
+    })
+    console.log('[Debate] Initialized messageIds, count:', messageIds.value.size)
   } catch (err) {
     console.error('Failed to load episode:', err)
     error.value = err.response?.data?.error || '加载失败'
@@ -159,7 +189,17 @@ async function loadEpisode() {
 async function refreshEpisode() {
   const data = await api.podcasts.getEpisodeById(route.params.episodeId)
   episode.value = data
-  dialogue.value = data?.dialogue || []
+  // 合并服务器数据和本地数据，避免覆盖用户刚发送的消息
+  const serverDialogue = data?.dialogue || []
+  const localDialogue = dialogue.value || []
+
+  // 如果本地有用户消息但服务器还没有，保留本地消息
+  if (localDialogue.length > serverDialogue.length) {
+    // 保留本地额外的消息（通常是刚发送的用户消息）
+    dialogue.value = [...serverDialogue, ...localDialogue.slice(serverDialogue.length)]
+  } else {
+    dialogue.value = serverDialogue
+  }
   scrollToBottom()
 }
 
@@ -171,12 +211,31 @@ async function sendMessage() {
     sending.value = true
     error.value = ''
 
-    await api.podcasts.sendDebateMessage(episode.value.id, message)
+    // 乐观更新：立即将用户消息添加到本地对话
+    const clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const userEntry = {
+      participant: 'user',
+      role: '我',
+      content: message,
+      timestamp: new Date().toISOString(),
+      clientId  // 客户端唯一标识，用于去重
+    }
+    console.log('[Debate] Adding user message:', userEntry)
+    console.log('[Debate] Before push, dialogue length:', dialogue.value.length)
+    // 使用展开运算符确保响应式
+    dialogue.value = [...dialogue.value, userEntry]
+    // 添加ID到集合
+    messageIds.value.add(generateMessageId(userEntry))
+    messageIds.value.add(`user:${message.slice(0, 50)}`)
+    console.log('[Debate] After push, dialogue length:', dialogue.value.length)
+    console.log('[Debate] Message IDs:', Array.from(messageIds.value))
+    scrollToBottom()
+
+    await api.podcasts.sendDebateMessage(episode.value.id, message, clientId)
     inputMessage.value = ''
     episode.value.status = 'processing'
 
-    await refreshEpisode()
-
+    // 不立即刷新，让 SSE 流来更新对话，避免覆盖刚添加的用户消息
     if (!eventSource || eventSource.readyState === EventSource.CLOSED) {
       startStreaming()
     }
@@ -262,29 +321,74 @@ function stopStreaming() {
 }
 
 function mergeOrAppendDialogue(entry) {
+  console.log('[Debate] mergeOrAppendDialogue:', entry)
   if (!entry) return dialogue.value.length - 1
 
-  const idxByStamp = dialogue.value.findIndex((item) => {
-    return item.timestamp && entry.timestamp && item.timestamp === entry.timestamp && item.participant === entry.participant
-  })
-
-  if (idxByStamp >= 0) {
-    dialogue.value[idxByStamp] = { ...dialogue.value[idxByStamp], ...entry }
-    return idxByStamp
+  // 1. 检查是否有 clientId 匹配（精确匹配本地乐观添加的消息）
+  if (entry.clientId) {
+    const idxByClientId = dialogue.value.findIndex((item) => item.clientId === entry.clientId)
+    if (idxByClientId >= 0) {
+      console.log('[Debate] Found by clientId, updating:', idxByClientId)
+      dialogue.value[idxByClientId] = { ...dialogue.value[idxByClientId], ...entry }
+      return idxByClientId
+    }
   }
 
+  // 2. 生成消息ID并检查是否已存在（防止完全重复的消息）
+  const msgId = generateMessageId(entry)
+  console.log('[Debate] Generated msgId:', msgId)
+  console.log('[Debate] Current messageIds:', Array.from(messageIds.value))
+  if (messageIds.value.has(msgId)) {
+    const idx = dialogue.value.findIndex((item) => generateMessageId(item) === msgId)
+    if (idx >= 0) {
+      console.log('[Debate] Found by msgId, updating:', idx)
+      dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
+      return idx
+    }
+  }
+
+  // 3. 特殊处理用户消息：检查内容是否匹配（防止乐观添加的消息和SSE推送的重复）
+  if (entry.participant === 'user' && entry.content) {
+    const contentPrefix = entry.content.slice(0, 50)
+    const contentId = `user:${contentPrefix}`
+    console.log('[Debate] Checking contentId:', contentId)
+    if (messageIds.value.has(contentId)) {
+      // 已存在相同内容的用户消息，更新时间戳等信息
+      const idx = dialogue.value.findIndex((item) =>
+        item.participant === 'user' && item.content === entry.content
+      )
+      if (idx >= 0) {
+        console.log('[Debate] Found by contentId, updating:', idx)
+        dialogue.value[idx] = { ...dialogue.value[idx], ...entry }
+        return idx
+      }
+    }
+  }
+
+  // 4. 特殊处理：检查是否是同一参与者的流式更新（内容前缀匹配）
   const lastIndex = dialogue.value.length - 1
   const last = dialogue.value[lastIndex]
-  if (last && last.participant === entry.participant) {
+  if (last && last.participant === entry.participant && entry.participant !== 'user') {
     const lastContent = last.content || ''
     const nextContent = entry.content || ''
-    if (nextContent === lastContent || nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
+    // 只有当内容有明显包含关系时才合并（流式更新）
+    if (nextContent.startsWith(lastContent) || lastContent.startsWith(nextContent)) {
+      console.log('[Debate] Streaming update for AI message')
+      const clientId = last.clientId
       dialogue.value[lastIndex] = { ...last, ...entry }
+      if (clientId) dialogue.value[lastIndex].clientId = clientId
       return lastIndex
     }
   }
 
-  dialogue.value.push(entry)
+  // 5. 新消息，追加
+  console.log('[Debate] New message, appending')
+  messageIds.value.add(msgId)
+  if (entry.participant === 'user' && entry.content) {
+    messageIds.value.add(`user:${entry.content.slice(0, 50)}`)
+  }
+  dialogue.value = [...dialogue.value, entry]
+  console.log('[Debate] New dialogue length:', dialogue.value.length)
   return dialogue.value.length - 1
 }
 

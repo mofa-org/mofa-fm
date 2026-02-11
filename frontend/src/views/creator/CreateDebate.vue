@@ -36,15 +36,23 @@
 
           <!-- 标题 -->
           <div class="form-group">
-            <label class="form-label" for="title">标题 *</label>
+            <label class="form-label" for="title">
+              {{ form.mode === 'debate' ? '辩论标题' : '会议标题' }} *
+            </label>
             <input
               id="title"
               v-model="form.title"
               type="text"
               class="form-input"
-              placeholder="例如：AI是否会取代程序员"
+              :placeholder="form.mode === 'debate' ? '例如：火星移民辩论' : '例如：深度学习入门'"
               required
             />
+            <div class="form-hint">
+              {{ form.mode === 'debate'
+                ? '标题用于展示，建议简洁明了（如：火星移民辩论、AI取代程序员之争）'
+                : '标题用于展示，建议简洁明了（如：深度学习入门、React最佳实践）'
+              }}
+            </div>
           </div>
 
           <!-- 主题 -->
@@ -61,9 +69,9 @@
               required
             ></textarea>
             <div class="form-hint">
-              {{ form.mode === 'debate'
-                ? '清晰描述辩论主题和双方立场，AI将据此展开辩论'
-                : '描述想要学习的主题，AI导师和学生将围绕此展开讨论'
+              <strong>{{ form.mode === 'debate' ? '必须明确写出辩题' : '描述想要学习的主题' }}</strong>，{{ form.mode === 'debate'
+                ? 'AI将根据此辩题生成辩论内容。例如："人类是否可以火星移民"、"AI是否会取代程序员"'
+                : 'AI导师和学生将围绕此展开讨论'
               }}
             </div>
           </div>
@@ -146,7 +154,7 @@ const form = ref({
 
 const topicPlaceholder = computed(() => {
   return form.value.mode === 'debate'
-    ? '例如：AI是否会取代程序员？这是一个关于人工智能和程序员职业未来的辩论。正方认为AI只是工具，反方认为AI将逐步取代大部分编程工作。'
+    ? '例如：人类是否可以火星移民？正方认为随着科技进步，火星移民是未来发展的必然选择；反方认为火星移民成本过高且技术尚不成熟，应专注于地球可持续发展。'
     : '例如：深度学习的基础原理。包括神经网络、反向传播、梯度下降等核心概念，以及如何应用到实际问题中。'
 })
 

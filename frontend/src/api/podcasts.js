@@ -277,8 +277,8 @@ export default {
   },
 
   // 向辩论发送用户消息（触发AI续辩）
-  sendDebateMessage(episodeId, message) {
-    return client.post(`/podcasts/episodes/${episodeId}/debate-message/`, { message })
+  sendDebateMessage(episodeId, message, clientId) {
+    return client.post(`/podcasts/episodes/${episodeId}/debate-message/`, { message, client_id: clientId })
   },
 
   // 获取分享卡片数据
