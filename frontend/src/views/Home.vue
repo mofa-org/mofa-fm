@@ -265,7 +265,7 @@ function formatNumber(num) {
 
 .recommended-reason {
   position: absolute;
-  top: var(--spacing-sm);
+  bottom: var(--spacing-sm);
   right: var(--spacing-sm);
   z-index: 2;
   background: rgba(13, 21, 49, 0.75);
