@@ -4,7 +4,7 @@
       <!-- 用户信息和元数据 -->
       <div class="comment-header">
         <div class="user-info">
-          <el-avatar :size="32" :src="comment.user.avatar_url" :icon="UserFilled" />
+          <el-avatar :size="32" :src="comment.user.avatar_url || '/default_avatar.png'" />
           <span class="username">{{ comment.user.username }}</span>
           <span class="time">{{ formatDate(comment.created_at) }}</span>
         </div>
@@ -90,7 +90,7 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import { UserFilled, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowRight } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
 import dayjs from 'dayjs'

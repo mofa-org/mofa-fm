@@ -40,7 +40,7 @@ class User(AbstractUser):
         """获取头像URL"""
         if self.avatar:
             return self.avatar.url
-        return None
+        return '/default_avatar.png'
 
 
 class CreatorVerification(models.Model):

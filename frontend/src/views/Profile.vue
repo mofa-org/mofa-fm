@@ -6,7 +6,7 @@
       <div class="profile-content mofa-card">
         <!-- 头像部分 -->
         <div class="avatar-section">
-          <el-avatar :size="120" :src="previewUrl || form.avatar_url" :icon="UserFilled" />
+          <el-avatar :size="120" :src="previewUrl || form.avatar_url || '/default_avatar.png'" />
           <input
             ref="avatarInput"
             type="file"
@@ -94,7 +94,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { UserFilled } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()

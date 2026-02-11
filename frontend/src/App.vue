@@ -21,6 +21,7 @@
             <router-link to="/" class="nav-item">首页</router-link>
             <router-link to="/discover" class="nav-item">发现</router-link>
             <router-link v-if="isAuthenticated" to="/library" class="nav-item">我的收听</router-link>
+            <router-link v-if="isAuthenticated" to="/creator" class="nav-item">内容管理</router-link>
           </nav>
         </div>
 
@@ -45,7 +46,7 @@
 
             <el-dropdown @command="handleCommand">
               <div class="user-avatar">
-                <el-avatar :src="user?.avatar_url" :icon="UserFilled" />
+                <el-avatar :src="user?.avatar_url || '/default_avatar.png'" />
               </div>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -98,6 +99,9 @@
           <router-link v-if="isAuthenticated" to="/library" class="mobile-nav-item" @click="showMobileMenu = false">
             我的收听
           </router-link>
+          <router-link v-if="isAuthenticated" to="/creator" class="mobile-nav-item" @click="showMobileMenu = false">
+            内容管理
+          </router-link>
           <template v-if="isAuthenticated">
             <router-link to="/creator/ai-studio" class="mobile-nav-item" @click="showMobileMenu = false">
               创作
@@ -131,7 +135,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
-import { Search, UserFilled } from '@element-plus/icons-vue'
+import { Search } from '@element-plus/icons-vue'
 import GlobalPlayer from '@/components/player/GlobalPlayer.vue'
 
 const router = useRouter()

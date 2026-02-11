@@ -130,7 +130,7 @@
         <div class="comments-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item mofa-card">
             <div class="comment-user">
-              <el-avatar :size="40" :src="comment.user.avatar_url" :icon="UserFilled" />
+              <el-avatar :size="40" :src="comment.user.avatar_url || '/default_avatar.png'" />
               <span class="username">{{ comment.user.username }}</span>
               <span class="comment-time">{{ formatDate(comment.created_at) }}</span>
             </div>
@@ -149,7 +149,7 @@ import { useAuthStore } from '@/stores/auth'
 import { usePlayerStore } from '@/stores/player'
 import api from '@/api'
 import { ElMessage } from 'element-plus'
-import { VideoPlay, Star, UserFilled, Bell, Share, Download, DocumentCopy, Loading } from '@element-plus/icons-vue'
+import { VideoPlay, Star, Bell, Share, Download, DocumentCopy, Loading } from '@element-plus/icons-vue'
 import QRCode from 'qrcode'
 import VisibilityBadge from '@/components/common/VisibilityBadge.vue'
 import ScriptViewer from '@/components/podcast/ScriptViewer.vue'
