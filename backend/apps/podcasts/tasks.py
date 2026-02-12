@@ -210,18 +210,12 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
 
         episode.script = "\n".join(script_lines)
 
-        # 更新状态为已发布（因为是纯文本，无需音频处理）
-        episode.status = 'published'
-        episode.published_at = timezone.now()
+        # 保存脚本并标记为草稿状态，等待用户继续编辑或生成音频
+        episode.status = 'draft'
+        episode.generation_stage = 'script_completed'
         episode.save()
 
-        # 更新节目统计（如果关联了show）
-        if episode.show_id:  # 使用show_id避免触发RelatedObjectDoesNotExist
-            show = episode.show
-            show.episodes_count = show.episodes.filter(status='published').count()
-            show.save()
-
-        return f"Debate/Conference {episode_id} generated successfully with {len(dialogue_entries)} entries"
+        return f"Debate/Conference {episode_id} script generated successfully with {len(dialogue_entries)} entries"
 
     except Exception as e:
         print(f"Failed to generate debate for episode {episode_id}: {e}")
@@ -232,13 +226,13 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
 
 
 @shared_task
-def generate_debate_audio_task(episode_id, show_id):
+def generate_debate_audio_task(episode_id, show_id=None):
     """
     Background task to generate audio for existing debate/conference Episode.
 
     Args:
         episode_id: Episode ID (must have dialogue and participants_config)
-        show_id: Show ID to associate with
+        show_id: Show ID to associate with (optional)
     """
     from .models import Episode, Show
     from .services.generator import PodcastGenerator
@@ -253,13 +247,16 @@ def generate_debate_audio_task(episode_id, show_id):
         if not episode.dialogue or not episode.participants_config:
             raise ValueError("Episode must have dialogue and participants_config")
 
-        # Validate and get Show
-        try:
-            show = Show.objects.get(id=show_id)
-        except Show.DoesNotExist:
-            raise ValueError(f"Show {show_id} does not exist")
+        # Get Show if show_id provided
+        show = None
+        if show_id:
+            try:
+                show = Show.objects.get(id=show_id)
+            except Show.DoesNotExist:
+                print(f"Warning: Show {show_id} does not exist, continuing without show association")
 
         episode.status = 'processing'
+        episode.generation_stage = 'audio_generating'
         episode.save()
 
         # Initialize generator
@@ -277,20 +274,23 @@ def generate_debate_audio_task(episode_id, show_id):
             output_path=full_path
         )
 
-        # Update episode with audio and show association
+        # Update episode with audio
         episode.audio_file.name = relative_path
-        episode.show = show
+        if show:
+            episode.show = show
         episode.status = 'published'
+        episode.generation_stage = 'completed'
         episode.duration = int(AudioSegment.from_mp3(full_path).duration_seconds)
         episode.file_size = os.path.getsize(full_path)
         episode.published_at = timezone.now()
         episode.save()
 
-        # Update show statistics
-        show.episodes_count = show.episodes.filter(status='published').count()
-        show.save()
+        # Update show statistics if show exists
+        if show:
+            show.episodes_count = show.episodes.filter(status='published').count()
+            show.save()
 
-        return f"Debate audio {episode_id} generated successfully and published to show {show_id}"
+        return f"Debate audio {episode_id} generated successfully" + (f" and published to show {show_id}" if show else "")
 
     except Exception as e:
         print(f"Failed to generate debate audio for episode {episode_id}: {e}")

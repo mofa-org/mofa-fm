@@ -2455,6 +2455,9 @@ function formatStage(episode) {
     if (episode.status === "published") {
         return "已发布";
     }
+    if (episode.status === "draft") {
+        return "草稿（可继续编辑）";
+    }
     const stage = episode.generation_stage;
     const map = {
         queued: "排队中",
@@ -2464,6 +2467,7 @@ function formatStage(episode) {
         cover_generating: "封面生成中",
         completed: "完成",
         failed: "失败",
+        script_completed: "脚本完成",
     };
     return map[stage] || map[episode.status] || "处理中";
 }
@@ -2474,12 +2478,14 @@ function generationProgress(episode) {
         queued: 5,
         source_fetching: 20,
         script_generating: 45,
+        script_completed: 50,
         audio_generating: 75,
         cover_generating: 90,
         completed: 100,
         failed: 100,
     };
     if (episode?.status === "published") return 100;
+    if (episode?.status === "draft") return 50;
     if (episode?.status === "failed" && !stage) return 100;
     return progressMap[stage] ?? (episode?.status === "processing" ? 50 : 0);
 }

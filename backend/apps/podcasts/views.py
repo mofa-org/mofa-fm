@@ -251,7 +251,7 @@ def show_episodes(request, show_id):
 def generation_queue(request):
     """当前用户的AI生成任务队列"""
     allowed_statuses = {code for code, _ in Episode.STATUS_CHOICES}
-    default_statuses = {'processing', 'failed', 'published'}
+    default_statuses = {'processing', 'failed', 'published', 'draft'}
 
     requested_status = request.query_params.getlist('status')
     if not requested_status:
@@ -267,9 +267,16 @@ def generation_queue(request):
     if not statuses:
         statuses = list(default_statuses)
 
+    # 获取用户创建的所有AI生成内容（包括关联了show的和debate）
+    from django.db.models import Q
     episodes = (
         Episode.objects
-        .filter(show__creator=request.user, status__in=statuses, description__icontains='AI Generated Podcast')
+        .filter(
+            Q(show__creator=request.user) |
+            Q(generation_meta__creator_id=request.user.id),
+            status__in=statuses,
+            description__icontains='AI Generated'
+        )
         .select_related('show')
         .order_by('-created_at')
     )
