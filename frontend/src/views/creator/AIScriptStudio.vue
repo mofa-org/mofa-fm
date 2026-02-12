@@ -474,23 +474,21 @@
                                         }}</span
                                     >
                                 </div>
+                                <div class="generation-stage-text">{{
+                                    formatStage(episode)
+                                }}</div>
                                 <div class="generation-stage-row">
-                                    <span class="generation-stage-text">{{
-                                        formatStage(episode)
-                                    }}</span>
-                                    <span class="generation-stage-percent"
-                                        >{{
-                                            generationProgress(episode)
-                                        }}%</span
-                                    >
-                                </div>
-                                <div class="generation-stage-progress">
-                                    <div
-                                        class="generation-stage-progress-bar"
-                                        :style="{
-                                            width: `${generationProgress(episode)}%`,
-                                        }"
-                                    ></div>
+                                    <div class="generation-stage-progress">
+                                        <div
+                                            class="generation-stage-progress-bar"
+                                            :style="{
+                                                width: `${generationProgress(episode)}%`,
+                                            }"
+                                        ></div>
+                                    </div>
+                                    <span class="generation-stage-percent">{{
+                                        generationProgress(episode)
+                                    }}%</span>
                                 </div>
                                 <div
                                     v-if="episode.generation_error"
@@ -2454,6 +2452,9 @@ function formatStage(episode) {
     if (episode.status === "failed" && !episode.generation_stage) {
         return "失败";
     }
+    if (episode.status === "published") {
+        return "已发布";
+    }
     const stage = episode.generation_stage;
     const map = {
         queued: "排队中",
@@ -2809,22 +2810,33 @@ async function createFromWeb() {
     font-size: var(--font-xs);
 }
 
+.generation-stage-text {
+    font-size: var(--font-xs);
+    color: var(--color-text-secondary);
+    margin-top: 4px;
+}
+
 .generation-stage-row {
     margin-top: 4px;
     display: flex;
-    justify-content: space-between;
-    gap: var(--spacing-sm);
-    font-size: var(--font-xs);
-    color: var(--color-text-secondary);
+    align-items: center;
+    gap: 8px;
 }
 
 .generation-stage-progress {
-    width: 100%;
+    width: 200px;
     height: 6px;
     border-radius: 999px;
     background: var(--color-bg-secondary);
     overflow: hidden;
-    margin-top: 4px;
+    flex-shrink: 0;
+}
+
+.generation-stage-percent {
+    font-size: var(--font-xs);
+    color: var(--color-text-secondary);
+    min-width: 36px;
+    text-align: left;
 }
 
 .generation-stage-progress-bar {

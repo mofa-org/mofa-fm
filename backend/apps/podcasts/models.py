@@ -138,6 +138,13 @@ class Show(models.Model):
     def __str__(self):
         return self.title
 
+    @property
+    def cover_url(self):
+        """获取封面URL"""
+        if self.cover:
+            return self.cover.url
+        return '/static/default_show_logo.png'
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = awesome_slugify(self.title)
