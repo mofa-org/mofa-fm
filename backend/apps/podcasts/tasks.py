@@ -226,13 +226,18 @@ def generate_debate_task(episode_id, topic, mode='debate', rounds=3):
 
 
 @shared_task
-def generate_debate_audio_task(episode_id, show_id=None):
+def generate_debate_audio_task(episode_id, show_id=None, voice_config=None):
     """
     Background task to generate audio for existing debate/conference Episode.
 
     Args:
         episode_id: Episode ID (must have dialogue and participants_config)
         show_id: Show ID to associate with (optional)
+        voice_config: Dict with voice configuration (optional)
+            {
+                "host_voice_id": "xxx",  # 主持人/正方音色
+                "guest_voice_id": "xxx"  # 嘉宾/反方音色
+            }
     """
     from .models import Episode, Show
     from .services.generator import PodcastGenerator
@@ -267,10 +272,35 @@ def generate_debate_audio_task(episode_id, show_id=None):
         relative_path = f"episodes/{episode.created_at.strftime('%Y/%m')}/{filename}"
         full_path = os.path.join(settings.MEDIA_ROOT, relative_path)
 
+        # Prepare participants config with voice overrides
+        participants_config = episode.participants_config
+        if voice_config:
+            judge_voice_id = voice_config.get('judge_voice_id')
+            host_voice_id = voice_config.get('host_voice_id')
+            guest_voice_id = voice_config.get('guest_voice_id')
+
+            # Update participants config with voice IDs
+            for participant in participants_config:
+                role = participant.get('role', '')
+                participant_id = participant.get('id', '')
+
+                # 主持人/裁判使用 judge_voice_id
+                if role in ['主持人', '裁判'] or participant_id in ['judge', 'tutor']:
+                    if judge_voice_id:
+                        participant['voice_id'] = judge_voice_id
+                # 正方/嘉宾使用 host_voice_id
+                elif role in ['正方辩手', '嘉宾'] or participant_id in ['llm1', 'student1']:
+                    if host_voice_id:
+                        participant['voice_id'] = host_voice_id
+                # 反方/学生使用 guest_voice_id
+                elif role in ['反方辩手', '学生'] or participant_id in ['llm2', 'student2']:
+                    if guest_voice_id:
+                        participant['voice_id'] = guest_voice_id
+
         # Generate audio from dialogue
         generator.generate_multi(
             dialogue=episode.dialogue,
-            participants_config=episode.participants_config,
+            participants_config=participants_config,
             output_path=full_path
         )
 

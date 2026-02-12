@@ -292,10 +292,13 @@ export default {
   },
 
   // 为Debate/Conference生成音频
-  generateDebateAudio(episodeId, showId) {
+  generateDebateAudio(episodeId, showId, voiceConfig = null) {
     const payload = {}
     if (showId) {
       payload.show_id = showId
+    }
+    if (voiceConfig) {
+      payload.voice_config = voiceConfig
     }
     return client.post(`/podcasts/episodes/${episodeId}/generate-audio/`, payload)
   },

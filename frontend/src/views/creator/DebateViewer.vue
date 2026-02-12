@@ -18,7 +18,7 @@
               </span>
               <span class="status-badge" :class="`status-${episode.status}`">
                 <el-icon v-if="isGenerating" class="is-loading"><Loading /></el-icon>
-                {{ statusText }}
+                {{ statusText }} <small style="opacity: 0.6; font-weight: normal;">({{ episode?.status }})</small>
               </span>
             </div>
           </div>
@@ -53,6 +53,114 @@
             <p>正在生成首轮发言...</p>
           </div>
         </div>
+
+        <!-- 生成音频按钮（草稿状态） -->
+        <div v-if="isDraft" class="audio-generation-panel">
+          <div class="audio-generation-hint">
+            脚本已生成完成，可生成音频
+          </div>
+          <button
+            class="mofa-btn mofa-btn-primary"
+            :disabled="generatingAudio"
+            @click="showAudioDialog"
+          >
+            {{ generatingAudio ? '生成中...' : '生成音频' }}
+          </button>
+        </div>
+
+        <!-- 音频生成对话框 -->
+        <el-dialog
+          v-model="audioDialogVisible"
+          title="生成音频"
+          width="min(520px, 92vw)"
+          class="audio-dialog"
+        >
+          <div class="audio-dialog-content">
+            <div class="form-group">
+              <label>目标频道</label>
+              <select v-model="selectedShowId" class="form-select">
+                <option :value="null">默认频道（自动）</option>
+                <option
+                  v-for="show in myShows"
+                  :key="show.id"
+                  :value="show.id"
+                >
+                  {{ show.title }}
+                </option>
+              </select>
+            </div>
+
+            <div class="speaker-config">
+              <div class="speaker-config-header">
+                <label>播报角色与音色（可选）</label>
+                <button
+                  type="button"
+                  class="mofa-btn mofa-btn-sm"
+                  :disabled="voiceLoading"
+                  @click="loadVoices"
+                >
+                  {{ voiceLoading ? '刷新中...' : '刷新音色' }}
+                </button>
+              </div>
+              <div class="speaker-grid three-col">
+                <div class="form-group">
+                  <label>主持人音色</label>
+                  <select v-model="judgeVoiceId" class="form-select">
+                    <option value="">默认音色</option>
+                    <option
+                      v-for="voice in availableVoices"
+                      :key="`judge-${voice.voice_id}`"
+                      :value="voice.voice_id"
+                    >
+                      {{ voice.name || voice.voice_id }}
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>正方音色</label>
+                  <select v-model="hostVoiceId" class="form-select">
+                    <option value="">默认音色</option>
+                    <option
+                      v-for="voice in availableVoices"
+                      :key="`host-${voice.voice_id}`"
+                      :value="voice.voice_id"
+                    >
+                      {{ voice.name || voice.voice_id }}
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>反方音色</label>
+                  <select v-model="guestVoiceId" class="form-select">
+                    <option value="">默认音色</option>
+                    <option
+                      v-for="voice in availableVoices"
+                      :key="`guest-${voice.voice_id}`"
+                      :value="voice.voice_id"
+                    >
+                      {{ voice.name || voice.voice_id }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <template #footer>
+            <div class="dialog-footer">
+              <button class="mofa-btn" @click="audioDialogVisible = false">
+                取消
+              </button>
+              <button
+                class="mofa-btn mofa-btn-primary"
+                :disabled="generatingAudio"
+                @click="confirmGenerateAudio"
+              >
+                {{ generatingAudio ? '生成中...' : '确认生成' }}
+              </button>
+            </div>
+          </template>
+        </el-dialog>
 
         <div class="composer">
           <textarea
@@ -141,9 +249,98 @@ const statusText = computed(() => {
   if (!episode.value) return ''
   if (episode.value.status === 'processing') return 'AI正在辩论'
   if (episode.value.status === 'published') return '辩论中，可继续插话'
+  if (episode.value.status === 'draft') return '草稿（可生成音频）'
   if (episode.value.status === 'failed') return '生成失败'
   return episode.value.status
 })
+
+const isDraft = computed(() => {
+  const status = episode.value?.status
+  const hasAudio = !!episode.value?.audio_url
+  // draft 或 failed 状态，且没有音频文件时显示生成按钮
+  return (status === 'draft' || status === 'failed') && !hasAudio
+})
+const generatingAudio = ref(false)
+
+// 音频生成对话框
+const audioDialogVisible = ref(false)
+const selectedShowId = ref(null)
+const myShows = ref([])
+const judgeVoiceId = ref('')
+const hostVoiceId = ref('')
+const guestVoiceId = ref('')
+const availableVoices = ref([])
+const voiceLoading = ref(false)
+
+// 加载用户的节目列表
+async function loadMyShows() {
+  try {
+    const data = await api.podcasts.getMyShows()
+    myShows.value = data || []
+  } catch (err) {
+    console.error('Failed to load shows:', err)
+  }
+}
+
+// 加载音色列表
+async function loadVoices() {
+  try {
+    voiceLoading.value = true
+    const data = await api.podcasts.getTTSVoices({ language: 'zh' })
+    availableVoices.value = data.voices || []
+  } catch (err) {
+    console.error('Failed to load voices:', err)
+  } finally {
+    voiceLoading.value = false
+  }
+}
+
+// 显示音频生成对话框
+function showAudioDialog() {
+  audioDialogVisible.value = true
+  selectedShowId.value = null
+  judgeVoiceId.value = ''
+  hostVoiceId.value = ''
+  guestVoiceId.value = ''
+  loadMyShows()
+  loadVoices()
+}
+
+// 确认生成音频
+async function confirmGenerateAudio() {
+  if (!episode.value?.id || generatingAudio.value) return
+
+  try {
+    generatingAudio.value = true
+    error.value = ''
+
+    const voiceConfig = {}
+    if (judgeVoiceId.value) {
+      voiceConfig.judge_voice_id = judgeVoiceId.value
+    }
+    if (hostVoiceId.value) {
+      voiceConfig.host_voice_id = hostVoiceId.value
+    }
+    if (guestVoiceId.value) {
+      voiceConfig.guest_voice_id = guestVoiceId.value
+    }
+
+    await api.podcasts.generateDebateAudio(
+      episode.value.id,
+      selectedShowId.value,
+      Object.keys(voiceConfig).length > 0 ? voiceConfig : null
+    )
+
+    audioDialogVisible.value = false
+    // 刷新 episode 状态
+    await loadEpisode()
+  } catch (err) {
+    console.error('Failed to generate audio:', err)
+    error.value = err.response?.data?.error || '音频生成失败'
+  } finally {
+    generatingAudio.value = false
+  }
+}
 
 onMounted(async () => {
   await loadEpisode()
@@ -640,6 +837,99 @@ function formatTime(timestamp) {
 .empty-tip h3 {
   margin: 0 0 0.35rem;
   color: var(--color-text-primary);
+}
+
+.audio-generation-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin: 0.5rem 0;
+  background: var(--color-bg-secondary);
+  border-radius: 12px;
+  border: 1px dashed var(--color-primary);
+}
+
+.audio-generation-hint {
+  font-size: var(--font-sm);
+  color: var(--color-text-secondary);
+}
+
+/* 音频生成对话框样式 */
+.audio-dialog-content {
+  padding: 1rem 0;
+}
+
+.audio-dialog-content .form-group {
+  margin-bottom: 1rem;
+}
+
+.audio-dialog-content label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.audio-dialog-content .form-select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-light-gray);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--color-white);
+}
+
+.audio-dialog-content .form-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.speaker-config {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.speaker-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.speaker-config-header label {
+  margin-bottom: 0;
+}
+
+.speaker-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.speaker-grid.three-col {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .speaker-grid.three-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .speaker-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 
 .composer {

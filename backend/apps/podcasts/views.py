@@ -1731,7 +1731,12 @@ def generate_debate_audio(request, episode_id):
 
     Request body:
     {
-        "show_id": 123  # 可选；不传则自动使用默认节目
+        "show_id": 123,  # 可选；不传则自动使用默认节目
+        "voice_config": {  # 可选；音色配置
+            "judge_voice_id": "xxx",  # 主持人/裁判音色
+            "host_voice_id": "xxx",   # 正方/嘉宾音色
+            "guest_voice_id": "xxx"   # 反方/学生音色
+        }
     }
     """
     from .tasks import generate_debate_audio_task
@@ -1774,12 +1779,15 @@ def generate_debate_audio(request, episode_id):
         show, _ = get_or_create_default_show(request.user)
         show_id = show.id
 
+    # 获取音色配置
+    voice_config = request.data.get('voice_config', {})
+
     # 更新状态
     episode.status = 'processing'
     episode.save()
 
     # 触发异步任务
-    generate_debate_audio_task.delay(episode_id, show_id)
+    generate_debate_audio_task.delay(episode_id, show_id, voice_config)
 
     return Response(
         {
