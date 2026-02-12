@@ -33,6 +33,7 @@ urlpatterns = [
     path('shows/<slug:slug>/delete/', views.ShowDeleteView.as_view(), name='show_delete'),
     path('shows/<slug:slug>/cover-options/', views.generate_show_cover_options, name='generate_show_cover_options'),
     path('shows/<slug:slug>/cover-apply/', views.apply_show_cover_option, name='apply_show_cover_option'),
+    path('shows/<slug:slug>/share-card/', views.show_share_card, name='show_share_card'),
 
     # 单集
     path('episodes/', views.EpisodeListView.as_view(), name='episode_list'),

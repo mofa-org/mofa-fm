@@ -500,6 +500,41 @@ def episode_share_card(request, episode_id):
     })
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def show_share_card(request, slug):
+    """生成频道分享卡片所需信息（前端据此绘制海报）"""
+    show = get_object_or_404(
+        Show.objects.select_related('creator'),
+        slug=slug,
+        visibility='public',
+    )
+
+    show_path = f"/shows/{show.slug}"
+    share_url = request.build_absolute_uri(show_path)
+    description = re.sub(r'\s+', ' ', (show.description or '').strip())
+    if len(description) > 120:
+        description = description[:117] + '...'
+
+    share_text = (
+        f"{show.title}\n"
+        f"{description}\n"
+        f"订阅链接：{share_url}"
+    )
+
+    return Response({
+        'title': show.title,
+        'show_title': show.title,
+        'creator_name': show.creator.username,
+        'description': description,
+        'cover_url': show.cover_url,
+        'share_url': share_url,
+        'web_path': show_path,
+        'share_text': share_text,
+        'created_at': show.created_at,
+    })
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def retry_generation(request, episode_id):

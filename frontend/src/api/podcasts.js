@@ -281,9 +281,14 @@ export default {
     return client.post(`/podcasts/episodes/${episodeId}/debate-message/`, { message, client_id: clientId })
   },
 
-  // 获取分享卡片数据
+  // 获取节目分享卡片数据
   getEpisodeShareCard(episodeId) {
     return client.get(`/podcasts/episodes/${episodeId}/share-card/`)
+  },
+
+  // 获取频道分享卡片数据
+  getShowShareCard(slug) {
+    return client.get(`/podcasts/shows/${slug}/share-card/`)
   },
 
   // 为Debate/Conference生成音频
