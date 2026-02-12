@@ -64,9 +64,17 @@ def apply_speaker_names(script_content: str, speaker_config: Optional[dict]) -> 
     guest_name = config["guest_name"]
     judge_name = config["judge_name"]
 
+    # 替换带中括号的角色标记
     result = re.sub(r"【\s*大牛\s*】", lambda _m: f"【{host_name}】", result)
     result = re.sub(r"【\s*一帆\s*】", lambda _m: f"【{guest_name}】", result)
     result = re.sub(r"【\s*博宇\s*】", lambda _m: f"【{judge_name}】", result)
+
+    # 替换文本内容中独立出现的角色名（前后不是汉字）
+    # 避免替换其他词语中包含的子串，如"大牛"在"大牛栏"中
+    result = re.sub(r"(?<![\u4e00-\u9fa5])大牛(?![\u4e00-\u9fa5])", host_name, result)
+    result = re.sub(r"(?<![\u4e00-\u9fa5])一帆(?![\u4e00-\u9fa5])", guest_name, result)
+    result = re.sub(r"(?<![\u4e00-\u9fa5])博宇(?![\u4e00-\u9fa5])", judge_name, result)
+
     return result
 
 
