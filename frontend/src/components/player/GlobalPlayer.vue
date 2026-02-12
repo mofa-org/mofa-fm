@@ -454,6 +454,7 @@ function handleScriptUpdated(updatedEpisode) {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-md);
+  margin-top: 10px;
 }
 
 .progress-bar {
