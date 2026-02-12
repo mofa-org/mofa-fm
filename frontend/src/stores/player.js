@@ -126,6 +126,13 @@ export const usePlayerStore = defineStore('player', () => {
       if (playPosition) {
         audio.value.currentTime = playPosition
       }
+
+      // 增加播放量（异步调用，不阻塞播放）
+      if (fullEpisode.id) {
+        api.podcasts.incrementPlayCount(fullEpisode.id).catch(() => {
+          // 忽略错误，不影响播放体验
+        })
+      }
     }
 
     audio.value.play()

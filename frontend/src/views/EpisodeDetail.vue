@@ -81,6 +81,22 @@
             <p>正在生成卡片...</p>
           </div>
           <template v-else>
+            <div class="share-cover-toggle" v-if="episode?.show?.cover_url">
+              <button
+                class="mofa-btn mofa-btn-sm"
+                :class="{ 'mofa-btn-primary': !useShowCoverForShare }"
+                @click="useShowCoverForShare = false; renderSharePoster()"
+              >
+                单集封面
+              </button>
+              <button
+                class="mofa-btn mofa-btn-sm"
+                :class="{ 'mofa-btn-primary': useShowCoverForShare }"
+                @click="useShowCoverForShare = true; renderSharePoster()"
+              >
+                节目封面
+              </button>
+            </div>
             <div class="share-poster-wrapper">
               <img
                 v-if="sharePosterDataUrl"
@@ -169,6 +185,7 @@ const shareError = ref('')
 const shareCardData = ref(null)
 const sharePosterDataUrl = ref('')
 const shareCanvasRef = ref(null)
+const useShowCoverForShare = ref(false)
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 
@@ -322,9 +339,14 @@ async function renderSharePoster() {
   const coverX = (w - coverSize) / 2
   const coverY = 220
 
-  if (data.cover_url) {
+  // 根据用户选择决定使用哪个封面
+  const coverUrl = useShowCoverForShare.value && episode.value?.show?.cover_url
+    ? episode.value.show.cover_url
+    : data.cover_url
+
+  if (coverUrl) {
     try {
-      const coverImage = await loadImage(data.cover_url)
+      const coverImage = await loadImage(coverUrl)
       ctx.drawImage(coverImage, coverX, coverY, coverSize, coverSize)
     } catch (error) {
       ctx.fillStyle = '#f5f5f5'
@@ -648,6 +670,13 @@ function downloadSharePoster() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
+}
+
+.share-cover-toggle {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
 }
 
 .share-loading {

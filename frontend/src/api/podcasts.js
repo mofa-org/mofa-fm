@@ -303,5 +303,10 @@ export default {
   // 获取我的辩论历史
   getMyDebates() {
     return client.get('/podcasts/debates/')
+  },
+
+  // 增加播放量（支持未登录用户）
+  incrementPlayCount(episodeId) {
+    return client.post(`/podcasts/episodes/${episodeId}/play/`)
   }
 }

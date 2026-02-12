@@ -46,6 +46,7 @@ urlpatterns = [
     path('episodes/<int:episode_id>/', views.get_episode_by_id, name='get_episode_by_id'),
     path('episodes/<int:episode_id>/debate-message/', views.debate_message, name='debate_message'),
     path('episodes/<int:episode_id>/share-card/', views.episode_share_card, name='episode_share_card'),
+    path('episodes/<int:episode_id>/play/', views.increment_play_count, name='increment_play_count'),
     path('episodes/<int:episode_id>/retry/', views.retry_generation, name='retry_generation'),
     path('episodes/<int:episode_id>/cover-options/', views.generate_cover_options, name='generate_cover_options'),
     path('episodes/<int:episode_id>/cover-apply/', views.apply_cover_option, name='apply_cover_option'),

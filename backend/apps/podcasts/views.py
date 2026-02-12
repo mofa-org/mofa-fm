@@ -536,6 +536,36 @@ def show_share_card(request, slug):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
+def increment_play_count(request, episode_id):
+    """增加播放量（支持未登录用户，通过 IP 防刷）"""
+    from django.core.cache import cache
+
+    episode = get_object_or_404(Episode, id=episode_id, status='published')
+
+    # 获取客户端标识（登录用户用 user_id，未登录用 IP+User-Agent）
+    if request.user.is_authenticated:
+        client_key = f"user:{request.user.id}"
+    else:
+        ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+        ip = ip.split(',')[0].strip() if ip else 'unknown'
+        client_key = f"ip:{ip}"
+
+    # 缓存键：24小时内同一客户端只统计一次
+    cache_key = f"play_count:{episode_id}:{client_key}"
+
+    if not cache.get(cache_key):
+        # 增加播放量
+        episode.play_count += 1
+        episode.save(update_fields=['play_count'])
+        # 设置24小时缓存
+        cache.set(cache_key, True, timeout=86400)
+        return Response({'play_count': episode.play_count, 'incremented': True})
+
+    return Response({'play_count': episode.play_count, 'incremented': False})
+
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def retry_generation(request, episode_id):
     """重试失败的 AI 生成任务"""

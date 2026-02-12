@@ -2,7 +2,7 @@
   <div class="episode-card mofa-card">
     <div class="episode-cover" @click="handlePlay">
       <img
-        :src="displayCoverUrl"
+        :src="episode.cover_url"
         :alt="episode.title"
         :class="{ 'placeholder-cover': isPlaceholderCover }"
       />
@@ -64,14 +64,6 @@
 
     <!-- 创作者操作按钮 -->
     <div v-if="showCreatorActions && isCreator && episode.show" class="episode-actions">
-      <button
-        class="mofa-btn mofa-btn-sm"
-        :title="useShowCover ? '切换到单集封面' : '切换到节目封面'"
-        @click="useShowCover = !useShowCover"
-      >
-        <el-icon><Picture /></el-icon>
-        {{ useShowCover ? '单集封面' : '节目封面' }}
-      </button>
       <router-link
         :to="`/creator/shows/${episode.show.slug}/episodes/${episode.slug}/edit`"
         class="mofa-btn mofa-btn-sm"
@@ -86,10 +78,10 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
-import { VideoPlay, Lock, View, User, Share, Download, Folder, ArrowRight, Picture } from '@element-plus/icons-vue'
+import { VideoPlay, Lock, View, User, Share, Download, Folder, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import dayjs from 'dayjs'
@@ -117,17 +109,6 @@ const emit = defineEmits(['deleted'])
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
-
-// 封面切换状态：true 使用节目封面，false 使用单集封面
-const useShowCover = ref(false)
-
-// 计算实际显示的封面URL
-const displayCoverUrl = computed(() => {
-  if (useShowCover.value && props.show?.cover_url) {
-    return props.show.cover_url
-  }
-  return props.episode.cover_url
-})
 
 // 计算实际生效的可见性
 const effectiveVisibility = computed(() => {
