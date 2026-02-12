@@ -822,14 +822,18 @@ class GenerateEpisodeView(generics.GenericAPIView):
                 audio_file=placeholder_file
             )
 
+            # 应用角色名替换（将【大牛】【一帆】替换为自定义名称）
+            from .services.speaker_config import apply_speaker_names
+            final_script = apply_speaker_names(data['script'], speaker_config)
+
             if speaker_config:
                 generate_podcast_task.delay(
                     episode.id,
-                    data['script'],
+                    final_script,
                     voice_config=speaker_config,
                 )
             else:
-                generate_podcast_task.delay(episode.id, data['script'])
+                generate_podcast_task.delay(episode.id, final_script)
 
             return Response(
                 {

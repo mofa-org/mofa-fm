@@ -74,6 +74,7 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
     from .models import Episode
     from .services.generator import PodcastGenerator
     from .services.cover_ai import generate_episode_cover
+    from .services.speaker_config import build_generator_runtime_options
     from pydub import AudioSegment
     import os
     from django.conf import settings
@@ -84,6 +85,9 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
         episode.status = 'processing'
         episode.generation_stage = 'generating_audio'
         episode.save()
+
+        # 转换 speaker_config 为 voice_overrides 格式
+        character_aliases, voice_overrides = build_generator_runtime_options(voice_config)
 
         # Initialize generator
         generator = PodcastGenerator()
@@ -101,8 +105,13 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
             if storage.exists(placeholder_name):
                 storage.delete(placeholder_name)
 
-        # Generate audio
-        generator.generate(script_content, full_path, voice_overrides=voice_config)
+        # Generate audio with proper voice overrides
+        generator.generate(
+            script_content,
+            full_path,
+            character_aliases=character_aliases,
+            voice_overrides=voice_overrides
+        )
 
         # Update episode with audio
         episode.audio_file.name = relative_path
