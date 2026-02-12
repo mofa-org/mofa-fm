@@ -89,6 +89,10 @@ def generate_podcast_task(episode_id, script_content, voice_config=None):
         # 转换 speaker_config 为 voice_overrides 格式
         character_aliases, voice_overrides = build_generator_runtime_options(voice_config)
 
+        print(f"[DEBUG] Script preview: {script_content[:200]}...")
+        print(f"[DEBUG] character_aliases: {character_aliases}")
+        print(f"[DEBUG] voice_overrides: {voice_overrides}")
+
         # Initialize generator
         generator = PodcastGenerator()
 

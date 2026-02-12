@@ -826,6 +826,10 @@ class GenerateEpisodeView(generics.GenericAPIView):
             from .services.speaker_config import apply_speaker_names
             final_script = apply_speaker_names(data['script'], speaker_config)
 
+            # 保存脚本到 Episode
+            episode.script = final_script
+            episode.save(update_fields=['script'])
+
             if speaker_config:
                 generate_podcast_task.delay(
                     episode.id,
