@@ -47,10 +47,8 @@ def normalize_speaker_config(raw: Optional[dict]) -> Optional[dict]:
 
 def apply_speaker_names(script_content: str, speaker_config: Optional[dict]) -> str:
     """
-    Apply role-tag name replacement in script, e.g.:
-    【大牛】 -> 【自定义主持名】
-    【一帆】 -> 【自定义嘉宾名】
-    【博宇】 -> 【自定义主持人/导师名】
+    Apply role-tag name replacement in script using LLM for better context understanding.
+    e.g.: 【大牛】 -> 【自定义主持名】, and "我是大牛" -> "我是小牛"
     """
     if not script_content:
         return script_content
@@ -59,23 +57,69 @@ def apply_speaker_names(script_content: str, speaker_config: Optional[dict]) -> 
     if not config:
         return script_content
 
-    result = script_content
+    # 如果没有自定义名称，直接返回原脚本
     host_name = config["host_name"]
     guest_name = config["guest_name"]
     judge_name = config["judge_name"]
+    if (host_name == DEFAULT_HOST_NAME and
+        guest_name == DEFAULT_GUEST_NAME and
+        judge_name == DEFAULT_JUDGE_NAME):
+        return script_content
 
-    # 替换带中括号的角色标记
-    result = re.sub(r"【\s*大牛\s*】", lambda _m: f"【{host_name}】", result)
-    result = re.sub(r"【\s*一帆\s*】", lambda _m: f"【{guest_name}】", result)
-    result = re.sub(r"【\s*博宇\s*】", lambda _m: f"【{judge_name}】", result)
+    # 使用 LLM 改写脚本，统一称谓
+    try:
+        from openai import OpenAI
+        from django.conf import settings
 
-    # 替换文本内容中独立出现的角色名（前后不是汉字）
-    # 避免替换其他词语中包含的子串，如"大牛"在"大牛栏"中
-    result = re.sub(r"(?<![\u4e00-\u9fa5])大牛(?![\u4e00-\u9fa5])", host_name, result)
-    result = re.sub(r"(?<![\u4e00-\u9fa5])一帆(?![\u4e00-\u9fa5])", guest_name, result)
-    result = re.sub(r"(?<![\u4e00-\u9fa5])博宇(?![\u4e00-\u9fa5])", judge_name, result)
+        client = OpenAI(
+            api_key=getattr(settings, 'OPENAI_API_KEY', ''),
+            base_url=getattr(settings, 'OPENAI_API_BASE', 'https://api.openai.com/v1')
+        )
+        model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
 
-    return result
+        prompt = f"""请将以下播客脚本中的角色名称统一替换。只替换角色名称，其他内容保持不变。
+
+原角色名 -> 新角色名：
+- 大牛 -> {host_name}
+- 一帆 -> {guest_name}
+- 博宇 -> {judge_name}
+
+注意：
+1. 替换所有出现的角色名，包括中括号内的标记和正文中的称呼
+2. 保持脚本格式不变（【角色名】对话内容）
+3. 只返回改写后的脚本，不要添加任何解释
+
+原脚本：
+{script_content}
+"""
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "你是一个专业的文本编辑助手，擅长统一文本中的角色名称。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=4000
+        )
+
+        result = response.choices[0].message.content.strip()
+        # 如果 LLM 返回了 markdown 代码块，提取其中的内容
+        if result.startswith("```"):
+            result = re.sub(r"^```\w*\n?|```$", "", result, flags=re.MULTILINE).strip()
+        return result
+
+    except Exception as e:
+        # LLM 失败时回退到简单的正则替换
+        print(f"LLM rewrite failed: {e}, falling back to regex replacement")
+        result = script_content
+        result = re.sub(r"【\s*大牛\s*】", lambda _m: f"【{host_name}】", result)
+        result = re.sub(r"【\s*一帆\s*】", lambda _m: f"【{guest_name}】", result)
+        result = re.sub(r"【\s*博宇\s*】", lambda _m: f"【{judge_name}】", result)
+        result = re.sub(r"大牛", host_name, result)
+        result = re.sub(r"一帆", guest_name, result)
+        result = re.sub(r"博宇", judge_name, result)
+        return result
 
 
 def build_generator_runtime_options(
