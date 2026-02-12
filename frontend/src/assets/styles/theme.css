@@ -53,15 +53,15 @@
     'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Helvetica Neue', Helvetica, Arial, sans-serif;
 
-  /* 字号 */
-  --font-xs: 12px;
-  --font-sm: 14px;
-  --font-base: 16px;
-  --font-lg: 18px;
-  --font-xl: 20px;
-  --font-2xl: 24px;
-  --font-3xl: 30px;
-  --font-4xl: 36px;
+  /* 字号 - 优化 100% 缩放 */
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-base: 14px;
+  --font-lg: 16px;
+  --font-xl: 18px;
+  --font-2xl: 20px;
+  --font-3xl: 24px;
+  --font-4xl: 30px;
 
   /* 字重 */
   --font-normal: 400;
@@ -75,41 +75,41 @@
   --line-height-normal: 1.5;
   --line-height-relaxed: 1.75;
 
-  /* ========== 间距系统 ========== */
+  /* ========== 间距系统 - 优化 100% 缩放 ========== */
 
-  --spacing-xs: 8px;
-  --spacing-sm: 12px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-2xl: 48px;
-  --spacing-3xl: 64px;
+  --spacing-xs: 6px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  --spacing-3xl: 48px;
 
   /* ========== 阴影系统 ========== */
 
-  /* 偏移阴影 (几何风格) */
-  --shadow-sm: 3px 3px 0 rgba(0, 0, 0, 0.08);
-  --shadow-md: 4px 4px 0 rgba(0, 0, 0, 0.12);
-  --shadow-lg: 6px 6px 0 rgba(0, 0, 0, 0.16);
-  --shadow-xl: 8px 8px 0 rgba(0, 0, 0, 0.2);
-  --shadow-hover: 8px 8px 0 rgba(0, 0, 0, 0.24);
+  /* 偏移阴影 (几何风格) - 优化 100% 缩放 */
+  --shadow-sm: 2px 2px 0 rgba(0, 0, 0, 0.08);
+  --shadow-md: 3px 3px 0 rgba(0, 0, 0, 0.12);
+  --shadow-lg: 4px 4px 0 rgba(0, 0, 0, 0.16);
+  --shadow-xl: 6px 6px 0 rgba(0, 0, 0, 0.2);
+  --shadow-hover: 6px 6px 0 rgba(0, 0, 0, 0.24);
 
   /* 柔和阴影 (浮动元素) */
   --shadow-soft: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
   --shadow-soft-lg: 0 20px 40px -10px rgba(0, 0, 0, 0.15);
 
-  /* ========== 边框系统 ========== */
+  /* ========== 边框系统 - 优化 100% 缩放 ========== */
 
-  --border-width: 3px;
-  --border-width-thin: 2px;
+  --border-width: 2px;
+  --border-width-thin: 1px;
   --border-color: var(--color-dark);
   --border-color-light: var(--color-light-gray);
 
-  /* 圆角 */
-  --radius-sm: 8px;
-  --radius-default: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  /* 圆角 - 优化 100% 缩放 */
+  --radius-sm: 6px;
+  --radius-default: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
 
   /* ========== 动画系统 ========== */
 
@@ -117,10 +117,10 @@
   --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* ========== 布局 ========== */
+  /* ========== 布局 - 优化 100% 缩放 ========== */
 
-  --header-height: 60px;
-  --player-height: 110px;
+  --header-height: 52px;
+  --player-height: 90px;
   --max-width: 1280px;
   --sidebar-width: 280px;
 }
